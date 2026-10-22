@@ -6,7 +6,7 @@ import { loadConfig } from './core/config';
 
 async function main() {
   const config = loadConfig();
-  const app = await NestFactory.create(AppModule.forRoot(config));
+  const app = await NestFactory.create(AppModule.forRoot(config), { rawBody: true }); // raw body for webhook signatures
   configureApp(app, config);
   await app.listen(config.PORT);
   console.log(`API listening on http://localhost:${config.PORT}`);

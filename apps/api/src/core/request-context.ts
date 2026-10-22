@@ -22,7 +22,8 @@ export interface DeviceIdentity {
 }
 
 export interface RequestContext {
-  user: AuthUser;
+  /** Null only for system work such as payment webhooks. */
+  user: AuthUser | null;
   tx: Transaction;
   /** Null on routes marked @NoTenant(). */
   tenant: TenantMembership | null;
@@ -47,4 +48,16 @@ export function currentTenant(): TenantMembership {
   const tenant = currentContext().tenant;
   if (!tenant) throw new InternalServerErrorException('Route is not tenant-scoped');
   return tenant;
+}
+
+/** The signed-in person making this request. */
+export function currentUserId(): string {
+  const user = currentContext().user;
+  if (!user) throw new InternalServerErrorException('This action needs a signed-in user');
+  return user.userId;
+}
+
+/** Who to record as the actor: the person, or null for system work. */
+export function actorUserId(): string | null {
+  return currentContext().user?.userId ?? null;
 }

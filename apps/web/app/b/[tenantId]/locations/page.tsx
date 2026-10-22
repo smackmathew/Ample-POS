@@ -1,6 +1,7 @@
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { can, type CurrentTenant, type Location } from '@/lib/types';
+import { formatPercent } from '@/lib/pricing';
 import { createLocation, setLocationArchived } from '../actions';
 
 export default async function LocationsPage({ params }: { params: Promise<{ tenantId: string }> }) {
@@ -30,6 +31,7 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
               <td className="py-2">{l.name}</td>
               <td className="capitalize">{l.kind}</td>
               <td>{l.timezone}</td>
+              <td>{formatPercent(l.taxRateBps)}</td>
               <td className="text-right">
                 {canManage && (
                   <form action={setLocationArchived.bind(null, tenantId, l.id, !l.archivedAt)}>
@@ -41,7 +43,7 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
           ))}
           {locations.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-stone-500">No locations yet.</td>
+              <td colSpan={5} className="py-4 text-stone-500">No locations yet.</td>
             </tr>
           )}
         </tbody>
@@ -49,7 +51,7 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
       </div>
 
       {canManage && (
-        <ActionForm action={createLocation.bind(null, tenantId)} className="card grid gap-3 sm:grid-cols-4">
+        <ActionForm action={createLocation.bind(null, tenantId)} className="card grid gap-3 sm:grid-cols-5">
           <input name="name" placeholder="Name" required className="input sm:col-span-2" />
           <select name="kind" className="input">
             <option value="store">Store</option>
@@ -57,7 +59,8 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
             <option value="office">Office</option>
           </select>
           <input name="timezone" placeholder="America/Chicago" required className="input" />
-          <button className="btn sm:col-span-4 sm:justify-self-start">Add location</button>
+          <input name="taxRate" placeholder="Sales tax %, e.g. 8.25" inputMode="decimal" className="input" />
+          <button className="btn sm:col-span-5 sm:justify-self-start">Add location</button>
         </ActionForm>
       )}
     </div>

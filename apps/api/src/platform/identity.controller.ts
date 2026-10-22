@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { AuthService } from '../core/auth.service';
 import { Db } from '../core/database';
 import { NoTenant, Public } from '../core/decorators';
-import { currentContext } from '../core/request-context';
+import { currentContext, currentUserId } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
 
 const devTokenBody = z.object({
@@ -49,11 +49,12 @@ export class IdentityController {
   @NoTenant()
   @Get('me')
   async me() {
-    const { tx, user } = currentContext();
+    const { tx } = currentContext();
+    const userId = currentUserId();
     const [profile] = await tx
       .select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName })
       .from(schema.users)
-      .where(eq(schema.users.id, user.userId));
+      .where(eq(schema.users.id, userId));
     const tenants = await tx.execute<{ tenant_id: string; name: string; slug: string; role_key: string; role_name: string }>(
       sql`select * from app_my_tenants()`,
     );

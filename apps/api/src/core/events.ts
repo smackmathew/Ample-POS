@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { schema } from '@pos/db';
-import { currentContext, currentTenant } from './request-context';
+import { actorUserId, currentContext, currentTenant } from './request-context';
 
 /** Writes audit rows and outbox events inside the current request transaction. */
 @Injectable()
 export class Events {
   async audit(action: string, target: { type: string; id: string }, data: Record<string, unknown> = {}) {
-    const { tx, user, device } = currentContext();
+    const { tx, device } = currentContext();
     await tx.insert(schema.auditLog).values({
       tenantId: currentTenant().tenantId,
-      actorUserId: user.userId,
+      actorUserId: actorUserId(),
       actorDeviceId: device?.id ?? null,
       action,
       targetType: target.type,

@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { schema, type MovementReason } from '@pos/db';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { Db } from '../core/database';
-import { currentContext, currentTenant } from '../core/request-context';
+import { actorUserId, currentContext, currentTenant } from '../core/request-context';
 
 export interface MovementLine {
   locationId: string;
@@ -12,7 +12,7 @@ export interface MovementLine {
 }
 
 export interface OperationInput {
-  kind: 'receipt' | 'adjustment' | 'transfer' | 'count';
+  kind: 'receipt' | 'adjustment' | 'transfer' | 'count' | 'sale' | 'refund';
   idempotencyKey?: string;
   note?: string | null;
   reference?: { type: string; id: string };
@@ -34,11 +34,12 @@ export class LedgerService {
   async record(input: OperationInput): Promise<OperationResult> {
     const tx = this.db.tx;
     const { tenantId } = currentTenant();
-    const { user, device } = currentContext();
+    const { device } = currentContext();
+    const actor = actorUserId();
 
     const [operation] = await tx
       .insert(schema.inventoryOperations)
-      .values({ tenantId, kind: input.kind, idempotencyKey: input.idempotencyKey ?? null, createdBy: user.userId })
+      .values({ tenantId, kind: input.kind, idempotencyKey: input.idempotencyKey ?? null, createdBy: actor })
       .onConflictDoNothing({ target: [schema.inventoryOperations.tenantId, schema.inventoryOperations.idempotencyKey] })
       .returning();
 
@@ -65,7 +66,7 @@ export class LedgerService {
           referenceType: input.reference?.type ?? null,
           referenceId: input.reference?.id ?? null,
           note: input.note ?? null,
-          actorUserId: user.userId,
+          actorUserId: actor,
           actorDeviceId: device?.id ?? null,
         })),
       )

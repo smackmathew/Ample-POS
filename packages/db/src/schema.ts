@@ -57,6 +57,7 @@ export const locations = pgTable('locations', {
   name: text('name').notNull(),
   kind: text('kind', { enum: ['store', 'warehouse', 'office'] }).notNull().default('store'),
   timezone: text('timezone').notNull(),
+  taxRateBps: integer('tax_rate_bps').notNull().default(0),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
@@ -179,7 +180,7 @@ export type MovementReason = (typeof MOVEMENT_REASONS)[number];
 export const inventoryOperations = pgTable('inventory_operations', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull(),
-  kind: text('kind', { enum: ['receipt', 'adjustment', 'transfer', 'count'] }).notNull(),
+  kind: text('kind', { enum: ['receipt', 'adjustment', 'transfer', 'count', 'sale', 'refund'] }).notNull(),
   idempotencyKey: text('idempotency_key'),
   createdBy: uuid('created_by'),
   createdAt: createdAt(),
@@ -243,3 +244,125 @@ export const countEntries = pgTable('count_entries', {
   voidedBy: uuid('voided_by'),
   createdAt: createdAt(),
 });
+
+const money = (name: string) => bigint(name, { mode: 'number' });
+
+export const tenantCounters = pgTable(
+  'tenant_counters',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    name: text('name').notNull(),
+    value: bigint('value', { mode: 'number' }).notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.name] })],
+);
+
+export const registerSessions = pgTable('register_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  deviceId: uuid('device_id'),
+  status: text('status', { enum: ['open', 'closed'] }).notNull().default('open'),
+  openingFloatMinor: money('opening_float_minor').notNull(),
+  openedBy: uuid('opened_by').notNull(),
+  openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+  countedCashMinor: money('counted_cash_minor'),
+  expectedCashMinor: money('expected_cash_minor'),
+  closedBy: uuid('closed_by'),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+});
+
+export const sales = pgTable('sales', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  registerSessionId: uuid('register_session_id').notNull(),
+  deviceId: uuid('device_id'),
+  status: text('status', { enum: ['open', 'completed', 'voided'] }).notNull().default('open'),
+  currency: text('currency').notNull(),
+  subtotalMinor: money('subtotal_minor').notNull(),
+  discountMinor: money('discount_minor').notNull(),
+  taxMinor: money('tax_minor').notNull(),
+  totalMinor: money('total_minor').notNull(),
+  taxRateBps: integer('tax_rate_bps').notNull(),
+  receiptNumber: bigint('receipt_number', { mode: 'number' }),
+  note: text('note'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  voidedAt: timestamp('voided_at', { withTimezone: true }),
+});
+
+export const saleLines = pgTable('sale_lines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  saleId: uuid('sale_id').notNull(),
+  position: integer('position').notNull(),
+  variantId: uuid('variant_id').notNull(),
+  description: text('description').notNull(),
+  sku: text('sku'),
+  quantity: integer('quantity').notNull(),
+  unitPriceMinor: money('unit_price_minor').notNull(),
+  discountMinor: money('discount_minor').notNull().default(0),
+  taxMinor: money('tax_minor').notNull(),
+  totalMinor: money('total_minor').notNull(),
+  trackInventory: boolean('track_inventory').notNull(),
+});
+
+export const PAYMENT_STATUSES = ['pending', 'succeeded', 'failed', 'canceled'] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const payments = pgTable('payments', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  saleId: uuid('sale_id').notNull(),
+  method: text('method', { enum: ['cash', 'card'] }).notNull(),
+  status: text('status', { enum: PAYMENT_STATUSES }).notNull(),
+  amountMinor: money('amount_minor').notNull(),
+  tenderedMinor: money('tendered_minor'),
+  changeMinor: money('change_minor'),
+  provider: text('provider'),
+  providerRef: text('provider_ref'),
+  lastError: text('last_error'),
+  createdBy: uuid('created_by').notNull(),
+  deviceId: uuid('device_id'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const refunds = pgTable('refunds', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  saleId: uuid('sale_id').notNull(),
+  amountMinor: money('amount_minor').notNull(),
+  restock: boolean('restock').notNull(),
+  reason: text('reason'),
+  registerSessionId: uuid('register_session_id'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+});
+
+export const refundLines = pgTable(
+  'refund_lines',
+  {
+    refundId: uuid('refund_id').notNull(),
+    tenantId: uuid('tenant_id').notNull(),
+    saleLineId: uuid('sale_line_id').notNull(),
+    quantity: integer('quantity').notNull(),
+    amountMinor: money('amount_minor').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.refundId, t.saleLineId] })],
+);
+
+export const refundPayments = pgTable(
+  'refund_payments',
+  {
+    refundId: uuid('refund_id').notNull(),
+    tenantId: uuid('tenant_id').notNull(),
+    paymentId: uuid('payment_id').notNull(),
+    amountMinor: money('amount_minor').notNull(),
+    status: text('status', { enum: ['pending', 'succeeded', 'failed'] }).notNull(),
+    providerRef: text('provider_ref'),
+  },
+  (t) => [primaryKey({ columns: [t.refundId, t.paymentId] })],
+);

@@ -10,6 +10,12 @@ import { TenantContextInterceptor } from './core/tenant-context.interceptor';
 import { CountsController } from './inventory/counts.controller';
 import { InventoryController } from './inventory/inventory.controller';
 import { LedgerService } from './inventory/ledger.service';
+import { CARD_PROVIDER } from './payments/provider';
+import { SimulatedCardProvider } from './payments/simulated.provider';
+import { StripeCardProvider } from './payments/stripe.provider';
+import { WebhooksController } from './payments/webhooks.controller';
+import { RegistersController, SalesController } from './sales/sales.controller';
+import { SalesService } from './sales/sales.service';
 import { AuditController } from './platform/audit.controller';
 import { DeviceSessionController } from './platform/device-session.controller';
 import { DevicesController } from './platform/devices.controller';
@@ -40,6 +46,9 @@ export class AppModule {
         CatalogController,
         InventoryController,
         CountsController,
+        RegistersController,
+        SalesController,
+        WebhooksController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
@@ -48,6 +57,14 @@ export class AppModule {
         AuthService,
         Events,
         LedgerService,
+        SalesService,
+        {
+          provide: CARD_PROVIDER,
+          useFactory: () =>
+            config.PAYMENTS_PROVIDER === 'stripe'
+              ? new StripeCardProvider(config.STRIPE_SECRET_KEY!, { account: config.STRIPE_ACCOUNT })
+              : new SimulatedCardProvider(),
+        },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
       ],
