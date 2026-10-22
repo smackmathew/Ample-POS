@@ -59,6 +59,11 @@ const updateVariantBody = z.object({
   barcodes: z.array(barcode).max(20).optional(),
 });
 
+const exportQuery = z.object({
+  after: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(5000).default(2000),
+});
+
 const listQuery = z.object({
   search: z.string().trim().max(100).optional(),
   status: z.enum(['active', 'archived', 'all']).default('active'),
@@ -114,6 +119,37 @@ export class CatalogController {
   @Get('products/:id')
   async get(@Param('id', ParseUUIDPipe) id: string) {
     return this.findProduct(id);
+  }
+
+  /**
+   * Compact list of sellable variants with their barcodes, for devices that
+   * keep a local copy of the catalog to scan offline. Page with `after`.
+   */
+  @RequirePermission('catalog.read')
+  @Get('variants')
+  async exportVariants(@Query(new ZodPipe(exportQuery)) q: z.infer<typeof exportQuery>) {
+    const v = schema.productVariants;
+    const p = schema.products;
+    const rows = await this.db.tx
+      .select({
+        id: v.id,
+        productId: p.id,
+        productName: p.name,
+        name: v.name,
+        sku: v.sku,
+        priceMinor: v.priceMinor,
+        trackInventory: v.trackInventory,
+      })
+      .from(v)
+      .innerJoin(p, eq(p.id, v.productId))
+      .where(and(eq(v.status, 'active'), eq(p.status, 'active'), q.after ? sql`${v.id} > ${q.after}` : undefined))
+      .orderBy(asc(v.id))
+      .limit(q.limit);
+    const barcodes = await this.barcodesFor(rows.map((r) => r.id));
+    return {
+      variants: rows.map((r) => ({ ...r, barcodes: barcodes.get(r.id) ?? [] })),
+      next: rows.length === q.limit ? rows[rows.length - 1]!.id : null,
+    };
   }
 
   /** Scanner lookup: exact barcode, or SKU (case-insensitive). Active items only. */

@@ -37,3 +37,5 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      # Catches module resolution problems (e.g. a second React Native) that typechecking misses.
+      - run: pnpm --filter @pos/mobile bundle:check

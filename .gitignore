@@ -7,3 +7,6 @@ coverage/
 .env.local
 *.tsbuildinfo
 next-env.d.ts
+.expo/
+dist-check/
+expo-env.d.ts

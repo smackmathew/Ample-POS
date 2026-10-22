@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  UnauthorizedException,
   CallHandler,
   ExecutionContext,
   ForbiddenException,
@@ -10,6 +11,7 @@ import { Reflector } from '@nestjs/core';
 import { schema } from '@pos/db';
 import { getModule, hasPermission, type ModuleId } from '@pos/modules';
 import { and, eq, sql } from 'drizzle-orm';
+import { verifyDeviceCredential } from './device-auth';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import type { AuthedRequest } from './auth.guard';
 import { Db } from './database';
@@ -50,7 +52,7 @@ export class TenantContextInterceptor implements NestInterceptor {
     return from(
       this.db.pool.transaction(async (tx) => {
         await tx.execute(sql`select set_config('app.user_id', ${user.userId}, true)`);
-        const ctx: RequestContext = { user, tx, tenant: null };
+        const ctx: RequestContext = { user, tx, tenant: null, device: null };
 
         if (!noTenant) {
           await tx.execute(sql`select set_config('app.tenant_id', ${tenantId!}, true)`);
@@ -67,6 +69,12 @@ export class TenantContextInterceptor implements NestInterceptor {
           // RLS already limits rows to the selected business, so no row means no access.
           if (!membership) throw new ForbiddenException('You are not a member of this business');
           ctx.tenant = { tenantId: tenantId!, ...membership };
+
+          const credential = req.headers['x-device-credential'];
+          if (typeof credential === 'string') {
+            ctx.device = await verifyDeviceCredential(tx, credential);
+            if (!ctx.device) throw new UnauthorizedException('This device is not recognized or has been revoked');
+          }
 
           if (permission && !hasPermission(membership.permissions, permission)) {
             throw new ForbiddenException(`Missing permission: ${permission}`);

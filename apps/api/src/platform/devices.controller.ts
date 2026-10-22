@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Body, Controller, Get, NotFoundException, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { schema } from '@pos/db';
 import { and, asc, eq, getTableColumns, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { Db } from '../core/database';
 import { RequirePermission } from '../core/decorators';
+import { hashDeviceSecret } from '../core/device-auth';
 import { Events } from '../core/events';
 import { currentTenant } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
@@ -16,10 +17,6 @@ const registerBody = z.object({
 });
 
 const { secretHash: _secretHash, ...publicColumns } = getTableColumns(schema.devices);
-
-export function hashDeviceSecret(secret: string): string {
-  return createHash('sha256').update(secret).digest('hex');
-}
 
 @Controller('devices')
 @RequirePermission('devices.manage')

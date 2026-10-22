@@ -11,6 +11,7 @@ import { CountsController } from './inventory/counts.controller';
 import { InventoryController } from './inventory/inventory.controller';
 import { LedgerService } from './inventory/ledger.service';
 import { AuditController } from './platform/audit.controller';
+import { DeviceSessionController } from './platform/device-session.controller';
 import { DevicesController } from './platform/devices.controller';
 import { IdentityController } from './platform/identity.controller';
 import { InvitationsController } from './platform/invitations.controller';
@@ -34,6 +35,7 @@ export class AppModule {
         MembersController,
         InvitationsController,
         DevicesController,
+        DeviceSessionController,
         AuditController,
         CatalogController,
         InventoryController,

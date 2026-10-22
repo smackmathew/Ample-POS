@@ -13,8 +13,8 @@ devices and an audit trail.
 |---|---|---|
 | 1 | Foundation: businesses, locations, roles and permissions, invitations, devices, module entitlements, audit log, outbox, admin hub | **Done** |
 | 2 | Product catalog and inventory ledger with count sessions | **Done** |
-| 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | Next |
-| 4 | POS checkout, refunds, registers, Stripe Terminal payment adapter | |
+| 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | **Done** |
+| 4 | POS checkout, refunds, registers, Stripe Terminal payment adapter | Next |
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | |
 | 6 | Time clock, tasks, scheduling, reporting | |
 | 7 | Subscription billing tied to enabled modules | |
@@ -26,8 +26,10 @@ Modules can already be turned on per business; their screens arrive in the phase
 ```
 apps/api         NestJS API (one transaction per request, RLS-scoped)
 apps/web         Next.js admin hub
+apps/mobile      Expo app for handhelds: pairing, offline scan-to-count
 packages/db      SQL migrations, Drizzle schema, migrator
 packages/modules Module registry, permissions catalog, built-in roles
+packages/sync    API client and offline sync engine shared by devices
 ```
 
 ## How tenant isolation works
@@ -68,6 +70,29 @@ packages/modules Module registry, permissions catalog, built-in roles
 ![Count review](docs/screenshots/count-review.png)
 
 Quantities are whole units for now; weighed and measured items come later.
+
+## Mobile counting app
+
+`apps/mobile` is an Expo (SDK 54) app for phones and rugged handhelds.
+
+1. **Sign in** with your account (dev sign-in for now).
+2. **Pair** the device: in the admin hub go to Devices → Register device
+   (type *Handheld*) and scan the QR code it shows. The code carries the API
+   address, the business and the device credential; the credential is kept in
+   the phone's secure keychain. Revoking the device in the hub stops it at once.
+3. **Count**: start or open a count for the device's location, then scan with
+   the camera or a hardware scanner (which types the code and presses enter).
+
+Counting works offline. The app downloads the catalog to look up barcodes
+locally, and every scan is stored in SQLite with its own ID before it is sent.
+The sync engine (`packages/sync`) retries when the network returns; the
+server ignores entries it already has, so a lost response never double-counts.
+Entries undone before syncing are never sent. If the count was closed on the
+web in the meantime, its entries are shown as refused rather than lost.
+
+Run it with `pnpm --filter @pos/mobile start` and open it in Expo Go or a
+development build. Set `PUBLIC_API_URL` for the web app (and the app's server
+field) to an address the phone can reach, such as your machine's LAN IP.
 
 ## Running locally
 

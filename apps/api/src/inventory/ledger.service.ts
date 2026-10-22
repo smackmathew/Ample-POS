@@ -34,7 +34,7 @@ export class LedgerService {
   async record(input: OperationInput): Promise<OperationResult> {
     const tx = this.db.tx;
     const { tenantId } = currentTenant();
-    const { user } = currentContext();
+    const { user, device } = currentContext();
 
     const [operation] = await tx
       .insert(schema.inventoryOperations)
@@ -66,6 +66,7 @@ export class LedgerService {
           referenceId: input.reference?.id ?? null,
           note: input.note ?? null,
           actorUserId: user.userId,
+          actorDeviceId: device?.id ?? null,
         })),
       )
       .returning();

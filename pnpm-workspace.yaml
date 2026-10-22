@@ -5,3 +5,7 @@ onlyBuiltDependencies:
   - "@swc/core"
   - esbuild
   - sharp
+# Optional peers (e.g. drizzle-orm's expo-sqlite) must not be installed
+# automatically: that drags a second React Native into the server packages
+# and breaks the mobile bundle. Each package declares the peers it uses.
+autoInstallPeers: false
