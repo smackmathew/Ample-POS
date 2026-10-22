@@ -60,7 +60,10 @@ export const MODULES: readonly ModuleDefinition[] = [
       { key: 'inventory.count', description: 'Record counts' },
       { key: 'inventory.count.approve', description: 'Approve count adjustments' },
     ],
-    nav: [{ label: 'Inventory', path: '/inventory', permission: 'inventory.read' }],
+    nav: [
+      { label: 'Stock levels', path: '/inventory', permission: 'inventory.read' },
+      { label: 'Counts', path: '/inventory/counts', permission: 'inventory.count' },
+    ],
     phase: 2,
   },
   {

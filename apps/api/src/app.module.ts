@@ -1,11 +1,15 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { CatalogController } from './catalog/catalog.controller';
 import { AuthGuard } from './core/auth.guard';
 import { AuthService } from './core/auth.service';
 import { APP_CONFIG, type AppConfig } from './core/config';
 import { Db, DB_HANDLE, dbHandleFactory } from './core/database';
 import { Events } from './core/events';
 import { TenantContextInterceptor } from './core/tenant-context.interceptor';
+import { CountsController } from './inventory/counts.controller';
+import { InventoryController } from './inventory/inventory.controller';
+import { LedgerService } from './inventory/ledger.service';
 import { AuditController } from './platform/audit.controller';
 import { DevicesController } from './platform/devices.controller';
 import { IdentityController } from './platform/identity.controller';
@@ -31,6 +35,9 @@ export class AppModule {
         InvitationsController,
         DevicesController,
         AuditController,
+        CatalogController,
+        InventoryController,
+        CountsController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
@@ -38,6 +45,7 @@ export class AppModule {
         Db,
         AuthService,
         Events,
+        LedgerService,
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
       ],

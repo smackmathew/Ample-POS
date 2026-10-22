@@ -4,7 +4,7 @@ export interface Me {
 }
 
 export interface CurrentTenant {
-  tenant: { id: string; name: string; slug: string };
+  tenant: { id: string; name: string; slug: string; currency: string };
   membership: { id: string; role: { id: string; key: string }; permissions: string[] };
   enabledModules: string[];
 }
@@ -70,3 +70,91 @@ export interface AuditEntry {
 }
 
 export const can = (permissions: string[], key: string) => permissions.includes('*') || permissions.includes(key);
+
+export interface Variant {
+  id: string;
+  productId: string;
+  name: string;
+  sku: string | null;
+  priceMinor: number;
+  costMinor: number | null;
+  trackInventory: boolean;
+  status: 'active' | 'archived';
+  version: number;
+  barcodes: string[];
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  status: 'active' | 'archived';
+  version: number;
+  variants: Variant[];
+}
+
+export interface StockLevel {
+  variantId: string;
+  variantName: string;
+  sku: string | null;
+  productId: string;
+  productName: string;
+  onHand: number;
+}
+
+export interface Movement {
+  id: number;
+  locationName: string;
+  variantName: string;
+  productName: string;
+  quantityDelta: number;
+  reason: string;
+  note: string | null;
+  occurredAt: string;
+  actor: { email: string | null; displayName: string | null } | null;
+}
+
+export interface CountSummary {
+  id: string;
+  name: string;
+  status: 'open' | 'submitted' | 'approved' | 'cancelled';
+  locationName: string;
+  startedAt: string;
+  entryCount: number;
+}
+
+export interface CountLine {
+  variantId: string;
+  productName: string;
+  variantName: string;
+  sku: string | null;
+  counted: number;
+  countedAt: string;
+  expected: number;
+  discrepancy: number;
+  onHandNow: number;
+}
+
+export interface CountDetail {
+  id: string;
+  name: string;
+  status: CountSummary['status'];
+  locationId: string;
+  startedAt: string;
+  lines: CountLine[];
+  totals: { items: number; withDiscrepancy: number; netUnits: number };
+}
+
+export interface CountEntry {
+  id: string;
+  variantName: string;
+  productName: string;
+  quantity: number;
+  countedAt: string;
+  voidedAt: string | null;
+  countedBy: { email: string | null; displayName: string | null } | null;
+}
+
+export const variantLabel = (productName: string, variantName: string) =>
+  variantName === 'Default' ? productName : `${productName} — ${variantName}`;
