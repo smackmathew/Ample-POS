@@ -45,6 +45,7 @@ const entriesBody = z.object({
 
 const listQuery = z.object({
   status: z.enum(['open', 'submitted', 'approved', 'cancelled']).optional(),
+  locationId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
@@ -91,7 +92,7 @@ export class CountsController {
       })
       .from(s)
       .innerJoin(schema.locations, eq(schema.locations.id, s.locationId))
-      .where(q.status ? eq(s.status, q.status) : undefined)
+      .where(and(q.status ? eq(s.status, q.status) : undefined, q.locationId ? eq(s.locationId, q.locationId) : undefined))
       .orderBy(desc(s.startedAt))
       .limit(q.limit);
   }
@@ -178,6 +179,7 @@ export class CountsController {
         // Entries can't predate the session they belong to.
         countedAt: new Date(Math.max(Math.min(at, now), session.startedAt.getTime())),
         countedBy: currentContext().user.userId,
+        deviceId: currentContext().device?.id ?? null,
       };
     });
     const inserted = await this.db.tx

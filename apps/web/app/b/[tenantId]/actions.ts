@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { api, attempt, type ActionState } from '@/lib/api';
+import QRCode from 'qrcode';
+import { api, attempt, PUBLIC_API_URL, type ActionState } from '@/lib/api';
 
 const str = (form: FormData, key: string) => {
   const v = form.get(key);
@@ -40,7 +41,10 @@ export async function registerDevice(tenantId: string, _: ActionState, form: For
       body: { locationId: str(form, 'locationId'), name: str(form, 'name'), kind: str(form, 'kind') },
     });
     revalidatePath(`/b/${tenantId}/devices`);
-    return { secret: credential };
+    // Scanned by the mobile app to pair: where the API is, which business, and the credential.
+    const pairing = JSON.stringify({ v: 1, api: PUBLIC_API_URL, tenantId, credential });
+    const qrSvg = await QRCode.toString(pairing, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+    return { secret: credential, qrSvg };
   });
 }
 

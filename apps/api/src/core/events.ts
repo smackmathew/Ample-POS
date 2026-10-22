@@ -6,10 +6,11 @@ import { currentContext, currentTenant } from './request-context';
 @Injectable()
 export class Events {
   async audit(action: string, target: { type: string; id: string }, data: Record<string, unknown> = {}) {
-    const { tx, user } = currentContext();
+    const { tx, user, device } = currentContext();
     await tx.insert(schema.auditLog).values({
       tenantId: currentTenant().tenantId,
       actorUserId: user.userId,
+      actorDeviceId: device?.id ?? null,
       action,
       targetType: target.type,
       targetId: target.id,

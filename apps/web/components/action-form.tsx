@@ -43,6 +43,13 @@ export function ActionForm({
         <div className="col-span-full mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
           <p className="font-medium">{secretLabel ?? 'Copy this now. It will not be shown again.'}</p>
           <code className="mt-1 block break-all">{state.secret}</code>
+          {state.qrSvg && (
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              {/* Generated server-side by the qrcode library from our own data. */}
+              <div className="w-48 bg-white" dangerouslySetInnerHTML={{ __html: state.qrSvg }} />
+              <p className="max-w-xs text-stone-700">Open the Ample POS app on the device and scan this code to pair it.</p>
+            </div>
+          )}
         </div>
       )}
     </form>

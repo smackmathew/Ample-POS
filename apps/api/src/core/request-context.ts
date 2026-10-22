@@ -15,11 +15,19 @@ export interface TenantMembership {
   permissions: string[];
 }
 
+export interface DeviceIdentity {
+  id: string;
+  locationId: string;
+  kind: 'register' | 'handheld' | 'kiosk';
+}
+
 export interface RequestContext {
   user: AuthUser;
   tx: Transaction;
   /** Null on routes marked @NoTenant(). */
   tenant: TenantMembership | null;
+  /** Set when the request came from a paired register or handheld. */
+  device: DeviceIdentity | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

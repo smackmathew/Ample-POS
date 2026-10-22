@@ -43,6 +43,8 @@ export const unique = (prefix: string) => `${prefix}-${Date.now().toString(36)}-
 /** A signed-in user with helpers for calling the API, optionally inside a business. */
 export class Client {
   tenantId?: string;
+  /** Sent as X-Device-Credential, as a paired handheld or register would. */
+  deviceCredential?: string;
   private constructor(
     private readonly app: INestApplication,
     readonly token: string,
@@ -57,6 +59,7 @@ export class Client {
   private req(method: 'get' | 'post' | 'put' | 'patch' | 'delete', path: string) {
     let r = request(this.app.getHttpServer())[method](path).set('Authorization', `Bearer ${this.token}`);
     if (this.tenantId) r = r.set('X-Tenant-Id', this.tenantId);
+    if (this.deviceCredential) r = r.set('X-Device-Credential', this.deviceCredential);
     return r;
   }
 

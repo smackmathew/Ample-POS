@@ -50,7 +50,10 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return data as T;
 }
 
-export type ActionState = { ok?: string; error?: string; secret?: string } | undefined;
+export type ActionState = { ok?: string; error?: string; secret?: string; qrSvg?: string } | undefined;
+
+/** Base URL devices use to reach the API (may differ from the server-side API_URL). */
+export const PUBLIC_API_URL = process.env.PUBLIC_API_URL ?? API_URL;
 
 /** Wraps a server action so API errors become form messages instead of error pages. */
 export async function attempt(fn: () => Promise<ActionState | void>): Promise<ActionState> {

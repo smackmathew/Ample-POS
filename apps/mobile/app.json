@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Ample POS",
+    "slug": "ample-pos",
+    "scheme": "amplepos",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.amplepos.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.amplepos.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Ample POS uses the camera to scan product barcodes and pairing codes.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "extra": {
+      "defaultApiUrl": "http://localhost:4000"
+    }
+  }
+}

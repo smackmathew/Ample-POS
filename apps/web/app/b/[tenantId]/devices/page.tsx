@@ -56,7 +56,7 @@ export default async function DevicesPage({ params }: { params: Promise<{ tenant
         <ActionForm
           action={registerDevice.bind(null, tenantId)}
           className="card grid gap-3 sm:grid-cols-3"
-          secretLabel="Device credential — enter it on the device now. It will not be shown again."
+          secretLabel="Pair the device now. This code will not be shown again."
         >
           <input name="name" placeholder="Register 1" required className="input" />
           <select name="kind" className="input">
