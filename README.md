@@ -14,7 +14,8 @@ devices and an audit trail.
 | 1 | Foundation: businesses, locations, roles and permissions, invitations, devices, module entitlements, audit log, outbox, admin hub | **Done** |
 | 2 | Product catalog and inventory ledger with count sessions | **Done** |
 | 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | **Done** |
-| 4 | POS checkout, refunds, registers, Stripe Terminal payment adapter | Next |
+| 4 | POS checkout, refunds, registers, card payments (simulated + Stripe server side) | **Done** |
+| 4b | Native register app with the Stripe Terminal reader SDK | Next |
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | |
 | 6 | Time clock, tasks, scheduling, reporting | |
 | 7 | Subscription billing tied to enabled modules | |
@@ -70,6 +71,35 @@ packages/sync    API client and offline sync engine shared by devices
 ![Count review](docs/screenshots/count-review.png)
 
 Quantities are whole units for now; weighed and measured items come later.
+
+## Checkout and payments
+
+- **Registers.** A cashier opens a register with a starting float (from the web
+  hub, or on a paired register device). Closing it compares the cash counted
+  with the float plus cash sales minus cash refunds and records the over/short.
+- **Sales.** The server prices every sale from the catalog. Prices are entered
+  before tax; each location has a sales tax rate, and tax is rounded per line.
+  Line discounts need `pos.discount`. A sale completes once its payments cover
+  the total: it gets the next receipt number and, if Inventory is on, stock
+  goes down.
+- **Payments.** Cash records what was tendered and the change. Card payments go
+  through a processor behind one interface:
+  - `PAYMENTS_PROVIDER=simulated` (default) keeps payments in memory; the
+    register shows *Simulate approved card* / *Simulate decline*.
+  - `PAYMENTS_PROVIDER=stripe` creates card-present PaymentIntents for Stripe
+    Terminal and updates them from Stripe's webhook (`POST /webhooks/stripe`,
+    signature checked) or when the register asks.
+  A declined card stays pending so the customer can try another card; while a
+  card is pending nothing else can be charged, so a sale can't be overpaid.
+- **Retries are safe.** Sale, payment and refund ids come from the client and
+  double as the processor's idempotency keys. Re-sending a request after a
+  timeout returns the original result instead of charging or refunding twice.
+- **Refunds.** Pick items and quantities; the amount includes their tax.
+  Partial refunds split a line to the cent. Money goes back to the original
+  payments, most recent first: cards through the processor, cash from the
+  refunding cashier's open register. Optionally put items back in stock.
+
+![Register](docs/screenshots/register.png)
 
 ## Mobile counting app
 

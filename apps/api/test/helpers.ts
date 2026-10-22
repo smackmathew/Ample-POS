@@ -23,14 +23,17 @@ export function adminSql() {
   return postgres(urlFor(decodeURIComponent(admin.username), decodeURIComponent(admin.password)), { max: 1, onnotice: () => {} });
 }
 
-export async function createTestApp(): Promise<INestApplication> {
+export async function createTestApp(options: { env?: Record<string, string>; providers?: [symbol, unknown][] } = {}): Promise<INestApplication> {
   const config = loadConfig({
     DATABASE_URL: appDatabaseUrl(),
     AUTH_MODE: 'dev',
     AUTH_DEV_SECRET: 'test-secret-test-secret-test-secret-123',
+    ...options.env,
   });
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule.forRoot(config)] }).compile();
-  const app = moduleRef.createNestApplication({ logger: false });
+  let builder = Test.createTestingModule({ imports: [AppModule.forRoot(config)] });
+  for (const [token, value] of options.providers ?? []) builder = builder.overrideProvider(token).useValue(value);
+  const moduleRef = await builder.compile();
+  const app = moduleRef.createNestApplication({ logger: false, rawBody: true });
   configureApp(app, config);
   // Listening once lets supertest reuse the server instead of binding per request.
   await app.listen(0);

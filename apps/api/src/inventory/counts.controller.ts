@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { Db } from '../core/database';
 import { RequireModule, RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
-import { currentContext, currentTenant } from '../core/request-context';
+import { currentContext, currentTenant, currentUserId } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
 import { LedgerService } from './ledger.service';
 
@@ -88,7 +88,7 @@ export class CountsController {
         startedAt: s.startedAt,
         submittedAt: s.submittedAt,
         closedAt: s.closedAt,
-        entryCount: sql<number>`(select count(*) from count_entries e where e.session_id = ${s.id} and e.voided_at is null)`.mapWith(Number),
+        entryCount: sql<number>`(select count(*) from count_entries e where e.session_id = count_sessions.id and e.voided_at is null)`.mapWith(Number),
       })
       .from(s)
       .innerJoin(schema.locations, eq(schema.locations.id, s.locationId))
@@ -107,7 +107,7 @@ export class CountsController {
     if (!location) throw new NotFoundException('Location not found or archived');
     const [session] = await this.db.tx
       .insert(schema.countSessions)
-      .values({ tenantId: currentTenant().tenantId, ...body, startedBy: currentContext().user.userId })
+      .values({ tenantId: currentTenant().tenantId, ...body, startedBy: currentUserId() })
       .returning();
     await this.events.record('count.started', { type: 'count', id: session!.id }, body);
     return session;
@@ -178,7 +178,7 @@ export class CountsController {
         quantity: e.quantity,
         // Entries can't predate the session they belong to.
         countedAt: new Date(Math.max(Math.min(at, now), session.startedAt.getTime())),
-        countedBy: currentContext().user.userId,
+        countedBy: currentUserId(),
         deviceId: currentContext().device?.id ?? null,
       };
     });
@@ -205,7 +205,7 @@ export class CountsController {
     await this.lock(id, ['open']);
     const [entry] = await this.db.tx
       .update(schema.countEntries)
-      .set({ voidedAt: new Date(), voidedBy: currentContext().user.userId })
+      .set({ voidedAt: new Date(), voidedBy: currentUserId() })
       .where(and(eq(schema.countEntries.id, entryId), eq(schema.countEntries.sessionId, id), isNull(schema.countEntries.voidedAt)))
       .returning({ id: schema.countEntries.id });
     if (!entry) throw new NotFoundException('Entry not found or already voided');
@@ -221,7 +221,7 @@ export class CountsController {
       .from(schema.countEntries)
       .where(and(eq(schema.countEntries.sessionId, id), isNull(schema.countEntries.voidedAt)))) as [{ n: number }];
     if (n === 0) throw new BadRequestException('Count at least one item before submitting');
-    await this.transition(id, 'submitted', { submittedAt: new Date(), submittedBy: currentContext().user.userId });
+    await this.transition(id, 'submitted', { submittedAt: new Date(), submittedBy: currentUserId() });
     await this.events.record('count.submitted', { type: 'count', id });
     return this.get(id);
   }
@@ -239,7 +239,7 @@ export class CountsController {
   @Post(':id/cancel')
   async cancel(@Param('id', ParseUUIDPipe) id: string) {
     await this.lock(id, ['open', 'submitted']);
-    await this.transition(id, 'cancelled', { closedAt: new Date(), closedBy: currentContext().user.userId });
+    await this.transition(id, 'cancelled', { closedAt: new Date(), closedBy: currentUserId() });
     await this.events.record('count.cancelled', { type: 'count', id });
     return this.get(id);
   }
@@ -267,7 +267,7 @@ export class CountsController {
       });
       operationId = result.operationId;
     }
-    await this.transition(id, 'approved', { closedAt: new Date(), closedBy: currentContext().user.userId, operationId });
+    await this.transition(id, 'approved', { closedAt: new Date(), closedBy: currentUserId(), operationId });
     await this.events.record('count.approved', { type: 'count', id }, {
       locationId: session.locationId,
       adjustments: changes.map((l) => ({ variantId: l.variantId, quantityDelta: l.discrepancy })),

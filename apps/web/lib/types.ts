@@ -31,6 +31,7 @@ export interface Location {
   name: string;
   kind: 'store' | 'warehouse' | 'office';
   timezone: string;
+  taxRateBps: number;
   archivedAt: string | null;
 }
 
@@ -158,3 +159,77 @@ export interface CountEntry {
 
 export const variantLabel = (productName: string, variantName: string) =>
   variantName === 'Default' ? productName : `${productName} — ${variantName}`;
+
+export interface RegisterSummary {
+  id: string;
+  locationId: string;
+  locationName: string;
+  deviceId: string | null;
+  status: 'open' | 'closed';
+  openingFloatMinor: number;
+  openedAt: string;
+  closedAt: string | null;
+  countedCashMinor: number | null;
+  totals: { salesCount: number; grossMinor: number; cashMinor: number; cardMinor: number; cashRefundsMinor: number; expectedCashMinor: number | null };
+  varianceMinor: number | null;
+}
+
+export interface SaleLine {
+  id: string;
+  variantId: string;
+  description: string;
+  sku: string | null;
+  quantity: number;
+  unitPriceMinor: number;
+  discountMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  refundedQuantity: number;
+  refundedMinor: number;
+}
+
+export interface SalePayment {
+  id: string;
+  method: 'cash' | 'card';
+  status: 'pending' | 'succeeded' | 'failed' | 'canceled';
+  amountMinor: number;
+  tenderedMinor: number | null;
+  changeMinor: number | null;
+  provider: string | null;
+  lastError: string | null;
+}
+
+export interface Sale {
+  id: string;
+  status: 'open' | 'completed' | 'voided';
+  currency: string;
+  registerSessionId: string;
+  subtotalMinor: number;
+  discountMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  taxRateBps: number;
+  receiptNumber: number | null;
+  createdAt: string;
+  completedAt: string | null;
+  lines: SaleLine[];
+  payments: SalePayment[];
+  refunds: { id: string; amountMinor: number; restock: boolean; reason: string | null; createdAt: string }[];
+  paidMinor: number;
+  pendingMinor: number;
+  dueMinor: number;
+  refundedMinor: number;
+}
+
+export interface SaleSummary {
+  id: string;
+  status: Sale['status'];
+  receiptNumber: number | null;
+  totalMinor: number;
+  currency: string;
+  createdAt: string;
+  locationName: string;
+  cashier: string | null;
+  cashierEmail: string | null;
+  refundedMinor: number;
+}

@@ -20,10 +20,14 @@ function isTimeZone(tz: string): boolean {
 const timezone = z.string().refine(isTimeZone, 'must be an IANA time zone, e.g. America/Chicago');
 const kind = z.enum(['store', 'warehouse', 'office']);
 
+/** Sales tax in basis points: 825 = 8.25%. Prices are entered before tax. */
+const taxRateBps = z.number().int().min(0).max(10_000);
+
 const createBody = z.object({
   name: z.string().trim().min(1).max(100),
   kind: kind.default('store'),
   timezone,
+  taxRateBps: taxRateBps.default(0),
 });
 
 const updateBody = z
@@ -31,6 +35,7 @@ const updateBody = z
     name: z.string().trim().min(1).max(100),
     kind,
     timezone,
+    taxRateBps,
     archived: z.boolean(),
   })
   .partial()
