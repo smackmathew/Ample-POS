@@ -19,6 +19,7 @@ export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
+  currency: text('currency').notNull().default('USD'),
   createdAt: createdAt(),
 });
 
@@ -121,4 +122,124 @@ export const invitations = pgTable('invitations', {
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   acceptedBy: uuid('accepted_by'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+
+const updatedAt = () => timestamp('updated_at', { withTimezone: true }).notNull().defaultNow();
+
+export const products = pgTable('products', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  category: text('category'),
+  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  version: integer('version').notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const productVariants = pgTable('product_variants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  productId: uuid('product_id').notNull(),
+  name: text('name').notNull().default('Default'),
+  sku: text('sku'),
+  priceMinor: bigint('price_minor', { mode: 'number' }).notNull(),
+  costMinor: bigint('cost_minor', { mode: 'number' }),
+  trackInventory: boolean('track_inventory').notNull().default(true),
+  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  position: integer('position').notNull().default(0),
+  version: integer('version').notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const variantBarcodes = pgTable(
+  'variant_barcodes',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    barcode: text('barcode').notNull(),
+    variantId: uuid('variant_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.barcode] })],
+);
+
+export const MOVEMENT_REASONS = [
+  'receive',
+  'sale',
+  'return',
+  'transfer_out',
+  'transfer_in',
+  'adjustment',
+  'count_adjustment',
+] as const;
+export type MovementReason = (typeof MOVEMENT_REASONS)[number];
+
+export const inventoryOperations = pgTable('inventory_operations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  kind: text('kind', { enum: ['receipt', 'adjustment', 'transfer', 'count'] }).notNull(),
+  idempotencyKey: text('idempotency_key'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+});
+
+export const stockMovements = pgTable('stock_movements', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  variantId: uuid('variant_id').notNull(),
+  quantityDelta: integer('quantity_delta').notNull(),
+  reason: text('reason', { enum: MOVEMENT_REASONS }).notNull(),
+  operationId: uuid('operation_id').notNull(),
+  referenceType: text('reference_type'),
+  referenceId: text('reference_id'),
+  note: text('note'),
+  actorUserId: uuid('actor_user_id'),
+  actorDeviceId: uuid('actor_device_id'),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: createdAt(),
+});
+
+export const stockLevels = pgTable(
+  'stock_levels',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    locationId: uuid('location_id').notNull(),
+    variantId: uuid('variant_id').notNull(),
+    onHand: integer('on_hand').notNull(),
+    lastMovementId: bigint('last_movement_id', { mode: 'number' }).notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.locationId, t.variantId] })],
+);
+
+export const countSessions = pgTable('count_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  name: text('name').notNull(),
+  status: text('status', { enum: ['open', 'submitted', 'approved', 'cancelled'] }).notNull().default('open'),
+  startedBy: uuid('started_by').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  submittedBy: uuid('submitted_by'),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  closedBy: uuid('closed_by'),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  operationId: uuid('operation_id'),
+});
+
+export const countEntries = pgTable('count_entries', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  sessionId: uuid('session_id').notNull(),
+  variantId: uuid('variant_id').notNull(),
+  quantity: integer('quantity').notNull(),
+  countedAt: timestamp('counted_at', { withTimezone: true }).notNull(),
+  countedBy: uuid('counted_by').notNull(),
+  deviceId: uuid('device_id'),
+  voidedAt: timestamp('voided_at', { withTimezone: true }),
+  voidedBy: uuid('voided_by'),
+  createdAt: createdAt(),
 });

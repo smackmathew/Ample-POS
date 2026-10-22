@@ -32,7 +32,8 @@ export async function createTestApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule.forRoot(config)] }).compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app, config);
-  await app.init();
+  // Listening once lets supertest reuse the server instead of binding per request.
+  await app.listen(0);
   return app;
 }
 

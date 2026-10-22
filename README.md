@@ -12,8 +12,8 @@ devices and an audit trail.
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Foundation: businesses, locations, roles and permissions, invitations, devices, module entitlements, audit log, outbox, admin hub | **Done** |
-| 2 | Product catalog and inventory ledger with count sessions | Next |
-| 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | |
+| 2 | Product catalog and inventory ledger with count sessions | **Done** |
+| 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | Next |
 | 4 | POS checkout, refunds, registers, Stripe Terminal payment adapter | |
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | |
 | 6 | Time clock, tasks, scheduling, reporting | |
@@ -44,6 +44,30 @@ packages/modules Module registry, permissions catalog, built-in roles
   that only act for `app.user_id`.
 - The audit log is append-only for `pos_app`.
 - Members can only grant, or act on holders of, permissions they hold themselves.
+
+## How inventory works
+
+- **Products and variants.** Every product has at least one variant (the sellable
+  item). Variants carry the SKU, price and cost in integer cents, and any number
+  of barcodes. SKUs and barcodes are unique within a business.
+- **Edits are versioned.** Product and variant updates send the version they
+  started from; a stale version gets `409 version_conflict` with the current
+  data instead of silently overwriting someone else's change.
+- **Stock is a ledger.** Receipts, adjustments, transfers and count corrections
+  are append-only `stock_movements`. A database trigger keeps `stock_levels` in
+  step, and the app role cannot update balances or edit movements directly.
+- **Retries are safe.** Stock operations accept an `idempotencyKey`; resending
+  the same request returns the original result without moving stock again.
+- **Counts compare against the moment of counting.** Staff record count entries
+  (several people can count the same item; offline devices can resend entries
+  safely). On approval, each item's count is compared with the ledger balance
+  as of when it was counted, so a sale that happens during the count is not
+  booked as shrinkage. Counting (`inventory.count`) and approving
+  (`inventory.count.approve`) are separate permissions.
+
+![Count review](docs/screenshots/count-review.png)
+
+Quantities are whole units for now; weighed and measured items come later.
 
 ## Running locally
 
