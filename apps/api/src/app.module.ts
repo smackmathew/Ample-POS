@@ -10,12 +10,18 @@ import { TenantContextInterceptor } from './core/tenant-context.interceptor';
 import { CountsController } from './inventory/counts.controller';
 import { InventoryController } from './inventory/inventory.controller';
 import { LedgerService } from './inventory/ledger.service';
+import { SECRET_BOX, SecretBox } from './core/secrets';
+import { SHOPIFY_FETCH } from './integrations/shopify/client';
+import { ShopifyController, ShopifyWebhookController } from './integrations/shopify/shopify.controller';
+import { ShopifyJobs } from './integrations/shopify/shopify.jobs';
+import { ShopifySyncService } from './integrations/shopify/shopify-sync.service';
 import { CARD_PROVIDER } from './payments/provider';
 import { SimulatedCardProvider } from './payments/simulated.provider';
 import { StripeCardProvider } from './payments/stripe.provider';
 import { WebhooksController } from './payments/webhooks.controller';
 import { RegistersController, SalesController } from './sales/sales.controller';
 import { SalesService } from './sales/sales.service';
+import { OutboxWorker } from './worker/outbox.worker';
 import { AuditController } from './platform/audit.controller';
 import { DeviceSessionController } from './platform/device-session.controller';
 import { DevicesController } from './platform/devices.controller';
@@ -49,6 +55,8 @@ export class AppModule {
         RegistersController,
         SalesController,
         WebhooksController,
+        ShopifyController,
+        ShopifyWebhookController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
@@ -58,6 +66,11 @@ export class AppModule {
         Events,
         LedgerService,
         SalesService,
+        OutboxWorker,
+        ShopifySyncService,
+        ShopifyJobs,
+        { provide: SECRET_BOX, useFactory: () => (config.SECRETS_KEY ? new SecretBox(config.SECRETS_KEY) : null) },
+        { provide: SHOPIFY_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         {
           provide: CARD_PROVIDER,
           useFactory: () =>

@@ -366,3 +366,69 @@ export const refundPayments = pgTable(
   },
   (t) => [primaryKey({ columns: [t.refundId, t.paymentId] })],
 );
+
+export const integrationConnections = pgTable('integration_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  provider: text('provider', { enum: ['shopify'] }).notNull(),
+  status: text('status', { enum: ['active', 'error', 'disconnected'] }).notNull().default('active'),
+  shopDomain: text('shop_domain').notNull(),
+  credentials: text('credentials').notNull(),
+  settings: jsonb('settings').$type<{ onlineOrdersLocationId?: string }>().notNull().default({}),
+  statusMessage: text('status_message'),
+  lastImportAt: timestamp('last_import_at', { withTimezone: true }),
+  lastPushAt: timestamp('last_push_at', { withTimezone: true }),
+  ordersCheckedAt: timestamp('orders_checked_at', { withTimezone: true }),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+});
+
+export const externalMappings = pgTable(
+  'external_mappings',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    connectionId: uuid('connection_id').notNull(),
+    kind: text('kind', { enum: ['product', 'variant', 'location'] }).notNull(),
+    externalId: text('external_id').notNull(),
+    internalId: uuid('internal_id').notNull(),
+    data: jsonb('data').$type<{ inventoryItemId?: string }>().notNull().default({}),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.connectionId, t.kind, t.externalId] })],
+);
+
+export const inventoryPushState = pgTable(
+  'inventory_push_state',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    connectionId: uuid('connection_id').notNull(),
+    variantId: uuid('variant_id').notNull(),
+    locationId: uuid('location_id').notNull(),
+    lastPushed: integer('last_pushed'),
+    pushSeq: integer('push_seq').notNull().default(0),
+    lastPushedAt: timestamp('last_pushed_at', { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.connectionId, t.variantId, t.locationId] })],
+);
+
+export const syncIssues = pgTable('sync_issues', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: uuid('tenant_id').notNull(),
+  connectionId: uuid('connection_id').notNull(),
+  kind: text('kind').notNull(),
+  message: text('message').notNull(),
+  externalRef: text('external_ref'),
+  createdAt: createdAt(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+});
+
+export const processedWebhooks = pgTable(
+  'processed_webhooks',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    connectionId: uuid('connection_id').notNull(),
+    webhookId: text('webhook_id').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.connectionId, t.webhookId] })],
+);

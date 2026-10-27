@@ -16,8 +16,8 @@ devices and an audit trail.
 | 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | **Done** |
 | 4 | POS checkout, refunds, registers, card payments (simulated + Stripe server side) | **Done** |
 | 4b | Native register app with the Stripe Terminal reader SDK | Next |
-| 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | |
-| 6 | Time clock, tasks, scheduling, reporting | |
+| 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | **Done** |
+| 6 | Time clock, tasks, scheduling, reporting | Next |
 | 7 | Subscription billing tied to enabled modules | |
 
 Modules can already be turned on per business; their screens arrive in the phase listed.
@@ -100,6 +100,51 @@ Quantities are whole units for now; weighed and measured items come later.
   refunding cashier's open register. Optionally put items back in stock.
 
 ![Register](docs/screenshots/register.png)
+
+## Shopify sync
+
+Turn on **Website sync**, then connect a store from the Website sync page.
+
+**Who owns what**
+
+| Data | Source of truth | Direction |
+|---|---|---|
+| Product names, variants, SKUs, barcodes, prices | Shopify | Imported into Ample POS (matched by SKU first, so nothing is duplicated) |
+| Stock at linked locations | Ample POS | Pushed to Shopify's "available" quantity |
+| Online orders | Shopify | Recorded as sales at the location you choose; cancellations restock |
+
+**How it stays correct**
+
+- *Compare-and-swap.* Every stock push says what Shopify should currently have
+  (`changeFromQuantity`). If an online sale changed it meanwhile, Shopify
+  refuses, we re-read, and retry once the order has been recorded, so a push
+  never erases an online sale.
+- *Idempotency keys* on every inventory write (required by Shopify since
+  2026-04), so a retried push is applied once.
+- *No surprise zeros.* The first time an item is linked at a location where
+  Ample POS has no stock record, Shopify's count is adopted as starting stock.
+  Nothing is pushed while the Inventory tool is off.
+- *Webhooks are only a nudge.* Signatures are checked, duplicates dropped, and
+  the worker re-reads the product or order from Shopify rather than trusting
+  the webhook body. A scheduled reconcile (every 15 minutes) catches anything a
+  webhook missed.
+- *Background worker.* Stock pushes and webhook handling run from the outbox
+  with retries and exponential backoff, inside the API process by default
+  (`WORKER_ENABLED`).
+
+**Connecting**
+
+- *Connect with Shopify* (recommended): set `SHOPIFY_CLIENT_ID` and
+  `SHOPIFY_CLIENT_SECRET` from Ample POS's app in the Shopify Dev Dashboard and
+  allow `<WEB_URL>/shopify/callback` as a redirect URL. Merchants approve
+  access on Shopify. Tokens expire hourly and are refreshed automatically; if
+  Shopify refuses a refresh (e.g. the app was uninstalled) the store is marked
+  "reconnect needed".
+- *Existing custom app token*: for stores that already have an app created in
+  the Shopify admin (Shopify no longer allows new ones).
+
+Credentials are encrypted with `SECRETS_KEY` (AES-256-GCM) and never returned
+by the API. Written against Shopify Admin API version 2026-10.
 
 ## Mobile counting app
 

@@ -300,7 +300,8 @@ export class CatalogController {
       .select()
       .from(schema.productVariants)
       .where(inArray(schema.productVariants.productId, products.map((p) => p.id)))
-      .orderBy(asc(schema.productVariants.position), asc(schema.productVariants.createdAt));
+      // id breaks ties so the order is stable (variants created together share created_at).
+      .orderBy(asc(schema.productVariants.position), asc(schema.productVariants.createdAt), asc(schema.productVariants.id));
     const barcodes = await this.barcodesFor(variants.map((v) => v.id));
     return products.map((p) => ({
       ...p,
