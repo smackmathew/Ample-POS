@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import QRCode from 'qrcode';
 import { api, attempt, PUBLIC_API_URL, type ActionState } from '@/lib/api';
+import { parsePercentToBps } from '@/lib/pricing';
 
 const str = (form: FormData, key: string) => {
   const v = form.get(key);
@@ -17,11 +18,13 @@ export async function toggleModule(tenantId: string, moduleId: string, enabled: 
 }
 
 export async function createLocation(tenantId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  const taxRateBps = parsePercentToBps(str(form, 'taxRate') ?? '0');
+  if (taxRateBps === null) return { error: 'Sales tax must be a percentage like 8.25' };
   return attempt(async () => {
     await api('/locations', {
       tenantId,
       method: 'POST',
-      body: { name: str(form, 'name'), kind: str(form, 'kind'), timezone: str(form, 'timezone') },
+      body: { name: str(form, 'name'), kind: str(form, 'kind'), timezone: str(form, 'timezone'), taxRateBps },
     });
     revalidatePath(`/b/${tenantId}/locations`);
     return { ok: 'Location added' };

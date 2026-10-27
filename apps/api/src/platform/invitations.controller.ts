@@ -17,7 +17,7 @@ import { assertCanDelegate } from '../core/access';
 import { Db } from '../core/database';
 import { NoTenant, RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
-import { currentContext, currentTenant } from '../core/request-context';
+import { currentTenant, currentUserId } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
 
 const createBody = z.object({
@@ -73,7 +73,7 @@ export class InvitationsController {
         roleId: role.id,
         email: body.email ?? null,
         codeHash: hashCode(code),
-        createdBy: currentContext().user.userId,
+        createdBy: currentUserId(),
         expiresAt: new Date(Date.now() + body.expiresInDays * 86_400_000),
       })
       .returning(publicColumns);

@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { Db } from '../core/database';
 import { RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
-import { currentContext, currentTenant } from '../core/request-context';
+import { currentTenant, currentUserId } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
 
 const toggleBody = z.object({ enabled: z.boolean() });
@@ -83,10 +83,10 @@ export class ModulesController {
 
     await tx
       .insert(schema.tenantModules)
-      .values({ tenantId, moduleId: id, enabled: body.enabled, updatedBy: currentContext().user.userId })
+      .values({ tenantId, moduleId: id, enabled: body.enabled, updatedBy: currentUserId() })
       .onConflictDoUpdate({
         target: [schema.tenantModules.tenantId, schema.tenantModules.moduleId],
-        set: { enabled: body.enabled, updatedAt: new Date(), updatedBy: currentContext().user.userId },
+        set: { enabled: body.enabled, updatedAt: new Date(), updatedBy: currentUserId() },
       });
     await this.events.record(body.enabled ? 'module.enabled' : 'module.disabled', { type: 'module', id });
     return { id, enabled: body.enabled };
