@@ -1,0 +1,44 @@
+# Render Blueprint: one web service (API + admin hub in one container) and a
+# Postgres database. Deploy with New → Blueprint and pick this repository.
+# Free plans are for trying it out: the service sleeps after 15 idle minutes
+# (background work such as Shopify sync pauses with it) and the free database
+# expires after 30 days. Switch both to paid plans before real use.
+services:
+  - type: web
+    name: ample-pos
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ADMIN_DATABASE_URL
+        fromDatabase:
+          name: ample-pos-db
+          property: connectionString
+      # Password for the restricted role the API connects as (created on first start).
+      - key: APP_DB_PASSWORD
+        generateValue: true
+      # Demo sign-in: anyone can sign in with any email. Test data only.
+      - key: AUTH_MODE
+        value: dev
+      - key: AUTH_DEV_SECRET
+        generateValue: true
+      # Encrypts stored Shopify credentials.
+      - key: SECRETS_KEY
+        generateValue: true
+      - key: PAYMENTS_PROVIDER
+        value: simulated
+      - key: BILLING_PROVIDER
+        value: simulated
+      # Optional, set in the dashboard when ready:
+      # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET (with PAYMENTS_PROVIDER=stripe)
+      # BILLING_STRIPE_SECRET_KEY / BILLING_STRIPE_WEBHOOK_SECRET (with BILLING_PROVIDER=stripe)
+      # SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET
+
+databases:
+  - name: ample-pos-db
+    plan: free
+    postgresMajorVersion: "16"
+    databaseName: ample_pos
+    ipAllowList: []

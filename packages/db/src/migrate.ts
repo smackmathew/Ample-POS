@@ -21,14 +21,20 @@ export async function setupDatabase(adminUrl: string, appPassword: string): Prom
 }
 
 async function ensureAppRole(sql: postgres.Sql, password: string): Promise<void> {
-  const [existing] = await sql`select 1 from pg_roles where rolname = ${APP_ROLE}`;
+  const [existing] = await sql<{ rolsuper: boolean; rolbypassrls: boolean }[]>`
+    select rolsuper, rolbypassrls from pg_roles where rolname = ${APP_ROLE}`;
   // Role names and passwords cannot be bound parameters in DDL.
   const literal = `'${password.replace(/'/g, "''")}'`;
   if (!existing) {
     await sql.unsafe(`create role ${APP_ROLE} login nosuperuser nobypassrls password ${literal}`);
-  } else {
-    await sql.unsafe(`alter role ${APP_ROLE} login nosuperuser nobypassrls password ${literal}`);
+    return;
   }
+  // Tenant isolation depends on RLS applying to this role. (Managed hosts' admin
+  // users may not re-state these attributes, so check instead of altering them.)
+  if (existing.rolsuper || existing.rolbypassrls) {
+    throw new Error(`The ${APP_ROLE} role must not be a superuser or bypass row-level security`);
+  }
+  await sql.unsafe(`alter role ${APP_ROLE} login password ${literal}`);
 }
 
 async function runMigrations(sql: postgres.Sql): Promise<string[]> {
