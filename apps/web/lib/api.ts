@@ -44,7 +44,13 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : (data?.message ?? res.statusText);
+    // Validation errors carry per-field issues; show those rather than a bare "Validation failed".
+    const issues = Array.isArray(data?.issues) ? (data.issues as { path: string; message: string }[]) : [];
+    const message = issues.length
+      ? issues.map((i) => i.message).join('; ')
+      : Array.isArray(data?.message)
+        ? data.message.join(', ')
+        : (data?.message ?? res.statusText);
     throw new ApiError(res.status, message, data);
   }
   return data as T;

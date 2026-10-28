@@ -28,6 +28,8 @@ export async function createTestApp(options: { env?: Record<string, string>; pro
     DATABASE_URL: appDatabaseUrl(),
     AUTH_MODE: 'dev',
     AUTH_DEV_SECRET: 'test-secret-test-secret-test-secret-123',
+    // Tests run the outbox worker explicitly with worker.runOnce().
+    WORKER_ENABLED: 'false',
     ...options.env,
   });
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(config)] });
