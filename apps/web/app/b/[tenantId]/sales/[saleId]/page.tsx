@@ -4,12 +4,18 @@ import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
 import { formatPercent } from '@/lib/pricing';
-import { can, type CurrentTenant, type Sale } from '@/lib/types';
+import { formatDateTime, formatDay, localDate } from '@/lib/time';
+import { can, type CurrentTenant, type Location, type Sale } from '@/lib/types';
 import { refundSale } from '../../sales-actions';
 
 export default async function SalePage({ params }: { params: Promise<{ tenantId: string; saleId: string }> }) {
   const { tenantId, saleId } = await params;
-  const [current, sale] = await Promise.all([api<CurrentTenant>('/tenant', { tenantId }), api<Sale>(`/sales/${saleId}`, { tenantId })]);
+  const [current, sale, locations] = await Promise.all([
+    api<CurrentTenant>('/tenant', { tenantId }),
+    api<Sale>(`/sales/${saleId}`, { tenantId }),
+    api<Location[]>('/locations?includeArchived=true', { tenantId }),
+  ]);
+  const tz = locations.find((l) => l.id === sale.locationId)?.timezone || 'UTC';
   const money = (n: number) => formatMoney(n, sale.currency);
   const refundable = sale.lines.filter((l) => l.quantity > l.refundedQuantity);
   const canRefund = sale.status === 'completed' && refundable.length > 0 && can(current.membership.permissions, 'pos.refund');
@@ -23,7 +29,7 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
         <div className="flex items-baseline justify-between">
           <h1 className="text-xl font-semibold">{sale.receiptNumber ? `Receipt #${sale.receiptNumber}` : 'Sale'}</h1>
           <span className="text-sm capitalize text-stone-500">
-            {sale.status} · {new Date(sale.completedAt ?? sale.createdAt).toLocaleString()}
+            {sale.status} · {formatDateTime(sale.completedAt ?? sale.createdAt, tz)}
           </span>
         </div>
         <table className="w-full text-sm">
@@ -54,7 +60,7 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
               />
             ))}
           {sale.refunds.map((r) => (
-            <Line key={r.id} label={`Refund ${new Date(r.createdAt).toLocaleDateString()}${r.reason ? ` — ${r.reason}` : ''}`} value={`−${money(r.amountMinor)}`} />
+            <Line key={r.id} label={`Refund ${formatDay(localDate(new Date(r.createdAt), tz))}${r.reason ? ` — ${r.reason}` : ''}`} value={`−${money(r.amountMinor)}`} />
           ))}
         </dl>
       </div>

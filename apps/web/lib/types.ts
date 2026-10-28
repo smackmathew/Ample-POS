@@ -120,6 +120,7 @@ export interface CountSummary {
   id: string;
   name: string;
   status: 'open' | 'submitted' | 'approved' | 'cancelled';
+  locationId: string;
   locationName: string;
   startedAt: string;
   entryCount: number;
@@ -202,6 +203,7 @@ export interface SalePayment {
 export interface Sale {
   id: string;
   status: 'open' | 'completed' | 'voided';
+  locationId: string;
   currency: string;
   registerSessionId: string;
   subtotalMinor: number;
@@ -228,6 +230,7 @@ export interface SaleSummary {
   totalMinor: number;
   currency: string;
   createdAt: string;
+  locationId: string;
   locationName: string;
   cashier: string | null;
   cashierEmail: string | null;

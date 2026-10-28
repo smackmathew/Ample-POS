@@ -50,6 +50,11 @@ export function formatTime(iso: string | Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 }
 
+/** Date and time of an instant in a time zone, e.g. "Mar 2, 2026, 9:05 AM". */
+export function formatDateTime(iso: string | Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+}
+
 export function formatDay(date: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00Z`));
 }

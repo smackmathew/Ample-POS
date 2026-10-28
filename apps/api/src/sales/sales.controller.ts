@@ -125,6 +125,7 @@ export class SalesController {
         currency: s.currency,
         createdAt: s.createdAt,
         completedAt: s.completedAt,
+        locationId: s.locationId,
         locationName: schema.locations.name,
         cashier: schema.users.displayName,
         cashierEmail: schema.users.email,

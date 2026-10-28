@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import type { AuditEntry } from '@/lib/types';
+import { formatDateTime } from '@/lib/time';
+import type { AuditEntry, Location } from '@/lib/types';
 
 export default async function AuditPage({
   params,
@@ -12,7 +13,12 @@ export default async function AuditPage({
   const { tenantId } = await params;
   const { before } = await searchParams;
   const qs = before && /^\d+$/.test(before) ? `?before=${before}` : '';
-  const { entries, nextBefore } = await api<{ entries: AuditEntry[]; nextBefore: number | null }>(`/audit${qs}`, { tenantId });
+  const [{ entries, nextBefore }, locations] = await Promise.all([
+    api<{ entries: AuditEntry[]; nextBefore: number | null }>(`/audit${qs}`, { tenantId }),
+    api<Location[]>('/locations', { tenantId }),
+  ]);
+  // Audit entries aren't tied to a location; show them in the business's main time zone.
+  const tz = locations[0]?.timezone || 'UTC';
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -30,7 +36,7 @@ export default async function AuditPage({
         <tbody>
           {entries.map((e) => (
             <tr key={e.id} className="border-t border-stone-100 align-top">
-              <td className="py-2 whitespace-nowrap">{new Date(e.createdAt).toLocaleString()}</td>
+              <td className="py-2 whitespace-nowrap">{formatDateTime(e.createdAt, tz)}</td>
               <td>{e.actor?.displayName ?? e.actor?.email ?? 'System'}</td>
               <td className="font-mono text-xs">{e.action}</td>
               <td className="font-mono text-xs break-all text-stone-500">{JSON.stringify(e.data)}</td>

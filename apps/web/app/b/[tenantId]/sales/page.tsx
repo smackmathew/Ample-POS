@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
+import { formatDateTime } from '@/lib/time';
 import type { CurrentTenant, Location, RegisterSummary, SaleSummary } from '@/lib/types';
 import { closeRegister, openRegister } from '../sales-actions';
 
@@ -23,13 +24,17 @@ export default async function SalesPage({
   const closedSession =
     closed && /^[0-9a-f-]{36}$/i.test(closed) ? await api<RegisterSummary>(`/registers/sessions/${closed}`, { tenantId }).catch(() => null) : null;
   const qs = receipt && /^\d+$/.test(receipt) ? `?receipt=${receipt}` : '?limit=50';
-  const [current, { session }, locations, { sales }] = await Promise.all([
+  const [current, { session }, allLocations, { sales }] = await Promise.all([
     api<CurrentTenant>('/tenant', { tenantId }),
     api<{ session: RegisterSummary | null }>('/registers/sessions/current', { tenantId }),
-    api<Location[]>('/locations', { tenantId }),
+    api<Location[]>('/locations?includeArchived=true', { tenantId }),
     api<{ sales: SaleSummary[] }>(`/sales${qs}`, { tenantId }),
   ]);
   const money = (n: number) => formatMoney(n, current.tenant.currency);
+  const where = new Map(allLocations.map((l) => [l.id, l]));
+  // Past rows can be at archived locations; only active ones can be picked.
+  const locations = allLocations.filter((l) => !l.archivedAt);
+  const tz = (locationId: string) => where.get(locationId)?.timezone || 'UTC';
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -119,7 +124,7 @@ export default async function SalesPage({
                       {s.receiptNumber ? `#${s.receiptNumber}` : 'View'}
                     </Link>
                   </td>
-                  <td className="text-stone-500">{new Date(s.createdAt).toLocaleString()}</td>
+                  <td className="text-stone-500">{formatDateTime(s.createdAt, tz(s.locationId))}</td>
                   <td>{s.locationName}</td>
                   <td>{s.cashier ?? s.cashierEmail}</td>
                   <td>

@@ -1,16 +1,19 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
-import { can, variantLabel, type CountDetail, type CountEntry, type CurrentTenant } from '@/lib/types';
+import { formatTime } from '@/lib/time';
+import { can, variantLabel, type CountDetail, type CountEntry, type CurrentTenant, type Location } from '@/lib/types';
 import { countScan, countTransition, voidCountEntry } from '../../../catalog-actions';
 
 export default async function CountPage({ params }: { params: Promise<{ tenantId: string; countId: string }> }) {
   const { tenantId, countId } = await params;
-  const [current, count, entries] = await Promise.all([
+  const [current, count, entries, locations] = await Promise.all([
     api<CurrentTenant>('/tenant', { tenantId }),
     api<CountDetail>(`/inventory/counts/${countId}`, { tenantId }),
     api<CountEntry[]>(`/inventory/counts/${countId}/entries`, { tenantId }),
+    api<Location[]>('/locations?includeArchived=true', { tenantId }),
   ]);
+  const tz = locations.find((l) => l.id === count.locationId)?.timezone || 'UTC';
   const perms = current.membership.permissions;
   const canCount = can(perms, 'inventory.count');
   const canApprove = can(perms, 'inventory.count.approve');
@@ -109,7 +112,7 @@ export default async function CountPage({ params }: { params: Promise<{ tenantId
                 {e.quantity} × {variantLabel(e.productName, e.variantName)}
               </span>
               <span className="flex items-center gap-3 text-xs text-stone-500">
-                {e.countedBy?.displayName ?? e.countedBy?.email} · {new Date(e.countedAt).toLocaleTimeString()}
+                {e.countedBy?.displayName ?? e.countedBy?.email} · {formatTime(e.countedAt, tz)}
                 {canCount && isOpen && !e.voidedAt && (
                   <form action={voidCountEntry.bind(null, tenantId, countId, e.id)}>
                     <button className="text-red-700 hover:underline">Void</button>

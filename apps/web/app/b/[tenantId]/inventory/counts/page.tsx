@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/time';
 import type { CountSummary, Location } from '@/lib/types';
 import { startCount } from '../../catalog-actions';
 
@@ -13,10 +14,14 @@ const STATUS_STYLE: Record<CountSummary['status'], string> = {
 
 export default async function CountsPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const [counts, locations] = await Promise.all([
+  const [counts, allLocations] = await Promise.all([
     api<CountSummary[]>('/inventory/counts', { tenantId }),
-    api<Location[]>('/locations', { tenantId }),
+    api<Location[]>('/locations?includeArchived=true', { tenantId }),
   ]);
+  const where = new Map(allLocations.map((l) => [l.id, l]));
+  // Past rows can be at archived locations; only active ones can be picked.
+  const locations = allLocations.filter((l) => !l.archivedAt);
+  const tz = (locationId: string) => where.get(locationId)?.timezone || 'UTC';
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -54,7 +59,7 @@ export default async function CountsPage({ params }: { params: Promise<{ tenantI
                   </Link>
                 </td>
                 <td>{c.locationName}</td>
-                <td className="text-stone-500">{new Date(c.startedAt).toLocaleString()}</td>
+                <td className="text-stone-500">{formatDateTime(c.startedAt, tz(c.locationId))}</td>
                 <td>{c.entryCount}</td>
                 <td>
                   <span className={`rounded px-2 py-0.5 text-xs capitalize ${STATUS_STYLE[c.status]}`}>{c.status}</span>

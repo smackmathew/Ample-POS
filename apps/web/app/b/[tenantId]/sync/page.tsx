@@ -1,5 +1,6 @@
 import { ActionForm } from '@/components/action-form';
 import { api, ApiError } from '@/lib/api';
+import { formatDateTime } from '@/lib/time';
 import type { Location } from '@/lib/types';
 import { connectShopify, disconnectShopify, linkLocation, resolveIssue, runSync, saveOrderLocation, startShopifyConnect } from '../sync-actions';
 
@@ -33,8 +34,6 @@ interface Issue {
   createdAt: string;
 }
 
-const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : 'never');
-
 export default async function SyncPage({
   params,
   searchParams,
@@ -45,6 +44,10 @@ export default async function SyncPage({
   const { tenantId } = await params;
   const { connected, error } = await searchParams;
   const [status, locations] = await Promise.all([api<Status>('/integrations/shopify', { tenantId }), api<Location[]>('/locations', { tenantId })]);
+
+  // Sync activity isn't tied to a location; show it in the business's main time zone.
+  const tz = locations[0]?.timezone || 'UTC';
+  const when = (iso?: string | null) => (iso ? formatDateTime(iso, tz) : 'never');
 
   if (!status.connected) return <Connect tenantId={tenantId} oauthEnabled={Boolean(status.oauthEnabled)} error={error} />;
 
@@ -153,7 +156,7 @@ export default async function SyncPage({
             <li key={i.id} className="flex items-start justify-between gap-3 py-2">
               <span>
                 {i.message}
-                <span className="block text-xs text-stone-400">{new Date(i.createdAt).toLocaleString()}</span>
+                <span className="block text-xs text-stone-400">{when(i.createdAt)}</span>
               </span>
               <form action={resolveIssue.bind(null, tenantId, i.id)}>
                 <button className="text-xs text-stone-500 hover:underline">Dismiss</button>

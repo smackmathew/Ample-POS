@@ -1,13 +1,17 @@
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
-import type { CurrentTenant, RegisterSummary } from '@/lib/types';
+import { formatDateTime } from '@/lib/time';
+import type { CurrentTenant, Location, RegisterSummary } from '@/lib/types';
 
 export default async function RegistersPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const [current, sessions] = await Promise.all([
+  const [current, sessions, locations] = await Promise.all([
     api<CurrentTenant>('/tenant', { tenantId }),
     api<RegisterSummary[]>('/registers/sessions?limit=100', { tenantId }),
+    api<Location[]>('/locations?includeArchived=true', { tenantId }),
   ]);
+  const where = new Map(locations.map((l) => [l.id, l]));
+  const tz = (locationId: string) => where.get(locationId)?.timezone || 'UTC';
   const money = (n: number | null) => (n === null ? '—' : formatMoney(n, current.tenant.currency));
 
   return (
@@ -32,7 +36,7 @@ export default async function RegistersPage({ params }: { params: Promise<{ tena
           <tbody>
             {sessions.map((s) => (
               <tr key={s.id} className="border-t border-stone-100">
-                <td className="py-2 whitespace-nowrap">{new Date(s.openedAt).toLocaleString()}</td>
+                <td className="py-2 whitespace-nowrap">{formatDateTime(s.openedAt, tz(s.locationId))}</td>
                 <td>
                   {s.locationName}
                   {s.deviceId ? '' : <span className="ml-1 text-xs text-stone-400">(web)</span>}

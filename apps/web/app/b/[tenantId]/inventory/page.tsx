@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/time';
 import { can, variantLabel, type CurrentTenant, type Location, type Movement, type StockLevel } from '@/lib/types';
 import { stockOperation } from '../catalog-actions';
 
@@ -151,7 +152,7 @@ export default async function InventoryPage({
             <tbody>
               {movements.map((m) => (
                 <tr key={m.id} className="border-t border-stone-100 first:border-0">
-                  <td className="py-2 whitespace-nowrap text-stone-500">{new Date(m.occurredAt).toLocaleString()}</td>
+                  <td className="py-2 whitespace-nowrap text-stone-500">{formatDateTime(m.occurredAt, location.timezone)}</td>
                   <td>{variantLabel(m.productName, m.variantName)}</td>
                   <td>{REASONS[m.reason] ?? m.reason}</td>
                   <td className={`text-right tabular-nums ${m.quantityDelta < 0 ? 'text-red-700' : 'text-teal-700'}`}>
