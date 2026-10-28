@@ -7,6 +7,28 @@ export interface CurrentTenant {
   tenant: { id: string; name: string; slug: string; currency: string };
   membership: { id: string; role: { id: string; key: string }; permissions: string[] };
   enabledModules: string[];
+  billing: TenantBilling | null;
+}
+
+export type BillingStanding = 'trial' | 'active' | 'past_due' | 'lapsed';
+
+export interface TenantBilling {
+  standing: BillingStanding;
+  trialEndsAt: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: string | null;
+}
+
+export interface BillingSummary {
+  standing: BillingStanding;
+  trialEndsAt: string;
+  provider: 'simulated' | 'stripe';
+  canManageOnline: boolean;
+  subscription: { status: string; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; syncedAt: string | null } | null;
+  lines: { moduleId: string; name: string; unitMinor: number; quantity: number; totalMinor: number }[];
+  included: string[];
+  monthlyTotalMinor: number;
+  currency: string;
 }
 
 export interface NavSection {
@@ -20,6 +42,7 @@ export interface ModuleSummary {
   name: string;
   description: string;
   phase: number;
+  monthlyPriceMinor: number;
   dependsOn: string[];
   permissions: { key: string; description: string }[];
   enabled: boolean;

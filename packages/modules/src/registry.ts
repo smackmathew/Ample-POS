@@ -32,6 +32,8 @@ export interface ModuleDefinition {
   nav: readonly NavItem[];
   /** Build phase that ships the module's functionality; the entitlement exists before then. */
   phase: number;
+  /** Monthly price per active location, in US cents. 0 means included with every plan. */
+  monthlyPriceMinor: number;
 }
 
 export const MODULES: readonly ModuleDefinition[] = [
@@ -47,6 +49,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     ],
     nav: [{ label: 'Products', path: '/catalog', permission: 'catalog.read' }],
     phase: 2,
+    monthlyPriceMinor: 0,
   },
   {
     id: 'inventory',
@@ -65,6 +68,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Counts', path: '/inventory/counts', permission: 'inventory.count' },
     ],
     phase: 2,
+    monthlyPriceMinor: 2900,
   },
   {
     id: 'pos',
@@ -83,6 +87,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Registers', path: '/registers', permission: 'pos.register.manage' },
     ],
     phase: 4,
+    monthlyPriceMinor: 4900,
   },
   {
     id: 'time-clock',
@@ -99,6 +104,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Timecards', path: '/timecards', permission: 'timeclock.manage' },
     ],
     phase: 6,
+    monthlyPriceMinor: 1900,
   },
   {
     id: 'scheduling',
@@ -112,6 +118,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     ],
     nav: [{ label: 'Schedule', path: '/schedule', permission: 'scheduling.read' }],
     phase: 6,
+    monthlyPriceMinor: 1900,
   },
   {
     id: 'tasks',
@@ -128,6 +135,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Checklists', path: '/tasks/manage', permission: 'tasks.manage' },
     ],
     phase: 6,
+    monthlyPriceMinor: 900,
   },
   {
     id: 'ecommerce-sync',
@@ -138,6 +146,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'sync.manage', description: 'Connect stores and resolve sync issues' }],
     nav: [{ label: 'Website sync', path: '/sync', permission: 'sync.manage' }],
     phase: 5,
+    monthlyPriceMinor: 2900,
   },
   {
     id: 'reporting',
@@ -148,6 +157,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'reports.read', description: 'View reports' }],
     nav: [{ label: 'Reports', path: '/reports', permission: 'reports.read' }],
     phase: 6,
+    monthlyPriceMinor: 0,
   },
 ];
 
@@ -171,4 +181,13 @@ export function missingDependencies(id: ModuleId, enabled: ReadonlySet<ModuleId>
 /** Enabled modules that depend on `id`. Empty means the module can be disabled. */
 export function enabledDependents(id: ModuleId, enabled: ReadonlySet<ModuleId>): ModuleId[] {
   return MODULES.filter((m) => enabled.has(m.id) && m.dependsOn.includes(id)).map((m) => m.id);
+}
+
+/** Currency every plan price is in. */
+export const BILLING_CURRENCY = 'usd';
+
+/** Paid modules among `enabled`; included ones are free and never billed. */
+export function billableModules(enabled: Iterable<ModuleId>): ModuleDefinition[] {
+  const set = new Set(enabled);
+  return MODULES.filter((m) => set.has(m.id) && m.monthlyPriceMinor > 0);
 }

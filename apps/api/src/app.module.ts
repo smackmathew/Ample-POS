@@ -16,6 +16,12 @@ import { ShopifyController, ShopifyWebhookController } from './integrations/shop
 import { ShopifyJobs } from './integrations/shopify/shopify.jobs';
 import { ShopifySyncService } from './integrations/shopify/shopify-sync.service';
 import { CARD_PROVIDER } from './payments/provider';
+import { BillingController, BillingWebhookController } from './billing/billing.controller';
+import { BillingJobs } from './billing/billing.jobs';
+import { BillingService } from './billing/billing.service';
+import { BILLING_PROVIDER } from './billing/provider';
+import { SimulatedBillingProvider } from './billing/simulated.provider';
+import { StripeBillingProvider } from './billing/stripe-billing.provider';
 import { SimulatedCardProvider } from './payments/simulated.provider';
 import { StripeCardProvider } from './payments/stripe.provider';
 import { WebhooksController } from './payments/webhooks.controller';
@@ -65,6 +71,8 @@ export class AppModule {
         ScheduleController,
         TasksController,
         ReportsController,
+        BillingController,
+        BillingWebhookController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
@@ -77,6 +85,8 @@ export class AppModule {
         OutboxWorker,
         ShopifySyncService,
         ShopifyJobs,
+        BillingService,
+        BillingJobs,
         { provide: SECRET_BOX, useFactory: () => (config.SECRETS_KEY ? new SecretBox(config.SECRETS_KEY) : null) },
         { provide: SHOPIFY_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         {
@@ -85,6 +95,11 @@ export class AppModule {
             config.PAYMENTS_PROVIDER === 'stripe'
               ? new StripeCardProvider(config.STRIPE_SECRET_KEY!, { account: config.STRIPE_ACCOUNT })
               : new SimulatedCardProvider(),
+        },
+        {
+          provide: BILLING_PROVIDER,
+          useFactory: () =>
+            config.BILLING_PROVIDER === 'stripe' ? new StripeBillingProvider(config.BILLING_STRIPE_SECRET_KEY!) : new SimulatedBillingProvider(),
         },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },

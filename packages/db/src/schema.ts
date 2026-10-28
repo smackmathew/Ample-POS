@@ -527,3 +527,24 @@ export const checklistCompletions = pgTable('checklist_completions', {
   undoneAt: timestamp('undone_at', { withTimezone: true }),
   undoneBy: uuid('undone_by'),
 });
+
+// Billing ---------------------------------------------------------------------
+
+export interface BilledItem {
+  moduleId: string;
+  quantity: number;
+}
+
+export const tenantBilling = pgTable('tenant_billing', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }).notNull(),
+  provider: text('provider').$type<'simulated' | 'stripe'>(),
+  customerId: text('customer_id'),
+  subscriptionId: text('subscription_id'),
+  status: text('status'),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  items: jsonb('items').$type<BilledItem[]>().notNull().default([]),
+  syncedAt: timestamp('synced_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

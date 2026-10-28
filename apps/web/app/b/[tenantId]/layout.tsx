@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { api } from '@/lib/api';
-import type { CurrentTenant, NavSection } from '@/lib/types';
+import { can, type CurrentTenant, type NavSection, type TenantBilling } from '@/lib/types';
 
 export default async function TenantLayout({
   children,
@@ -43,7 +43,40 @@ export default async function TenantLayout({
           ))}
         </nav>
       </aside>
-      <main className="flex-1 p-8">{children}</main>
+      <main className="flex-1 p-8">
+        <BillingBanner billing={current.billing} href={can(current.membership.permissions, 'billing.manage') ? `${base}/billing` : null} />
+        {children}
+      </main>
+    </div>
+  );
+}
+
+/** Trial reminders and payment problems, shown on every page. Only owners get the link to fix them. */
+function BillingBanner({ billing, href }: { billing: TenantBilling | null; href: string | null }) {
+  if (!billing) return null;
+  const days = Math.ceil((Date.parse(billing.trialEndsAt) - Date.now()) / 86_400_000);
+  let message: string | null = null;
+  let tone = 'border-amber-200 bg-amber-50';
+  if (billing.standing === 'lapsed') {
+    message = href
+      ? 'Your free trial has ended. Paid tools are read-only until you subscribe.'
+      : 'The free trial has ended. Paid tools are read-only until the owner subscribes.';
+    tone = 'border-red-200 bg-red-50';
+  } else if (billing.standing === 'past_due') {
+    message = href ? 'Your last payment failed. Update your card to keep everything running.' : 'There is a billing problem; let the owner know.';
+    tone = 'border-red-200 bg-red-50';
+  } else if (billing.standing === 'trial' && days <= 3 && href) {
+    message = `Your free trial ends in ${days} day${days === 1 ? '' : 's'}.`;
+  }
+  if (!message) return null;
+  return (
+    <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${tone}`}>
+      <span>{message}</span>
+      {href && (
+        <Link href={href} className="btn px-3 py-1.5 text-sm">
+          {billing.standing === 'past_due' ? 'Fix billing' : 'Subscribe'}
+        </Link>
+      )}
     </div>
   );
 }

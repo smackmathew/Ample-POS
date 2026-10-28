@@ -4,6 +4,7 @@ import {
   CallHandler,
   ExecutionContext,
   ForbiddenException,
+  HttpException,
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { Reflector } from '@nestjs/core';
 import { schema } from '@pos/db';
 import { getModule, hasPermission, type ModuleId } from '@pos/modules';
 import { and, eq, sql } from 'drizzle-orm';
+import { READ_METHODS, standing } from '../billing/standing';
 import { verifyDeviceCredential } from './device-auth';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import type { AuthedRequest } from './auth.guard';
@@ -86,6 +88,20 @@ export class TenantContextInterceptor implements NestInterceptor {
               .where(eq(schema.tenantModules.moduleId, moduleId));
             if (!entitlement?.enabled) {
               throw new ForbiddenException(`${getModule(moduleId).name} is not enabled for this business`);
+            }
+            // Paid tools turn read-only once the trial is over without a working subscription.
+            if (getModule(moduleId).monthlyPriceMinor > 0 && !READ_METHODS.has(req.method)) {
+              const [billing] = await tx.select().from(schema.tenantBilling);
+              if (billing && standing(billing) === 'lapsed') {
+                throw new HttpException(
+                  {
+                    statusCode: 402,
+                    code: 'subscription_required',
+                    message: `Your free trial has ended. Subscribe in Billing to keep making changes in ${getModule(moduleId).name}.`,
+                  },
+                  402,
+                );
+              }
             }
           }
         }

@@ -86,12 +86,14 @@ describe('SyncEngine', () => {
     expect(await engine.status(COUNT)).toEqual({ pending: 0, failed: 1 });
   });
 
-  it('stops without discarding work on 401 or server errors', async () => {
+  it('stops without discarding work on 401, 402 or server errors', async () => {
     const server = fakeServer();
     const engine = new SyncEngine(new MemoryEntryStore(), server.api);
     await scan(engine, 'a');
     server.state.status = 401;
     expect((await engine.flush()).stopped).toBe('unauthorized');
+    server.state.status = 402;
+    expect((await engine.flush()).stopped).toBe('subscription_required');
     server.state.status = 503;
     expect((await engine.flush()).stopped).toBe('offline');
     server.state.status = 0;

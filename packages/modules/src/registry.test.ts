@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MODULES,
+  billableModules,
   PLATFORM_PERMISSIONS,
   SYSTEM_ROLES,
   enabledDependents,
@@ -11,6 +12,11 @@ import {
 } from './index';
 
 describe('module registry', () => {
+  it('prices every module in whole cents, and only bills paid ones', () => {
+    for (const m of MODULES) expect(Number.isInteger(m.monthlyPriceMinor) && m.monthlyPriceMinor >= 0).toBe(true);
+    expect(billableModules(['catalog', 'pos', 'reporting']).map((m) => m.id)).toEqual(['pos']);
+  });
+
   it('has unique module ids and permission keys', () => {
     expect(new Set(MODULES.map((m) => m.id)).size).toBe(MODULES.length);
     const keys = [...PLATFORM_PERMISSIONS, ...MODULES.flatMap((m) => m.permissions)].map((p) => p.key);
