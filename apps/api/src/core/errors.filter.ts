@@ -13,7 +13,7 @@ function pgErrorOf(err: unknown): PgError | null {
   return null;
 }
 
-/** Maps Postgres unique violations to 409 so callers get a usable error. */
+/** Maps Postgres unique and exclusion violations to 409 so callers get a usable error. */
 @Catch()
 export class DatabaseErrorFilter extends BaseExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger('DatabaseErrorFilter');
@@ -23,6 +23,11 @@ export class DatabaseErrorFilter extends BaseExceptionFilter implements Exceptio
       const pg = pgErrorOf(exception);
       if (pg?.code === '23505') {
         return super.catch(new ConflictException(`Already exists (${pg.constraint_name ?? 'unique'})`), host);
+      }
+      // Exclusion constraints (e.g. one person can't have overlapping shifts).
+      if (pg?.code === '23P01') {
+        const message = pg.constraint_name?.startsWith('shifts_') ? 'That person is already scheduled at that time' : 'This overlaps with an existing entry';
+        return super.catch(new ConflictException(message), host);
       }
       this.logger.error(exception);
     }

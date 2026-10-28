@@ -20,7 +20,11 @@ import { SimulatedCardProvider } from './payments/simulated.provider';
 import { StripeCardProvider } from './payments/stripe.provider';
 import { WebhooksController } from './payments/webhooks.controller';
 import { RegistersController, SalesController } from './sales/sales.controller';
+import { ReportsController } from './reports/reports.controller';
 import { SalesService } from './sales/sales.service';
+import { ScheduleController } from './workforce/schedule.controller';
+import { TasksController } from './workforce/tasks.controller';
+import { TimeClockController } from './workforce/timeclock.controller';
 import { OutboxWorker } from './worker/outbox.worker';
 import { AuditController } from './platform/audit.controller';
 import { DeviceSessionController } from './platform/device-session.controller';
@@ -57,6 +61,10 @@ export class AppModule {
         WebhooksController,
         ShopifyController,
         ShopifyWebhookController,
+        TimeClockController,
+        ScheduleController,
+        TasksController,
+        ReportsController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },

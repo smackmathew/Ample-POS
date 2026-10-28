@@ -131,11 +131,12 @@ describe('modules', () => {
     const titles = ownerNav.body.sections.map((s: { title: string }) => s.title);
     expect(titles).toEqual(['Business', 'Time clock']);
 
-    // Staff can punch but not manage timecards, so the Time clock section is hidden.
+    // Staff can punch but not manage timecards, so they see only the clock link.
     const staff = await owner.invite(await Client.signIn(app), 'staff');
     const staffNav = await staff.get('/navigation').expect(200);
-    expect(staffNav.body.sections.map((s: { title: string }) => s.title)).toEqual(['Business']);
+    expect(staffNav.body.sections.map((s: { title: string }) => s.title)).toEqual(['Business', 'Time clock']);
     expect(staffNav.body.sections[0].items.map((i: { label: string }) => i.label)).toEqual(['Locations']);
+    expect(staffNav.body.sections[1].items.map((i: { label: string }) => i.label)).toEqual(['Clock in / out']);
   });
 
   it('records module changes in the audit log and outbox', async () => {

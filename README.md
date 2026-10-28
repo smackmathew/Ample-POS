@@ -17,10 +17,10 @@ devices and an audit trail.
 | 4 | POS checkout, refunds, registers, card payments (simulated + Stripe server side) | **Done** |
 | 4b | Native register app with the Stripe Terminal reader SDK | Next |
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | **Done** |
-| 6 | Time clock, tasks, scheduling, reporting | Next |
+| 6 | Time clock, tasks, scheduling, reporting | **Done** |
 | 7 | Subscription billing tied to enabled modules | |
 
-Modules can already be turned on per business; their screens arrive in the phase listed.
+Every module except billing now has working screens.
 
 ## Layout
 
@@ -145,6 +145,28 @@ Turn on **Website sync**, then connect a store from the Website sync page.
 
 Credentials are encrypted with `SECRETS_KEY` (AES-256-GCM) and never returned
 by the API. Written against Shopify Admin API version 2026-10.
+
+## Time clock, scheduling, tasks and reports
+
+- **Punches are permanent.** Clocking in, out and breaks adds a row to
+  `time_punches`; the database refuses updates and deletes except the void
+  columns. A missed punch is added by a manager with a reason, and a wrong one
+  is voided with a reason, so the timecard keeps its full history. Managers
+  cannot correct or approve their own time; another manager or the owner must.
+- **Timecards** pair punches into shifts per person, count days in the
+  location's time zone, flag open or odd shifts, and show weekly overtime past
+  40 hours. Approving a week saves the minutes; if a punch in that week changes
+  later, the approval shows as out of date.
+- **Scheduling.** Shifts start as drafts and staff see them only once the week
+  is published. The database rejects overlapping shifts for the same person.
+  With the time clock on, timecards show scheduled minutes next to worked.
+- **Tasks.** Checklists run once, daily or on chosen weekdays, for a person, a
+  role or everyone at a location. Each day gets its own run; ticking an item
+  records who and when, and an unfinished one-off list carries over.
+- **Reports.** Sales by store day (gross, discounts, tax, refunds, net), totals
+  by payment method, top products and a CSV download; stock value at cost; and
+  hours worked with net sales per labor hour. Each section appears when its
+  tool is on.
 
 ## Mobile counting app
 
