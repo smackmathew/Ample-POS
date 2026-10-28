@@ -23,11 +23,28 @@ const kind = z.enum(['store', 'warehouse', 'office']);
 /** Sales tax in basis points: 825 = 8.25%. Prices are entered before tax. */
 const taxRateBps = z.number().int().min(0).max(10_000);
 
+/** Street address; card readers need one (Stripe registers them to the store's address). */
+const address = z
+  .object({
+    line1: z.string().trim().min(1).max(200),
+    line2: z.string().trim().max(200).optional(),
+    city: z.string().trim().min(1).max(100),
+    state: z.string().trim().max(100).optional(),
+    postalCode: z.string().trim().min(1).max(20),
+    country: z
+      .string()
+      .trim()
+      .length(2, 'use a two-letter country code, e.g. US')
+      .transform((c) => c.toUpperCase()),
+  })
+  .transform(({ line2, state, ...rest }) => ({ ...rest, ...(line2 ? { line2 } : {}), ...(state ? { state } : {}) }));
+
 const createBody = z.object({
   name: z.string().trim().min(1).max(100),
   kind: kind.default('store'),
   timezone,
   taxRateBps: taxRateBps.default(0),
+  address: address.nullable().optional(),
 });
 
 const updateBody = z
@@ -36,6 +53,7 @@ const updateBody = z
     kind,
     timezone,
     taxRateBps,
+    address: address.nullable(),
     archived: z.boolean(),
   })
   .partial()

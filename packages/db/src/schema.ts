@@ -60,9 +60,21 @@ export const locations = pgTable('locations', {
   kind: text('kind', { enum: ['store', 'warehouse', 'office'] }).notNull().default('store'),
   timezone: text('timezone').notNull(),
   taxRateBps: integer('tax_rate_bps').notNull().default(0),
+  address: jsonb('address').$type<LocationAddress>(),
+  terminalLocation: jsonb('terminal_location').$type<{ provider: string; ref: string; addressHash: string }>(),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
+
+export interface LocationAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  state?: string;
+  postalCode: string;
+  /** ISO 3166-1 alpha-2, e.g. "US". */
+  country: string;
+}
 
 export const devices = pgTable('devices', {
   id: uuid('id').primaryKey().defaultRandom(),

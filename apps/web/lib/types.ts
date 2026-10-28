@@ -55,7 +55,17 @@ export interface Location {
   kind: 'store' | 'warehouse' | 'office';
   timezone: string;
   taxRateBps: number;
+  address: LocationAddress | null;
   archivedAt: string | null;
+}
+
+export interface LocationAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  state?: string;
+  postalCode: string;
+  country: string;
 }
 
 export interface Device {

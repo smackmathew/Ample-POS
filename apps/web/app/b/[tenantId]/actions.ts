@@ -17,6 +17,13 @@ export async function toggleModule(tenantId: string, moduleId: string, enabled: 
   });
 }
 
+/** The address fields of a form, or null when they were left blank. */
+function addressFrom(form: FormData) {
+  const field = (k: string) => String(form.get(k) ?? '').trim();
+  const address = { line1: field('line1'), line2: field('line2'), city: field('city'), state: field('state'), postalCode: field('postalCode'), country: field('country') || 'US' };
+  return address.line1 || address.city || address.postalCode ? address : null;
+}
+
 export async function createLocation(tenantId: string, _: ActionState, form: FormData): Promise<ActionState> {
   const taxRateBps = parsePercentToBps(str(form, 'taxRate') ?? '0');
   if (taxRateBps === null) return { error: 'Sales tax must be a percentage like 8.25' };
@@ -24,10 +31,18 @@ export async function createLocation(tenantId: string, _: ActionState, form: For
     await api('/locations', {
       tenantId,
       method: 'POST',
-      body: { name: str(form, 'name'), kind: str(form, 'kind'), timezone: str(form, 'timezone'), taxRateBps },
+      body: { name: str(form, 'name'), kind: str(form, 'kind'), timezone: str(form, 'timezone'), taxRateBps, address: addressFrom(form) },
     });
     revalidatePath(`/b/${tenantId}/locations`);
     return { ok: 'Location added' };
+  });
+}
+
+export async function setLocationAddress(tenantId: string, id: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/locations/${id}`, { tenantId, method: 'PATCH', body: { address: addressFrom(form) } });
+    revalidatePath(`/b/${tenantId}/locations`);
+    return { ok: 'Address saved' };
   });
 }
 

@@ -1,8 +1,8 @@
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
-import { can, type CurrentTenant, type Location } from '@/lib/types';
+import { can, type CurrentTenant, type Location, type LocationAddress } from '@/lib/types';
 import { formatPercent } from '@/lib/pricing';
-import { createLocation, setLocationArchived } from '../actions';
+import { createLocation, setLocationAddress, setLocationArchived } from '../actions';
 
 export default async function LocationsPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
@@ -22,6 +22,8 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
             <th className="pb-2">Name</th>
             <th className="pb-2">Type</th>
             <th className="pb-2">Time zone</th>
+            <th className="pb-2">Sales tax</th>
+            <th className="pb-2">Address</th>
             <th />
           </tr>
         </thead>
@@ -32,6 +34,18 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
               <td className="capitalize">{l.kind}</td>
               <td>{l.timezone}</td>
               <td>{formatPercent(l.taxRateBps)}</td>
+              <td className="py-2">
+                {l.address ? <span className="whitespace-pre-line">{formatAddress(l.address)}</span> : <span className="text-stone-400">None</span>}
+                {canManage && !l.archivedAt && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-xs text-stone-500 hover:underline">{l.address ? 'Edit' : 'Add address'}</summary>
+                    <ActionForm action={setLocationAddress.bind(null, tenantId, l.id)} className="mt-2 grid gap-2">
+                      <AddressFields value={l.address} />
+                      <button className="btn-secondary justify-self-start px-3 py-1 text-xs">Save address</button>
+                    </ActionForm>
+                  </details>
+                )}
+              </td>
               <td className="text-right">
                 {canManage && (
                   <form action={setLocationArchived.bind(null, tenantId, l.id, !l.archivedAt)}>
@@ -43,7 +57,7 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
           ))}
           {locations.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-stone-500">No locations yet.</td>
+              <td colSpan={6} className="py-4 text-stone-500">No locations yet.</td>
             </tr>
           )}
         </tbody>
@@ -60,9 +74,30 @@ export default async function LocationsPage({ params }: { params: Promise<{ tena
           </select>
           <input name="timezone" placeholder="America/Chicago" required className="input" />
           <input name="taxRate" placeholder="Sales tax %, e.g. 8.25" inputMode="decimal" className="input" />
+          <fieldset className="grid gap-2 sm:col-span-5 sm:grid-cols-2">
+            <legend className="mb-1 text-xs text-stone-500">Street address (optional; card readers need one)</legend>
+            <AddressFields value={null} />
+          </fieldset>
           <button className="btn sm:col-span-5 sm:justify-self-start">Add location</button>
         </ActionForm>
       )}
     </div>
+  );
+}
+
+function formatAddress(a: LocationAddress): string {
+  return [a.line1, a.line2, [a.city, a.state, a.postalCode].filter(Boolean).join(' '), a.country].filter(Boolean).join('\n');
+}
+
+function AddressFields({ value }: { value: LocationAddress | null }) {
+  return (
+    <>
+      <input name="line1" defaultValue={value?.line1} placeholder="Street address" className="input" />
+      <input name="line2" defaultValue={value?.line2} placeholder="Suite, unit (optional)" className="input" />
+      <input name="city" defaultValue={value?.city} placeholder="City" className="input" />
+      <input name="state" defaultValue={value?.state} placeholder="State / region" className="input" />
+      <input name="postalCode" defaultValue={value?.postalCode} placeholder="ZIP / postal code" className="input" />
+      <input name="country" defaultValue={value?.country ?? 'US'} placeholder="Country code, e.g. US" maxLength={2} className="input uppercase" />
+    </>
   );
 }

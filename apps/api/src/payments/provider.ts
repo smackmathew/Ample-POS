@@ -1,3 +1,5 @@
+import type { LocationAddress } from '@pos/db';
+
 /**
  * A card payment processor. Implementations must make create and refund
  * idempotent on `idempotencyKey`, so a retried request after a timeout never
@@ -20,8 +22,18 @@ export interface ProviderRefund {
   error: string | null;
 }
 
+/** Readers driven by an SDK on the register itself (Stripe Terminal), rather than by the server. */
+export interface TerminalReaders {
+  /** Short-lived token the register's SDK uses to talk to the processor, scoped to one store. */
+  connectionToken(locationRef: string): Promise<string>;
+  /** Creates (ref null) or updates the processor's record of a store; returns its ref. */
+  saveLocation(input: { ref: string | null; displayName: string; address: LocationAddress; idempotencyKey: string }): Promise<string>;
+}
+
 export interface CardPaymentProvider {
   readonly name: string;
+  /** Present when card readers connect from the register app. Absent for the simulated processor. */
+  readonly terminal?: TerminalReaders;
   createCardPayment(input: {
     amountMinor: number;
     currency: string;
