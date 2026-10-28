@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@pos/sync": "workspace:*",
+    "@stripe/stripe-terminal-react-native": "0.0.1-beta.33",
     "expo": "54.0.38",
+    "expo-build-properties": "~1.0.10",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.14",
     "expo-crypto": "~15.0.9",

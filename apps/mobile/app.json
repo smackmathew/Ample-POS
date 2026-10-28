@@ -24,6 +24,23 @@
           "cameraPermission": "Ample POS uses the camera to scan product barcodes and pairing codes.",
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      [
+        "@stripe/stripe-terminal-react-native",
+        {
+          "bluetoothBackgroundMode": true,
+          "locationWhenInUsePermission": "Ample POS uses your location to keep card payments secure.",
+          "bluetoothPeripheralPermission": "Ample POS uses Bluetooth to connect to card readers.",
+          "bluetoothAlwaysUsagePermission": "Ample POS uses Bluetooth to connect to card readers."
+        }
       ]
     ],
     "extra": {

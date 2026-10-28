@@ -15,7 +15,7 @@ devices and an audit trail.
 | 2 | Product catalog and inventory ledger with count sessions | **Done** |
 | 3 | Mobile counting app (Expo, offline SQLite queue, barcode scanning) | **Done** |
 | 4 | POS checkout, refunds, registers, card payments (simulated + Stripe server side) | **Done** |
-| 4b | Native register app with the Stripe Terminal reader SDK | Next |
+| 4b | Native register app with the Stripe Terminal reader SDK | **Done** |
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | **Done** |
 | 6 | Time clock, tasks, scheduling, reporting | **Done** |
 | 7 | Subscription billing tied to enabled modules | **Done** |
@@ -200,6 +200,40 @@ Locally, `BILLING_PROVIDER=simulated` subscribes without a card. For Stripe set
 `BILLING_STRIPE_WEBHOOK_SECRET`, and point a webhook (subscription, invoice
 and checkout events) at `/webhooks/stripe-billing`. Turn on the customer
 portal in the Stripe dashboard.
+
+## Register app
+
+The same Expo app becomes a register when it is paired as a *Register* device
+(Devices → Register device → type Register); paired as a *Handheld* it counts
+stock as before.
+
+- **Selling.** Open the register with the starting cash, then scan (camera or a
+  hardware scanner) or search by name to build the cart. *Charge* creates the
+  sale on the server, which prices it (tax, rounding); payment can be cash,
+  card, or both. Closing the register compares counted cash with expected.
+- **Retries are safe.** The sale id and each payment id are made on the
+  register, so a retried request after a dropped connection returns the same
+  sale or payment instead of a second one. A declined card keeps its payment
+  open, and *try again* resumes it. *Edit cart* voids the unpaid sale and
+  starts a new one.
+- **Card readers (Stripe Terminal).** Tap to Pay on the phone or tablet, or a
+  Bluetooth reader such as the Stripe M2. The app asks our API for a
+  connection token (`POST /terminal/connection-token`), so it never holds a
+  Stripe key. Readers are registered to the store: the API creates a Stripe
+  Terminal Location from the store's address the first time and updates it when
+  the address changes. A store needs a street address (Locations page) before
+  readers connect.
+- **The reader is not the source of truth.** After the reader says approved,
+  the app asks the server to re-read the PaymentIntent from Stripe, and only
+  then is the sale paid (the payment webhook does the same).
+- **Test mode.** With `PAYMENTS_PROVIDER=simulated` the payment screen shows
+  Approve and Decline buttons instead of a reader. With Stripe test keys,
+  *Use a simulated reader* connects Stripe's virtual reader.
+
+The card reader SDK is native code, so card readers need a development or store
+build (`npx expo run:ios`, `npx expo run:android`, or EAS Build); in Expo Go the
+register still works with cash and the simulated processor. Android needs 8.0
+(API 26) or newer.
 
 ## Mobile counting app
 

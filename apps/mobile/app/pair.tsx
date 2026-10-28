@@ -11,6 +11,7 @@ import { Button, ErrorText, Field, styles } from '@/ui';
 interface DeviceInfo {
   id: string;
   name: string;
+  kind: 'register' | 'handheld' | 'kiosk';
   location: { id: string; name: string };
 }
 
@@ -46,7 +47,7 @@ export default function Pair() {
         tenantId: code.tenantId,
         tenantName: tenant.name,
         deviceCredential: code.credential,
-        device: { id: device.id, name: device.name, locationId: device.location.id, locationName: device.location.name },
+        device: { id: device.id, name: device.name, kind: device.kind, locationId: device.location.id, locationName: device.location.name },
       });
       await refreshCatalog(api).catch(() => {});
       router.replace('/');
@@ -63,7 +64,7 @@ export default function Pair() {
   return (
     <ScrollView contentContainerStyle={styles.screen}>
       <Text style={styles.muted}>
-        In the admin hub, open Devices and register this phone as a handheld. Then scan the code it shows.
+        In the admin hub, open Devices and register this phone or tablet as a register (to sell) or a handheld (to count). Then scan the code it shows.
       </Text>
       {scanning && permission?.granted ? (
         <View style={{ height: 320, borderRadius: 12, overflow: 'hidden' }}>

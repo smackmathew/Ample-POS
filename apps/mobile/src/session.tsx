@@ -11,7 +11,8 @@ export interface Session {
   tenantName?: string;
   /** "<deviceId>.<secret>" from the pairing QR code. Stored only in the secure keychain. */
   deviceCredential?: string;
-  device?: { id: string; name: string; locationId: string; locationName: string };
+  /** kind: a register sells; a handheld counts. Sessions paired before registers existed have none (handheld). */
+  device?: { id: string; name: string; kind?: 'register' | 'handheld' | 'kiosk'; locationId: string; locationName: string };
 }
 
 interface SessionValue {

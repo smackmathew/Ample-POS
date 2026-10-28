@@ -16,6 +16,7 @@ import { ShopifyController, ShopifyWebhookController } from './integrations/shop
 import { ShopifyJobs } from './integrations/shopify/shopify.jobs';
 import { ShopifySyncService } from './integrations/shopify/shopify-sync.service';
 import { CARD_PROVIDER } from './payments/provider';
+import { TerminalController } from './terminal/terminal.controller';
 import { BillingController, BillingWebhookController } from './billing/billing.controller';
 import { BillingJobs } from './billing/billing.jobs';
 import { BillingService } from './billing/billing.service';
@@ -73,6 +74,7 @@ export class AppModule {
         ReportsController,
         BillingController,
         BillingWebhookController,
+        TerminalController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },

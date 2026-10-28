@@ -5,6 +5,7 @@ import {
   type ProviderPayment,
   type ProviderPaymentStatus,
   type ProviderRefund,
+  type TerminalReaders,
 } from './provider';
 
 interface StripePaymentIntent {
@@ -49,6 +50,19 @@ function mapStatus(status: string): ProviderPaymentStatus {
  */
 export class StripeCardProvider implements CardPaymentProvider {
   readonly name = 'stripe';
+
+  readonly terminal: TerminalReaders = {
+    connectionToken: async (locationRef) =>
+      (await this.call<{ secret: string }>('POST', '/terminal/connection_tokens', undefined, { location: locationRef })).secret,
+    saveLocation: async ({ ref, displayName, address, idempotencyKey }) => {
+      const params = {
+        display_name: displayName,
+        address: { line1: address.line1, line2: address.line2, city: address.city, state: address.state, postal_code: address.postalCode, country: address.country },
+      };
+      const path = ref ? `/terminal/locations/${encodeURIComponent(ref)}` : '/terminal/locations';
+      return (await this.call<{ id: string }>('POST', path, idempotencyKey, params)).id;
+    },
+  };
 
   constructor(
     private readonly secretKey: string,
