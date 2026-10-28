@@ -18,9 +18,9 @@ devices and an audit trail.
 | 4b | Native register app with the Stripe Terminal reader SDK | Next |
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | **Done** |
 | 6 | Time clock, tasks, scheduling, reporting | **Done** |
-| 7 | Subscription billing tied to enabled modules | |
+| 7 | Subscription billing tied to enabled modules | **Done** |
 
-Every module except billing now has working screens.
+Every tool has working screens, and businesses pay only for the tools they turn on.
 
 ## Layout
 
@@ -167,6 +167,39 @@ by the API. Written against Shopify Admin API version 2026-10.
   by payment method, top products and a CSV download; stock value at cost; and
   hours worked with net sales per labor hour. Each section appears when its
   tool is on.
+
+## Billing
+
+- **Free trial, then pay for what's on.** Every business gets 14 days free.
+  After that each paid tool costs a monthly price per active location
+  (Product catalog and Reporting are included). Prices live in the module
+  registry (`monthlyPriceMinor`), so the Tools page, the Billing page and
+  Stripe all use the same numbers.
+- **Stripe does the money.** Subscribing opens Stripe Checkout; invoices, cards
+  and cancellation are in Stripe's customer portal. Ample POS creates its
+  Stripe products and prices on first use (found by lookup key; a new price
+  gets a new key, so existing prices are never edited). Every subscription
+  carries a $0 base item so it stays valid when no paid tool is on.
+- **The plan follows the business.** Turning tools on or off, or adding and
+  archiving locations, updates the subscription in the background (prorated),
+  through the same outbox worker as Shopify sync.
+- **Webhooks are a nudge.** `POST /webhooks/stripe-billing` checks the
+  signature, then re-reads the customer's subscription from Stripe; the event
+  body is never trusted for state.
+- **Lapsed means read-only, not locked out.** If the trial ends without a
+  subscription, or the subscription is canceled or unpaid, paid tools reject
+  changes with `402 subscription_required` but everything stays viewable and
+  included tools keep working. A failed payment (`past_due`) keeps working while
+  Stripe retries, with a banner. Handhelds keep unsynced scans and send them
+  once the business subscribes.
+- The trial end is set by the database when a business is created; the API
+  role cannot change it.
+
+Locally, `BILLING_PROVIDER=simulated` subscribes without a card. For Stripe set
+`BILLING_PROVIDER=stripe`, `BILLING_STRIPE_SECRET_KEY` and
+`BILLING_STRIPE_WEBHOOK_SECRET`, and point a webhook (subscription, invoice
+and checkout events) at `/webhooks/stripe-billing`. Turn on the customer
+portal in the Stripe dashboard.
 
 ## Mobile counting app
 

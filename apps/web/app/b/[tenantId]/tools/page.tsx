@@ -1,5 +1,6 @@
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
+import { formatMoney } from '@/lib/money';
 import type { ModuleSummary } from '@/lib/types';
 import { toggleModule } from '../actions';
 
@@ -11,7 +12,9 @@ export default async function ToolsPage({ params }: { params: Promise<{ tenantId
   return (
     <div className="max-w-4xl">
       <h1 className="text-2xl font-semibold">Tools</h1>
-      <p className="mt-1 text-sm text-stone-600">Turn on the tools your business needs. You can change this any time.</p>
+      <p className="mt-1 text-sm text-stone-600">
+        Turn on the tools your business needs. You can change this any time, and you only pay for what’s on.
+      </p>
       <ul className="mt-6 grid gap-4 sm:grid-cols-2">
         {modules.map((m) => (
           <li key={m.id} className={`card flex flex-col ${m.enabled ? 'border-brand' : ''}`}>
@@ -23,7 +26,9 @@ export default async function ToolsPage({ params }: { params: Promise<{ tenantId
             {m.dependsOn.length > 0 && (
               <p className="mt-2 text-xs text-stone-500">Requires {m.dependsOn.map((d) => names.get(d)).join(', ')}</p>
             )}
-            <p className="mt-1 text-xs text-stone-400">Full functionality arrives in build phase {m.phase}.</p>
+            <p className="mt-2 text-sm font-medium">
+              {m.monthlyPriceMinor ? `${formatMoney(m.monthlyPriceMinor, 'USD')} per location / month` : 'Included'}
+            </p>
             <ActionForm action={toggleModule.bind(null, tenantId, m.id, !m.enabled)} className="mt-3">
               <button className={m.enabled ? 'btn-secondary' : 'btn'} disabled={!m.enabled && m.missingDependencies.length > 0}>
                 {m.enabled ? 'Turn off' : 'Turn on'}

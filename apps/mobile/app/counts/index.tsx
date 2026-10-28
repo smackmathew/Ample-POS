@@ -116,6 +116,9 @@ export default function Counts() {
             <Text style={styles.muted}>{session.tenantName}</Text>
             {offline && <Text style={{ color: colors.warn, marginTop: 4 }}>Offline — scans will sync when you reconnect.</Text>}
             {last?.stopped === 'unauthorized' && <Text style={{ color: colors.danger, marginTop: 4 }}>Sync stopped: this device needs to be paired again.</Text>}
+            {last?.stopped === 'subscription_required' && (
+              <Text style={{ color: colors.danger, marginTop: 4 }}>Sync paused: the free trial has ended. Scans are kept and will sync once the owner subscribes.</Text>
+            )}
           </Pressable>
           <View style={[styles.card, styles.row, { justifyContent: 'space-between' }]}>
             <View style={{ flex: 1 }}>

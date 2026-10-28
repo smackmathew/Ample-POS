@@ -8,6 +8,7 @@ import { RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
 import { currentTenant } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
+import { standing } from '../billing/standing';
 import { enabledModuleIds } from './modules.controller';
 
 const updateTenantBody = z.object({ name: z.string().trim().min(1).max(100) });
@@ -19,6 +20,7 @@ const PLATFORM_NAV = [
   { label: 'Team', path: '/team', permission: 'members.read' },
   { label: 'Roles', path: '/roles', permission: 'roles.manage' },
   { label: 'Audit log', path: '/audit', permission: 'audit.read' },
+  { label: 'Billing', path: '/billing', permission: 'billing.manage' },
 ];
 
 @Controller()
@@ -32,6 +34,7 @@ export class TenantController {
   async current() {
     const membership = currentTenant();
     const [tenant] = await this.db.tx.select().from(schema.tenants);
+    const [billing] = await this.db.tx.select().from(schema.tenantBilling);
     return {
       tenant,
       membership: {
@@ -40,6 +43,8 @@ export class TenantController {
         permissions: membership.permissions,
       },
       enabledModules: [...(await enabledModuleIds(this.db))],
+      // Every member sees whether paid tools are read-only; only billing.manage sees the details.
+      billing: billing ? { standing: standing(billing), trialEndsAt: billing.trialEndsAt, cancelAtPeriodEnd: billing.cancelAtPeriodEnd, currentPeriodEnd: billing.currentPeriodEnd } : null,
     };
   }
 

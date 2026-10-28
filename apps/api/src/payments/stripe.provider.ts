@@ -90,24 +90,35 @@ export class StripeCardProvider implements CardPaymentProvider {
     return { ref: pi.id, status: mapStatus(pi.status), clientSecret: pi.client_secret, error: pi.last_payment_error?.message ?? null };
   }
 
-  private async call<T>(method: 'GET' | 'POST', path: string, idempotencyKey?: string, params?: Record<string, unknown>): Promise<T> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${this.secretKey}` };
-    if (params) headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-    if (this.options.account) headers['Stripe-Account'] = this.options.account;
-    let res: Response;
-    try {
-      res = await (this.options.fetch ?? fetch)(`${API}${path}`, { method, headers, body: params ? formEncode(params) : undefined });
-    } catch (err) {
-      throw new ProviderUnavailableError(`Could not reach Stripe: ${(err as Error).message}`);
-    }
-    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } } & T;
-    if (!res.ok) {
-      if (res.status >= 500 || res.status === 429) throw new ProviderUnavailableError(body.error?.message ?? `Stripe returned ${res.status}`);
-      throw new StripeApiError(res.status, body.error?.message ?? `Stripe returned ${res.status}`);
-    }
-    return body;
+  private call<T>(method: 'GET' | 'POST', path: string, idempotencyKey?: string, params?: Record<string, unknown>): Promise<T> {
+    return stripeRequest<T>(this.secretKey, method, path, { idempotencyKey, params, account: this.options.account, fetch: this.options.fetch });
   }
+}
+
+/** One Stripe REST call. 5xx, 429 and network failures throw ProviderUnavailableError; other errors StripeApiError. */
+export async function stripeRequest<T>(
+  secretKey: string,
+  method: 'GET' | 'POST',
+  path: string,
+  options: { idempotencyKey?: string; params?: Record<string, unknown>; account?: string; fetch?: typeof fetch } = {},
+): Promise<T> {
+  const { idempotencyKey, params, account } = options;
+  const headers: Record<string, string> = { Authorization: `Bearer ${secretKey}` };
+  if (params) headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  if (account) headers['Stripe-Account'] = account;
+  let res: Response;
+  try {
+    res = await (options.fetch ?? fetch)(`${API}${path}`, { method, headers, body: params ? formEncode(params) : undefined });
+  } catch (err) {
+    throw new ProviderUnavailableError(`Could not reach Stripe: ${(err as Error).message}`);
+  }
+  const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } } & T;
+  if (!res.ok) {
+    if (res.status >= 500 || res.status === 429) throw new ProviderUnavailableError(body.error?.message ?? `Stripe returned ${res.status}`);
+    throw new StripeApiError(res.status, body.error?.message ?? `Stripe returned ${res.status}`);
+  }
+  return body;
 }
 
 export class StripeApiError extends Error {

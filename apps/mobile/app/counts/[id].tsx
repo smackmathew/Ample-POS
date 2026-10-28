@@ -91,7 +91,12 @@ export default function CountScreen() {
       const result = await flush();
       const status = await engine.status(id);
       if (result.stopped || status.pending > 0) {
-        Alert.alert('Not synced yet', 'Some entries have not reached the server. Connect to the network and try again.');
+        Alert.alert(
+          'Not synced yet',
+          result.stopped === 'subscription_required'
+            ? 'The free trial has ended. Your scans are kept on this device and will sync once the owner subscribes.'
+            : 'Some entries have not reached the server. Connect to the network and try again.',
+        );
         return;
       }
       await api.post(`/inventory/counts/${id}/submit`);

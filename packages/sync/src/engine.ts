@@ -31,7 +31,7 @@ export interface EntryStore {
   update(ids: string[], patch: Partial<Pick<LocalEntry, 'state' | 'voided' | 'voidState' | 'error'>>): Promise<void>;
 }
 
-export type FlushStop = 'offline' | 'unauthorized';
+export type FlushStop = 'offline' | 'unauthorized' | 'subscription_required';
 
 export interface FlushResult {
   sent: number;
@@ -48,7 +48,7 @@ export interface SyncStatus {
 const BATCH = 500;
 
 const isPermanent = (err: unknown) =>
-  err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 401 && err.status !== 408 && err.status !== 429;
+  err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 401 && err.status !== 402 && err.status !== 408 && err.status !== 429;
 
 /** Queues count entries locally and delivers them when the API is reachable. */
 export class SyncEngine {
@@ -146,6 +146,8 @@ export class SyncEngine {
 
   private stopReason(err: unknown): FlushStop | null {
     if (err instanceof ApiError && err.status === 401) return 'unauthorized';
+    // The business's trial ended; keep the work until it subscribes.
+    if (err instanceof ApiError && err.status === 402) return 'subscription_required';
     if (err instanceof NetworkError || !isPermanent(err)) return 'offline';
     return null;
   }

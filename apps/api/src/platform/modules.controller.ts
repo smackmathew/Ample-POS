@@ -42,6 +42,7 @@ export class ModulesController {
       description: m.description,
       version: m.version,
       phase: m.phase,
+      monthlyPriceMinor: m.monthlyPriceMinor,
       dependsOn: m.dependsOn,
       permissions: m.permissions,
       enabled: enabled.has(m.id),
