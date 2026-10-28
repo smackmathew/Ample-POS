@@ -56,6 +56,21 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return data as T;
 }
 
+/** For non-JSON responses such as CSV downloads. */
+export async function apiText(path: string, options: { tenantId?: string } = {}): Promise<{ body: string; filename: string | null }> {
+  const token = (await cookies()).get(TOKEN_COOKIE)?.value;
+  if (!token) redirect('/login');
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, ...(options.tenantId ? { 'X-Tenant-Id': options.tenantId } : {}) },
+    cache: 'no-store',
+  });
+  if (res.status === 401) redirect('/login');
+  const body = await res.text();
+  if (!res.ok) throw new ApiError(res.status, body || res.statusText, body);
+  const filename = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? null;
+  return { body, filename };
+}
+
 export type ActionState = { ok?: string; error?: string; secret?: string; qrSvg?: string } | undefined;
 
 /** Base URL devices use to reach the API (may differ from the server-side API_URL). */

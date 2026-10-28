@@ -94,7 +94,10 @@ export const MODULES: readonly ModuleDefinition[] = [
       { key: 'timeclock.punch', description: 'Clock in and out' },
       { key: 'timeclock.manage', description: 'Edit and approve timecards' },
     ],
-    nav: [{ label: 'Timecards', path: '/timecards', permission: 'timeclock.manage' }],
+    nav: [
+      { label: 'Clock in / out', path: '/clock', permission: 'timeclock.punch' },
+      { label: 'Timecards', path: '/timecards', permission: 'timeclock.manage' },
+    ],
     phase: 6,
   },
   {
@@ -120,7 +123,10 @@ export const MODULES: readonly ModuleDefinition[] = [
       { key: 'tasks.complete', description: 'Complete assigned tasks' },
       { key: 'tasks.manage', description: 'Create and assign tasks' },
     ],
-    nav: [{ label: 'Tasks', path: '/tasks', permission: 'tasks.complete' }],
+    nav: [
+      { label: 'Today’s tasks', path: '/tasks', permission: 'tasks.complete' },
+      { label: 'Checklists', path: '/tasks/manage', permission: 'tasks.manage' },
+    ],
     phase: 6,
   },
   {

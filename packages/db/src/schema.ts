@@ -4,10 +4,12 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  date,
   integer,
   jsonb,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uuid,
@@ -432,3 +434,96 @@ export const processedWebhooks = pgTable(
   },
   (t) => [primaryKey({ columns: [t.connectionId, t.webhookId] })],
 );
+
+export const PUNCH_KINDS = ['in', 'out', 'break_start', 'break_end'] as const;
+export type PunchKind = (typeof PUNCH_KINDS)[number];
+
+export const timePunches = pgTable('time_punches', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  kind: text('kind', { enum: PUNCH_KINDS }).notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  source: text('source', { enum: ['self', 'manager'] }).notNull(),
+  reason: text('reason'),
+  createdBy: uuid('created_by').notNull(),
+  deviceId: uuid('device_id'),
+  voidedAt: timestamp('voided_at', { withTimezone: true }),
+  voidedBy: uuid('voided_by'),
+  voidReason: text('void_reason'),
+});
+
+export const timecardApprovals = pgTable(
+  'timecard_approvals',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    weekStart: date('week_start', { mode: 'string' }).notNull(),
+    workedMinutes: integer('worked_minutes').notNull(),
+    approvedBy: uuid('approved_by').notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.userId, t.weekStart] })],
+);
+
+export const shifts = pgTable('shifts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  userId: uuid('user_id'),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  position: text('position'),
+  notes: text('notes'),
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('draft'),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const checklists = pgTable('checklists', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id'),
+  title: text('title').notNull(),
+  recurrence: text('recurrence', { enum: ['once', 'daily', 'weekly'] }).notNull(),
+  weekdays: smallint('weekdays').array().notNull().default(sql`'{}'`),
+  dueDate: date('due_date', { mode: 'string' }),
+  assigneeUserId: uuid('assignee_user_id'),
+  assigneeRoleKey: text('assignee_role_key'),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+});
+
+export const checklistItems = pgTable('checklist_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  checklistId: uuid('checklist_id').notNull(),
+  position: integer('position').notNull(),
+  label: text('label').notNull(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+});
+
+export const checklistRuns = pgTable('checklist_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  checklistId: uuid('checklist_id').notNull(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  createdAt: createdAt(),
+});
+
+export const checklistCompletions = pgTable('checklist_completions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  runId: uuid('run_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  completedBy: uuid('completed_by').notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+  note: text('note'),
+  undoneAt: timestamp('undone_at', { withTimezone: true }),
+  undoneBy: uuid('undone_by'),
+});
