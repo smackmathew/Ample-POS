@@ -5,7 +5,13 @@ const schema = z
     DATABASE_URL: z.string().url(),
     PORT: z.coerce.number().int().default(4000),
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
-    AUTH_MODE: z.enum(['dev', 'jwks']).default('dev'),
+    /** Which proxies' X-Forwarded-For to believe for client IPs (Express "trust proxy"). */
+    TRUST_PROXY: z.string().default('loopback, uniquelocal'),
+    /** password: built-in accounts. dev: anyone can sign in as any email (local only). jwks: an external identity provider. */
+    AUTH_MODE: z.enum(['password', 'dev', 'jwks']).default('password'),
+    /** Sends password-reset emails through Resend when set; otherwise only hub-made reset links work. */
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().default('Ample POS <no-reply@example.com>'),
     AUTH_DEV_SECRET: z.string().min(32).optional(),
     AUTH_JWKS_URL: z.string().url().optional(),
     AUTH_ISSUER: z.string().optional(),

@@ -3,15 +3,19 @@ import {
   ConflictException,
   Controller,
   Get,
+  Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
 } from '@nestjs/common';
 import { schema } from '@pos/db';
-import { and, asc, count, eq, ne } from 'drizzle-orm';
+import { and, asc, count, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { assertCanDelegate } from '../core/access';
+import { newToken } from '../core/auth.service';
+import { APP_CONFIG, type AppConfig } from '../core/config';
 import { Db } from '../core/database';
 import { RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
@@ -30,6 +34,7 @@ export class MembersController {
   constructor(
     private readonly db: Db,
     private readonly events: Events,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @RequirePermission('members.read')
@@ -84,5 +89,36 @@ export class MembersController {
     const [updated] = await tx.update(schema.memberships).set(body).where(eq(schema.memberships.id, id)).returning();
     await this.events.record('member.updated', { type: 'membership', id }, body);
     return updated;
+  }
+
+  /**
+   * A one-time link (valid 24 hours) that lets a member choose a new password,
+   * for when they forgot theirs and email reset isn't available. Only for people
+   * who belong to this business alone, so it can't open an account used elsewhere.
+   */
+  @RequirePermission('members.manage')
+  @Post(':id/password-reset')
+  async passwordReset(@Param('id', ParseUUIDPipe) id: string) {
+    const tx = this.db.tx;
+    const [member] = await tx
+      .select({ userId: schema.memberships.userId, permissions: schema.roles.permissions })
+      .from(schema.memberships)
+      .innerJoin(schema.roles, eq(schema.roles.id, schema.memberships.roleId))
+      .where(eq(schema.memberships.id, id));
+    if (!member) throw new NotFoundException('Member not found');
+    assertCanDelegate(member.permissions);
+
+    const { secret, secretHash } = newToken();
+    let resetId: string;
+    try {
+      const [row] = await tx.execute<{ id: string }>(sql`select app_create_member_reset(${member.userId}::uuid, ${secretHash}) as id`);
+      resetId = row!.id;
+    } catch (err) {
+      const pgError = (err as { cause?: { code?: string; message?: string } }).cause ?? (err as { code?: string; message?: string });
+      if (pgError.code === '22023') throw new ConflictException(pgError.message);
+      throw err;
+    }
+    await this.events.audit('member.password_reset_link', { type: 'membership', id });
+    return { link: `${this.config.WEB_URL}/reset?token=${resetId}.${secret}`, expiresInHours: 24 };
   }
 }

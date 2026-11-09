@@ -71,6 +71,14 @@ export async function revokeDevice(tenantId: string, id: string) {
   revalidatePath(`/b/${tenantId}/devices`);
 }
 
+/** A one-time link a team member can use to choose a new password (valid 24 hours). */
+export async function memberResetLink(tenantId: string, membershipId: string): Promise<ActionState> {
+  return attempt(async () => {
+    const { link } = await api<{ link: string }>(`/members/${membershipId}/password-reset`, { tenantId, method: 'POST' });
+    return { ok: 'Reset link created', secret: link };
+  });
+}
+
 export async function inviteMember(tenantId: string, _: ActionState, form: FormData): Promise<ActionState> {
   return attempt(async () => {
     const { code } = await api<{ code: string }>('/invitations', {

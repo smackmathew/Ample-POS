@@ -23,9 +23,14 @@ export default async function TenantLayout({
         <Link href={base} className="block text-lg font-semibold">
           {current.tenant.name}
         </Link>
-        <Link href="/businesses" className="text-xs text-stone-500 hover:underline">
-          Switch business
-        </Link>
+        <div className="flex gap-3 text-xs text-stone-500">
+          <Link href="/businesses" className="hover:underline">
+            Switch business
+          </Link>
+          <Link href="/account" className="hover:underline">
+            Your account
+          </Link>
+        </div>
         <nav className="mt-6 space-y-5">
           {nav.sections.map((section) => (
             <div key={section.title}>

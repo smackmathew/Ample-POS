@@ -1,14 +1,16 @@
 import { ActionForm } from '@/components/action-form';
-import { api } from '@/lib/api';
+import { api, authConfig } from '@/lib/api';
 import { can, type CurrentTenant, type Member, type Role } from '@/lib/types';
-import { inviteMember, updateMember } from '../actions';
+import { inviteMember, memberResetLink, updateMember } from '../actions';
 
 export default async function TeamPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
-  const [current, members, roles] = await Promise.all([
+  const [current, members, roles, config, me] = await Promise.all([
     api<CurrentTenant>('/tenant', { tenantId }),
     api<Member[]>('/members', { tenantId }),
     api<Role[]>('/roles', { tenantId }),
+    authConfig(),
+    api<{ user: { id: string } }>('/me'),
   ]);
   const canManage = can(current.membership.permissions, 'members.manage');
 
@@ -41,6 +43,15 @@ export default async function TeamPage({ params }: { params: Promise<{ tenantId:
               </ActionForm>
             ) : (
               <span className="text-sm">{m.role.name}</span>
+            )}
+            {canManage && config.mode === 'password' && m.user.id !== me.user.id && (
+              <ActionForm
+                action={memberResetLink.bind(null, tenantId, m.id)}
+                className="w-full"
+                secretLabel="Send this link to them privately. It lets them choose a new password, works once, and expires in 24 hours."
+              >
+                <button className="text-xs text-stone-500 hover:underline">Forgot their password? Create a reset link</button>
+              </ActionForm>
             )}
           </li>
         ))}
