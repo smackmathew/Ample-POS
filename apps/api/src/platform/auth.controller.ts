@@ -21,8 +21,17 @@ const changeBody = z.object({ currentPassword: password, newPassword: password }
 const forgotBody = z.object({ email });
 const resetBody = z.object({ token: z.string().min(1).max(200), password });
 const verifyBody = z.object({ token: z.string().min(1).max(200) });
+const emailChangeBody = z.object({ newEmail: email, password });
 
 const WINDOW = 15 * 60_000;
+
+function pgCode(err: unknown): string | undefined {
+  for (let e: unknown = err; e && typeof e === 'object'; e = (e as { cause?: unknown }).cause) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return undefined;
+}
 
 /**
  * Built-in accounts (AUTH_MODE=password). Sign-in hands out an opaque session
@@ -210,6 +219,84 @@ export class AuthController {
       throw new BadRequestException({ code: 'verify_invalid', message: 'This confirmation link has expired or was already used. Sign in to get a new one.' });
     }
     return { email: row.email };
+  }
+
+  /**
+   * Changes the sign-in email after checking the current password. With email
+   * available the new address must confirm a link first; without it the change
+   * is immediate (and the address unconfirmed).
+   */
+  @NoTenant()
+  @Post('email/change')
+  @HttpCode(200)
+  async changeEmail(@Body(new ZodPipe(emailChangeBody)) body: z.infer<typeof emailChangeBody>) {
+    this.requirePasswordMode();
+    const { user } = currentContext();
+    const userId = user!.userId;
+    this.limiter.check(`change:${userId}`, 10);
+    const [row] = await this.db.pool.execute<{ hash: string | null }>(sql`select app_password_hash(${userId}::uuid) as hash`);
+    if (!row?.hash || !(await verifyPassword(body.password, row.hash))) {
+      this.limiter.hit(`change:${userId}`, WINDOW);
+      throw new BadRequestException({ message: 'Your password is incorrect', issues: [{ path: 'password', message: 'Your password is incorrect' }] });
+    }
+
+    try {
+      if (!this.mailer.enabled) {
+        await this.db.pool.execute(sql`select app_apply_email_change(${userId}::uuid, ${body.newEmail}, false)`);
+        return { status: 'changed' as const, email: body.newEmail };
+      }
+      this.limiter.check(`email-change:${userId}`, 3, 'A confirmation email was just sent. Check that inbox, or try again in a few minutes.');
+      this.limiter.hit(`email-change:${userId}`, WINDOW);
+      const { secret, secretHash } = newToken();
+      const [change] = await this.db.pool.execute<{ id: string }>(
+        sql`select app_request_email_change(${userId}::uuid, ${body.newEmail}, ${secretHash}) as id`,
+      );
+      await this.mailer.send(
+        body.newEmail,
+        'Confirm your new email for Ample POS',
+        `Someone asked to use this address for their Ample POS account.\n\nTo confirm, open this link within 24 hours:\n${this.config.WEB_URL}/email-change?token=${change!.id}.${secret}\n\nIf this wasn’t you, ignore this email; nothing will change.`,
+      );
+      return { status: 'confirm_sent' as const, email: body.newEmail };
+    } catch (err) {
+      if (pgCode(err) === '23505') {
+        throw new HttpException({ statusCode: 409, code: 'email_taken', message: 'Another account already uses that email' }, 409);
+      }
+      throw err;
+    }
+  }
+
+  /** Spends the link sent to the new address, then lets the old address know. */
+  @Public()
+  @Post('email/change/confirm')
+  @HttpCode(200)
+  async confirmEmailChange(@Body(new ZodPipe(verifyBody)) body: z.infer<typeof verifyBody>, @Req() req: Request) {
+    this.limiter.check(`verify-ip:${req.ip}`, 30);
+    const parts = splitToken(body.token);
+    let row: { user_id: string; old_email: string; new_email: string } | undefined;
+    try {
+      [row] = parts
+        ? await this.db.pool.execute<{ user_id: string; old_email: string; new_email: string }>(
+            sql`select * from app_confirm_email_change(${parts.id}::uuid, ${sha256(parts.secret)})`,
+          )
+        : [];
+    } catch (err) {
+      if (pgCode(err) === '23505') {
+        throw new HttpException({ statusCode: 409, code: 'email_taken', message: 'Another account started using that email in the meantime' }, 409);
+      }
+      throw err;
+    }
+    if (!row) {
+      this.limiter.hit(`verify-ip:${req.ip}`, WINDOW);
+      throw new BadRequestException({ code: 'change_invalid', message: 'This link has expired or was already used. Request the change again from your account page.' });
+    }
+    await this.mailer
+      .send(
+        row.old_email,
+        'Your Ample POS email was changed',
+        `The email for your Ample POS account was changed from ${row.old_email} to ${row.new_email}.\n\nIf you did this, there’s nothing else to do. If you didn’t, contact the owner of your business right away: someone who knows your password may have changed it.`,
+      )
+      .catch((err: Error) => this.logger.error(err.message));
+    return { email: row.new_email };
   }
 
   private async startSession(userId: string, req: Request): Promise<string> {

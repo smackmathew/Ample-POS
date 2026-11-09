@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { api, attempt, TOKEN_COOKIE, type ActionState } from '@/lib/api';
@@ -81,6 +82,19 @@ export async function changePassword(_: ActionState, form: FormData): Promise<Ac
       body: { currentPassword: field(form, 'currentPassword'), newPassword: field(form, 'newPassword') },
     });
     return { ok: 'Password changed. Other devices have been signed out.' };
+  });
+}
+
+export async function changeEmail(_: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    const res = await api<{ status: 'confirm_sent' | 'changed'; email: string }>('/auth/email/change', {
+      method: 'POST',
+      body: { newEmail: field(form, 'newEmail'), password: field(form, 'password') },
+    });
+    revalidatePath('/account');
+    return res.status === 'changed'
+      ? { ok: `Your email is now ${res.email}. Use it to sign in.` }
+      : { ok: `Almost done: open the link we sent to ${res.email} to finish the change. Until then, keep signing in with your current email.` };
   });
 }
 
