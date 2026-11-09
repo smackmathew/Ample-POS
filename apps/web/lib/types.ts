@@ -59,6 +59,7 @@ export interface Location {
   taxRateBps: number;
   address: LocationAddress | null;
   archivedAt: string | null;
+  createdAt: string;
 }
 
 export interface LocationAddress {
@@ -155,6 +156,7 @@ export interface CountSummary {
   id: string;
   name: string;
   status: 'open' | 'submitted' | 'approved' | 'cancelled';
+  locationId: string;
   locationName: string;
   startedAt: string;
   entryCount: number;
@@ -245,6 +247,7 @@ export interface Sale {
   totalMinor: number;
   taxRateBps: number;
   receiptNumber: number | null;
+  locationId: string;
   createdAt: string;
   completedAt: string | null;
   lines: SaleLine[];
@@ -263,6 +266,7 @@ export interface SaleSummary {
   totalMinor: number;
   currency: string;
   createdAt: string;
+  locationId: string;
   locationName: string;
   cashier: string | null;
   cashierEmail: string | null;

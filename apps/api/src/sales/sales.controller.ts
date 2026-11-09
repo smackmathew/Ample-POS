@@ -123,6 +123,7 @@ export class SalesController {
         receiptNumber: s.receiptNumber,
         totalMinor: s.totalMinor,
         currency: s.currency,
+        locationId: s.locationId,
         createdAt: s.createdAt,
         completedAt: s.completedAt,
         locationName: schema.locations.name,

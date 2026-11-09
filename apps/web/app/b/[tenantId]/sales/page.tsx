@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
+import { formatDateTime, zoneFinder } from '@/lib/time';
 import type { CurrentTenant, Location, RegisterSummary, SaleSummary } from '@/lib/types';
 import { closeRegister, openRegister } from '../sales-actions';
 
@@ -23,12 +24,15 @@ export default async function SalesPage({
   const closedSession =
     closed && /^[0-9a-f-]{36}$/i.test(closed) ? await api<RegisterSummary>(`/registers/sessions/${closed}`, { tenantId }).catch(() => null) : null;
   const qs = receipt && /^\d+$/.test(receipt) ? `?receipt=${receipt}` : '?limit=50';
-  const [current, { session }, locations, { sales }] = await Promise.all([
+  const [current, { session }, allLocations, { sales }] = await Promise.all([
     api<CurrentTenant>('/tenant', { tenantId }),
     api<{ session: RegisterSummary | null }>('/registers/sessions/current', { tenantId }),
-    api<Location[]>('/locations', { tenantId }),
+    api<Location[]>('/locations?includeArchived=true', { tenantId }),
     api<{ sales: SaleSummary[] }>(`/sales${qs}`, { tenantId }),
   ]);
+  // Archived stores still have past sales; only open ones can open a register.
+  const zoneOf = zoneFinder(allLocations);
+  const locations = allLocations.filter((l) => !l.archivedAt);
   const money = (n: number) => formatMoney(n, current.tenant.currency);
 
   return (
@@ -119,7 +123,7 @@ export default async function SalesPage({
                       {s.receiptNumber ? `#${s.receiptNumber}` : 'View'}
                     </Link>
                   </td>
-                  <td className="text-stone-500">{new Date(s.createdAt).toLocaleString()}</td>
+                  <td className="text-stone-500">{formatDateTime(s.createdAt, zoneOf(s.locationId))}</td>
                   <td>{s.locationName}</td>
                   <td>{s.cashier ?? s.cashierEmail}</td>
                   <td>
