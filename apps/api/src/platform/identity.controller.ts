@@ -5,6 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthService } from '../core/auth.service';
 import { EmailVerification } from '../core/email-verification';
+import { TwoFactor } from '../core/two-factor';
 import { Db } from '../core/database';
 import { NoTenant, Public } from '../core/decorators';
 import { currentContext, currentUserId } from '../core/request-context';
@@ -32,6 +33,7 @@ export class IdentityController {
     private readonly db: Db,
     private readonly auth: AuthService,
     private readonly verification: EmailVerification,
+    private readonly twoFactor: TwoFactor,
   ) {}
 
   @Public()
@@ -62,7 +64,7 @@ export class IdentityController {
     );
     return {
       user: profile,
-      account: await this.verification.status(userId),
+      account: { ...(await this.verification.status(userId)), twoFactor: await this.twoFactorSummary(userId) },
       tenants: tenants.map((t) => ({ id: t.tenant_id, name: t.name, slug: t.slug, role: { key: t.role_key, name: t.role_name } })),
     };
   }
@@ -76,5 +78,10 @@ export class IdentityController {
       sql`select app_create_tenant(${body.name}, ${body.slug}, ${roles}::jsonb) as id`,
     );
     return { id: row!.id, name: body.name, slug: body.slug };
+  }
+
+  private async twoFactorSummary(userId: string) {
+    const t = await this.twoFactor.state(userId);
+    return { enabled: t.enabled, setupPending: !t.enabled && Boolean(t.secret), recoveryCodesLeft: t.enabled ? t.recoveryLeft : 0 };
   }
 }

@@ -4,6 +4,8 @@ import { CatalogController } from './catalog/catalog.controller';
 import { AuthGuard } from './core/auth.guard';
 import { AuthService } from './core/auth.service';
 import { EmailVerification } from './core/email-verification';
+import { TwoFactor } from './core/two-factor';
+import { TwoFactorController } from './platform/two-factor.controller';
 import { MAIL_FETCH, Mailer } from './core/mailer';
 import { RateLimiter } from './core/rate-limit';
 import { AuthController } from './platform/auth.controller';
@@ -56,6 +58,7 @@ export class AppModule {
       controllers: [
         IdentityController,
         AuthController,
+        TwoFactorController,
         TenantController,
         ModulesController,
         LocationsController,
@@ -89,6 +92,7 @@ export class AppModule {
         RateLimiter,
         Mailer,
         EmailVerification,
+        TwoFactor,
         { provide: MAIL_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         Events,
         LedgerService,

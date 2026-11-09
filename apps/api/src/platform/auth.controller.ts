@@ -8,6 +8,7 @@ import { Db } from '../core/database';
 import { NoTenant, Public } from '../core/decorators';
 import { EmailVerification } from '../core/email-verification';
 import { Mailer } from '../core/mailer';
+import { TwoFactor } from '../core/two-factor';
 import { DUMMY_HASH, hashPassword, normalizeEmail, PASSWORD_MAX, passwordProblem, verifyPassword } from '../core/passwords';
 import { RateLimiter } from '../core/rate-limit';
 import { currentContext } from '../core/request-context';
@@ -21,6 +22,7 @@ const changeBody = z.object({ currentPassword: password, newPassword: password }
 const forgotBody = z.object({ email });
 const resetBody = z.object({ token: z.string().min(1).max(200), password });
 const verifyBody = z.object({ token: z.string().min(1).max(200) });
+const secondStepBody = z.object({ challenge: z.string().min(1).max(200), code: z.string().trim().min(6).max(20) });
 const emailChangeBody = z.object({ newEmail: email, password });
 
 const WINDOW = 15 * 60_000;
@@ -49,6 +51,7 @@ export class AuthController {
     private readonly limiter: RateLimiter,
     private readonly mailer: Mailer,
     private readonly verification: EmailVerification,
+    private readonly twoFactor: TwoFactor,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -103,7 +106,30 @@ export class AuthController {
       if (account) await this.db.pool.execute(sql`select app_login_failed(${account.user_id}::uuid)`);
       throw new UnauthorizedException({ code: 'bad_credentials', message: 'Email or password is incorrect' });
     }
-    return { token: await this.startSession(account.user_id, req) };
+    return this.signedIn(account.user_id, req);
+  }
+
+  /** Second step for accounts with two-step sign-in: the code from the app, or a recovery code. */
+  @Public()
+  @Post('login/2fa')
+  @HttpCode(200)
+  async secondStep(@Body(new ZodPipe(secondStepBody)) body: z.infer<typeof secondStepBody>, @Req() req: Request) {
+    this.requirePasswordMode();
+    this.limiter.check(`login-ip:${req.ip}`, 50);
+    const parts = splitToken(body.challenge);
+    const [row] = parts
+      ? await this.db.pool.execute<{ user_id: string | null }>(sql`select app_login_challenge_user(${parts.id}::uuid, ${sha256(parts.secret)}) as user_id`)
+      : [];
+    if (!row?.user_id) {
+      this.limiter.hit(`login-ip:${req.ip}`, WINDOW);
+      throw new UnauthorizedException({ code: 'challenge_expired', message: 'Too many tries or too much time passed. Sign in again.' });
+    }
+    if (!(await this.twoFactor.check(row.user_id, body.code))) {
+      this.limiter.hit(`login-ip:${req.ip}`, WINDOW);
+      throw new UnauthorizedException({ code: 'bad_code', message: 'That code didn’t match. Use the newest code from your app, or a recovery code.' });
+    }
+    await this.db.pool.execute(sql`select app_finish_login_challenge(${parts!.id}::uuid)`);
+    return { token: await this.startSession(row.user_id, req) };
   }
 
   @NoTenant()
@@ -189,7 +215,8 @@ export class AuthController {
       this.limiter.hit(`reset-ip:${req.ip}`, WINDOW);
       throw new BadRequestException({ code: 'reset_invalid', message: 'This reset link has expired or was already used. Ask for a new one.' });
     }
-    return { token: await this.startSession(row.user_id, req) };
+    // A new password doesn't skip the code: an inbox alone shouldn't open the account.
+    return this.signedIn(row.user_id, req);
   }
 
   /** Sends a fresh verification link to the signed-in account's email. */
@@ -297,6 +324,12 @@ export class AuthController {
       )
       .catch((err: Error) => this.logger.error(err.message));
     return { email: row.new_email };
+  }
+
+  /** A session, or, when two-step sign-in is on, a challenge for the code step. */
+  private async signedIn(userId: string, req: Request): Promise<{ token: string } | { twoFactor: true; challenge: string }> {
+    if ((await this.twoFactor.state(userId)).enabled) return { twoFactor: true, challenge: await this.twoFactor.challenge(userId) };
+    return { token: await this.startSession(userId, req) };
   }
 
   private async startSession(userId: string, req: Request): Promise<string> {

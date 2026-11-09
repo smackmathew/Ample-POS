@@ -287,6 +287,15 @@ field) to an address the phone can reach, such as your machine's LAN IP.
   email available, a link goes to the new address and the change happens when
   it is opened; the old address is then told. Links already sent to the old
   address stop working. Without email the change is immediate.
+- **Two-step sign-in** (Your account page, per account; recommended for
+  owners): an authenticator app (RFC 6238 codes, 30-second steps, one step of
+  clock drift) plus 10 one-time recovery codes, stored only as hashes. Signing
+  in then takes the password, then a code; the two are linked by a challenge
+  that expires after 10 minutes or 5 wrong codes. A code can't be reused.
+  Password resets (emailed or from the Team page) still ask for the code, so an
+  inbox alone doesn't open the account. Turning it off or making new recovery
+  codes needs the password and a code. Someone who loses both their phone and
+  their recovery codes can't be let back in from inside Ample POS yet.
 - **Forgotten passwords.** With `RESEND_API_KEY` set, *Forgot password?* emails
   a link that works once for an hour. Without email, an owner (or anyone with
   *members.manage*) can create a one-time reset link on the Team page, valid 24
