@@ -84,6 +84,13 @@ export async function changePassword(_: ActionState, form: FormData): Promise<Ac
   });
 }
 
+export async function resendVerification(): Promise<ActionState> {
+  return attempt(async () => {
+    const { sent } = await api<{ sent: boolean }>('/auth/email/verify-request', { method: 'POST' });
+    return sent ? { ok: 'Sent. Check your inbox (and spam folder) for the link.' } : { ok: 'Your email is already confirmed.' };
+  });
+}
+
 /** Local development (AUTH_MODE=dev): sign in as any email. */
 export async function devSignIn(_: ActionState, form: FormData): Promise<ActionState> {
   const result = await attempt(async () => {

@@ -15,6 +15,7 @@ import { and, desc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { assertCanDelegate } from '../core/access';
 import { Db } from '../core/database';
+import { EmailVerification } from '../core/email-verification';
 import { NoTenant, RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
 import { currentTenant, currentUserId } from '../core/request-context';
@@ -40,11 +41,19 @@ function pgCode(err: unknown): string | undefined {
   return undefined;
 }
 
+function pgMessage(err: unknown): string {
+  for (let e: unknown = err; e && typeof e === 'object'; e = (e as { cause?: unknown }).cause) {
+    if (typeof (e as { code?: unknown }).code === 'string') return String((e as { message?: unknown }).message ?? '');
+  }
+  return '';
+}
+
 @Controller('invitations')
 export class InvitationsController {
   constructor(
     private readonly db: Db,
     private readonly events: Events,
+    private readonly verification: EmailVerification,
   ) {}
 
   @RequirePermission('members.manage')
@@ -103,13 +112,17 @@ export class InvitationsController {
     try {
       // Savepoint so a rejected code does not poison the request transaction.
       const [row] = await this.db.tx.transaction((sp) =>
-        sp.execute<{ id: string }>(sql`select app_accept_invitation(${hashCode(body.code)}) as id`),
+        sp.execute<{ id: string }>(sql`select app_accept_invitation(${hashCode(body.code)}, ${this.verification.enforced}) as id`),
       );
       return { tenantId: row!.id };
     } catch (err) {
       const code = pgCode(err);
       if (code === 'P0002') throw new GoneException('This invitation is invalid or has expired');
-      if (code === '42501') throw new ForbiddenException('This invitation was issued to a different email address');
+      if (code === '42501') {
+        throw /confirm your email/.test(pgMessage(err))
+          ? new ForbiddenException({ code: 'email_unverified', message: 'Confirm your email address before accepting this invitation. Check your inbox for the link.' })
+          : new ForbiddenException('This invitation was issued to a different email address');
+      }
       throw err;
     }
   }

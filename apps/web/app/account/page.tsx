@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
+import { VerifyEmailBanner } from '@/components/verify-email-banner';
 import { api, authConfig } from '@/lib/api';
 import type { Me } from '@/lib/types';
 import { changePassword, signOut, signOutEverywhere } from '../session-actions';
@@ -14,9 +15,13 @@ export default async function AccountPage() {
           Your businesses
         </Link>
       </header>
+      <VerifyEmailBanner me={me} config={config} />
       <section className="card">
         <p className="font-medium">{me.user.displayName ?? me.user.email}</p>
-        <p className="text-sm text-stone-600">{me.user.email}</p>
+        <p className="text-sm text-stone-600">
+          {me.user.email}
+          {config.emailVerification && me.account.emailVerified && me.account.hasPassword && <span className="ml-2 text-teal-700">Confirmed</span>}
+        </p>
       </section>
 
       {config.mode === 'password' && (

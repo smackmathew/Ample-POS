@@ -276,6 +276,13 @@ field) to an address the phone can reach, such as your machine's LAN IP.
 - **Guessing is throttled**: 10 wrong passwords lock an account for 15
   minutes, and failures are also limited per email and per network address
   (`TRUST_PROXY` says which proxies' `X-Forwarded-For` to believe).
+- **Email verification** (on whenever email can be sent). New accounts get a
+  confirmation link (valid 24 hours, *Send it again* on the businesses page).
+  Until they confirm, they can't create a business or accept an invitation
+  locked to their email; open invitation codes still work. Resetting a password
+  through an emailed link also confirms the email, so someone who signed up
+  with your address can be locked out by you resetting it. Without email
+  nothing is held back, since there would be no way to confirm.
 - **Forgotten passwords.** With `RESEND_API_KEY` set, *Forgot password?* emails
   a link that works once for an hour. Without email, an owner (or anyone with
   *members.manage*) can create a one-time reset link on the Team page, valid 24
@@ -321,7 +328,9 @@ pnpm --filter @pos/web start   # http://localhost:3000
 Create an account on the sign-in page. `AUTH_MODE=dev` instead lets anyone
 sign in as any email (handy for quick local experiments only), and
 `AUTH_MODE=jwks` accepts tokens from an external identity provider (Clerk,
-Auth0 or similar) via `AUTH_JWKS_URL` and `AUTH_ISSUER`.
+Auth0 or similar) via `AUTH_JWKS_URL` and `AUTH_ISSUER`. To try confirmation
+and reset emails locally, set `EMAIL_DEV_LOG=true`: emails are printed to the
+API's log instead of sent (refused in production).
 
 ## Tests
 

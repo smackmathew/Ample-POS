@@ -3,6 +3,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CatalogController } from './catalog/catalog.controller';
 import { AuthGuard } from './core/auth.guard';
 import { AuthService } from './core/auth.service';
+import { EmailVerification } from './core/email-verification';
 import { MAIL_FETCH, Mailer } from './core/mailer';
 import { RateLimiter } from './core/rate-limit';
 import { AuthController } from './platform/auth.controller';
@@ -87,6 +88,7 @@ export class AppModule {
         AuthService,
         RateLimiter,
         Mailer,
+        EmailVerification,
         { provide: MAIL_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         Events,
         LedgerService,

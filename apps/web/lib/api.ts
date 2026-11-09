@@ -95,6 +95,8 @@ export async function attempt(fn: () => Promise<ActionState | void>): Promise<Ac
 export interface AuthConfig {
   mode: 'password' | 'dev' | 'jwks';
   passwordResetByEmail: boolean;
+  /** New accounts confirm their email before creating a business. */
+  emailVerification: boolean;
 }
 
 export const authConfig = () => api<AuthConfig>('/auth/config', { anonymous: true });

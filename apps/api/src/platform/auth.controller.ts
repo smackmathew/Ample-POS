@@ -6,6 +6,7 @@ import { AuthService, newToken, SESSION_DAYS, splitToken, sha256 } from '../core
 import { APP_CONFIG, type AppConfig } from '../core/config';
 import { Db } from '../core/database';
 import { NoTenant, Public } from '../core/decorators';
+import { EmailVerification } from '../core/email-verification';
 import { Mailer } from '../core/mailer';
 import { DUMMY_HASH, hashPassword, normalizeEmail, PASSWORD_MAX, passwordProblem, verifyPassword } from '../core/passwords';
 import { RateLimiter } from '../core/rate-limit';
@@ -19,6 +20,7 @@ const loginBody = z.object({ email, password });
 const changeBody = z.object({ currentPassword: password, newPassword: password });
 const forgotBody = z.object({ email });
 const resetBody = z.object({ token: z.string().min(1).max(200), password });
+const verifyBody = z.object({ token: z.string().min(1).max(200) });
 
 const WINDOW = 15 * 60_000;
 
@@ -37,6 +39,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly limiter: RateLimiter,
     private readonly mailer: Mailer,
+    private readonly verification: EmailVerification,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -44,7 +47,8 @@ export class AuthController {
   @Public()
   @Get('config')
   authConfig() {
-    return { mode: this.auth.mode, passwordResetByEmail: this.auth.mode === 'password' && this.mailer.enabled };
+    const byEmail = this.auth.mode === 'password' && this.mailer.enabled;
+    return { mode: this.auth.mode, passwordResetByEmail: byEmail, emailVerification: this.verification.enforced };
   }
 
   @Public()
@@ -62,7 +66,9 @@ export class AuthController {
     if (!row?.id) {
       throw new HttpException({ statusCode: 409, code: 'email_taken', message: 'An account with this email already exists. Sign in, or reset your password.' }, 409);
     }
-    return { token: await this.startSession(row.id, req) };
+    const token = await this.startSession(row.id, req);
+    await this.verification.send(row.id);
+    return { token };
   }
 
   @Public()
@@ -175,6 +181,35 @@ export class AuthController {
       throw new BadRequestException({ code: 'reset_invalid', message: 'This reset link has expired or was already used. Ask for a new one.' });
     }
     return { token: await this.startSession(row.user_id, req) };
+  }
+
+  /** Sends a fresh verification link to the signed-in account's email. */
+  @NoTenant()
+  @Post('email/verify-request')
+  @HttpCode(200)
+  async requestVerification() {
+    if (!this.verification.enforced) throw new NotFoundException();
+    const { user } = currentContext();
+    this.limiter.check(`verify-send:${user!.userId}`, 3, 'A confirmation email was just sent. Check your inbox, or try again in a few minutes.');
+    this.limiter.hit(`verify-send:${user!.userId}`, WINDOW);
+    return { sent: await this.verification.send(user!.userId) };
+  }
+
+  /** Spends the emailed link. No sign-in needed: the link itself is the proof. */
+  @Public()
+  @Post('email/verify')
+  @HttpCode(200)
+  async verifyEmail(@Body(new ZodPipe(verifyBody)) body: z.infer<typeof verifyBody>, @Req() req: Request) {
+    this.limiter.check(`verify-ip:${req.ip}`, 30);
+    const parts = splitToken(body.token);
+    const [row] = parts
+      ? await this.db.pool.execute<{ email: string | null }>(sql`select app_verify_email(${parts.id}::uuid, ${sha256(parts.secret)}) as email`)
+      : [];
+    if (!row?.email) {
+      this.limiter.hit(`verify-ip:${req.ip}`, WINDOW);
+      throw new BadRequestException({ code: 'verify_invalid', message: 'This confirmation link has expired or was already used. Sign in to get a new one.' });
+    }
+    return { email: row.email };
   }
 
   private async startSession(userId: string, req: Request): Promise<string> {
