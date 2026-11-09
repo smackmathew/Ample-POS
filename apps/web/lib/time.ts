@@ -53,3 +53,45 @@ export function formatTime(iso: string | Date, timeZone: string): string {
 export function formatDay(date: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(`${date}T00:00:00Z`));
 }
+
+/** Date and time in a store's time zone, e.g. "Nov 9, 2026, 3:04 PM" (with "CST" when withZone). */
+export function formatDateTime(iso: string | Date, timeZone: string, withZone = false): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(withZone ? { timeZoneName: 'short' } : {}),
+  }).format(new Date(iso));
+}
+
+export function formatDate(iso: string | Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone, month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(iso));
+}
+
+interface ZonedLocation {
+  id: string;
+  timezone: string;
+  createdAt?: string;
+  archivedAt?: string | null;
+}
+
+/**
+ * The business's own time zone for things that belong to no one store (audit
+ * log, integrations): its first store's. UTC only when it has no locations.
+ */
+export function homeTimeZone(locations: ZonedLocation[]): string {
+  const active = locations.filter((l) => !l.archivedAt);
+  const pool = active.length ? active : locations;
+  const first = [...pool].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))[0];
+  return first?.timezone ?? 'UTC';
+}
+
+/** Time zone for a location id, falling back to the business's home zone. */
+export function zoneFinder(locations: ZonedLocation[]): (locationId?: string | null) => string {
+  const byId = new Map(locations.map((l) => [l.id, l.timezone]));
+  const home = homeTimeZone(locations);
+  return (locationId) => (locationId && byId.get(locationId)) || home;
+}
