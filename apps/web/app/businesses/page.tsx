@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
-import { api } from '@/lib/api';
+import { VerifyEmailBanner } from '@/components/verify-email-banner';
+import { api, authConfig } from '@/lib/api';
 import type { Me } from '@/lib/types';
 import { acceptInvitation, createBusiness, signOut } from '../session-actions';
 
 export default async function BusinessesPage() {
-  const me = await api<Me>('/me');
+  const [me, config] = await Promise.all([api<Me>('/me'), authConfig()]);
   return (
     <main className="mx-auto mt-16 max-w-2xl space-y-8 px-4">
       <header className="flex items-center justify-between">
@@ -19,6 +20,7 @@ export default async function BusinessesPage() {
           </form>
         </div>
       </header>
+      <VerifyEmailBanner me={me} config={config} />
 
       {me.tenants.length > 0 ? (
         <ul className="space-y-2">

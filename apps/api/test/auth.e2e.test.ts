@@ -42,10 +42,24 @@ const as = (token: string) => ({
 });
 const newEmail = () => `${unique('person')}@Example.com`;
 
+/** The token from the last email of a kind sent to an address. */
+function linkToken(email: string, path: 'verify' | 'reset'): string {
+  const mail = outbox.findLast((m) => m.to[0] === email.toLowerCase() && m.text.includes(`/${path}?token=`));
+  if (!mail) throw new Error(`no ${path} email for ${email}`);
+  return new RegExp(`https://hub\\.example/${path}\\?token=(\\S+)`).exec(mail.text)![1]!;
+}
+
+/** Signs up and confirms the email, as someone who reads their inbox would. */
+async function verifiedAccount(email = newEmail()): Promise<{ email: string; token: string }> {
+  const token = (await signup(email).expect(201)).body.token as string;
+  await http().post('/auth/email/verify').send({ token: linkToken(email, 'verify') }).expect(200);
+  return { email, token };
+}
+
 describe('built-in accounts', () => {
   it('signs up, signs in with any letter case, and rejects duplicates and weak passwords', async () => {
     const email = newEmail();
-    expect((await http().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: true });
+    expect((await http().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: true, emailVerification: true });
     expect((await signup(email, 'short')).status).toBe(400);
     expect((await signup(email, email.toLowerCase())).body.message).toBe('Don’t use your email as your password');
 
@@ -132,7 +146,7 @@ describe('built-in accounts', () => {
   });
 
   it('lets a manager make a reset link only for members who belong to no other business', async () => {
-    const ownerToken = (await signup(newEmail()).expect(201)).body.token;
+    const ownerToken = (await verifiedAccount()).token;
     const owner = as(ownerToken);
     const tenantId = (await owner.post('/tenants', { name: 'Shop', slug: unique('shop') }).expect(201)).body.id;
     const roles = (await http().get('/roles').set('Authorization', `Bearer ${ownerToken}`).set('X-Tenant-Id', tenantId).expect(200)).body;
@@ -153,8 +167,10 @@ describe('built-in accounts', () => {
     const made = await owner.post(`/members/${memberId(staff.email)}/password-reset`, {}, tenantId).expect(201);
     expect(made.body.link).toMatch(/^https:\/\/hub\.example\/reset\?token=/);
     const token = new URL(made.body.link).searchParams.get('token')!;
-    await http().post('/auth/password/reset').send({ token, password: 'staff picked this one' }).expect(200);
+    const viaHub = await http().post('/auth/password/reset').send({ token, password: 'staff picked this one' }).expect(200);
     await login(staff.email, 'staff picked this one').expect(200);
+    // A link from the hub says nothing about who reads that inbox.
+    expect((await as(viaHub.body.token).get('/me').expect(200)).body.account.emailVerified).toBe(false);
 
     // Nobody resets their own password this way.
     const ownerMember = members.find((m: { role: { key: string } }) => m.role.key === 'owner').id;
@@ -167,6 +183,63 @@ describe('built-in accounts', () => {
     await as(manager.token).post('/invitations/accept', { code }).expect(201);
     const shared = await owner.post(`/members/${memberId(manager.email)}/password-reset`, {}, tenantId).expect(409);
     expect(shared.body.message).toMatch(/also belongs to another business/);
+  });
+
+  it('asks new accounts to confirm their email before creating a business', async () => {
+    const email = newEmail();
+    const token = (await signup(email).expect(201)).body.token;
+    const mail = outbox.findLast((m) => m.to[0] === email.toLowerCase())!;
+    expect(mail.subject).toBe('Confirm your email for Ample POS');
+    expect((await as(token).get('/me').expect(200)).body.account).toEqual({ hasPassword: true, emailVerified: false });
+
+    const blocked = await as(token).post('/tenants', { name: 'Shop', slug: unique('shop') }).expect(403);
+    expect(blocked.body.code).toBe('email_unverified');
+
+    // A fresh link can be requested; only the latest matters to the user, but any unused one works.
+    await as(token).post('/auth/email/verify-request').expect(200);
+    const verifyToken = linkToken(email, 'verify');
+    const verified = await http().post('/auth/email/verify').send({ token: verifyToken }).expect(200);
+    expect(verified.body.email).toBe(email.toLowerCase());
+    expect((await as(token).get('/me').expect(200)).body.account.emailVerified).toBe(true);
+    await as(token).post('/tenants', { name: 'Shop', slug: unique('shop') }).expect(201);
+
+    const reused = await http().post('/auth/email/verify').send({ token: verifyToken }).expect(400);
+    expect(reused.body.code).toBe('verify_invalid');
+    // Nothing left to verify, so no more links go out.
+    const before = outbox.length;
+    expect((await as(token).post('/auth/email/verify-request').expect(200)).body.sent).toBe(false);
+    expect(outbox.length).toBe(before);
+  });
+
+  it('only lets a verified account accept an invitation locked to its email', async () => {
+    const owner = await verifiedAccount();
+    const tenantId = (await as(owner.token).post('/tenants', { name: 'Shop', slug: unique('shop') }).expect(201)).body.id;
+    const roles = (await http().get('/roles').set('Authorization', `Bearer ${owner.token}`).set('X-Tenant-Id', tenantId).expect(200)).body;
+    const staffRole = roles.find((r: { key: string }) => r.key === 'staff').id;
+
+    const email = newEmail();
+    const invitee = (await signup(email).expect(201)).body.token;
+    const locked = (await as(owner.token).post('/invitations', { roleId: staffRole, email }, tenantId).expect(201)).body.code;
+    const refused = await as(invitee).post('/invitations/accept', { code: locked }).expect(403);
+    expect(refused.body.code).toBe('email_unverified');
+
+    // An open code (not locked to an email) works without verifying.
+    const open = (await as(owner.token).post('/invitations', { roleId: staffRole }, tenantId).expect(201)).body.code;
+    const other = (await signup(newEmail()).expect(201)).body.token;
+    await as(other).post('/invitations/accept', { code: open }).expect(201);
+
+    await http().post('/auth/email/verify').send({ token: linkToken(email, 'verify') }).expect(200);
+    await as(invitee).post('/invitations/accept', { code: locked }).expect(201);
+  });
+
+  it('treats an emailed password reset as proof of the email, but not a hub-made link', async () => {
+    // Someone signs up with an address they don't own; the real owner reclaims it by email.
+    const email = newEmail();
+    const squatter = (await signup(email, 'squatter password').expect(201)).body.token;
+    await http().post('/auth/password/forgot').send({ email }).expect(200);
+    const reset = await http().post('/auth/password/reset').send({ token: linkToken(email, 'reset'), password: 'the real owner here' }).expect(200);
+    expect((await as(squatter).get('/me')).status).toBe(401);
+    expect((await as(reset.body.token).get('/me').expect(200)).body.account.emailVerified).toBe(true);
   });
 
   it('carries a demo-mode user (and their businesses) over to a password account', async () => {
@@ -189,5 +262,25 @@ describe('built-in accounts', () => {
     } finally {
       await sql.end();
     }
+  });
+});
+
+describe('built-in accounts without email', () => {
+  let quiet: INestApplication;
+
+  beforeAll(async () => {
+    quiet = await createTestApp({ env: { AUTH_MODE: 'password' } });
+  });
+
+  afterAll(async () => {
+    await quiet.close();
+  });
+
+  it('doesn’t hold anything back when there is no way to send a confirmation', async () => {
+    const q = () => request(quiet.getHttpServer());
+    expect((await q().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: false, emailVerification: false });
+    const token = (await q().post('/auth/signup').send({ email: newEmail(), password: PASSWORD, name: 'Pat' }).expect(201)).body.token;
+    await q().post('/tenants').set('Authorization', `Bearer ${token}`).send({ name: 'Shop', slug: unique('shop') }).expect(201);
+    await q().post('/auth/email/verify-request').set('Authorization', `Bearer ${token}`).expect(404);
   });
 });

@@ -4,6 +4,7 @@ import { SYSTEM_ROLES } from '@pos/modules';
 import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthService } from '../core/auth.service';
+import { EmailVerification } from '../core/email-verification';
 import { Db } from '../core/database';
 import { NoTenant, Public } from '../core/decorators';
 import { currentContext, currentUserId } from '../core/request-context';
@@ -30,6 +31,7 @@ export class IdentityController {
   constructor(
     private readonly db: Db,
     private readonly auth: AuthService,
+    private readonly verification: EmailVerification,
   ) {}
 
   @Public()
@@ -60,6 +62,7 @@ export class IdentityController {
     );
     return {
       user: profile,
+      account: await this.verification.status(userId),
       tenants: tenants.map((t) => ({ id: t.tenant_id, name: t.name, slug: t.slug, role: { key: t.role_key, name: t.role_name } })),
     };
   }
@@ -67,6 +70,7 @@ export class IdentityController {
   @NoTenant()
   @Post('tenants')
   async createTenant(@Body(new ZodPipe(createTenantBody)) body: z.infer<typeof createTenantBody>) {
+    await this.verification.require(currentUserId(), 'create a business');
     const roles = JSON.stringify(SYSTEM_ROLES);
     const [row] = await this.db.tx.execute<{ id: string }>(
       sql`select app_create_tenant(${body.name}, ${body.slug}, ${roles}::jsonb) as id`,

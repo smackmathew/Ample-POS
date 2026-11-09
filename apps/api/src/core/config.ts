@@ -12,6 +12,8 @@ const schema = z
     /** Sends password-reset emails through Resend when set; otherwise only hub-made reset links work. */
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().default('Ample POS <no-reply@example.com>'),
+    /** Development only: print emails to the log instead of sending them. */
+    EMAIL_DEV_LOG: z.enum(['true', 'false']).default('false'),
     AUTH_DEV_SECRET: z.string().min(32).optional(),
     AUTH_JWKS_URL: z.string().url().optional(),
     AUTH_ISSUER: z.string().optional(),
@@ -42,6 +44,9 @@ const schema = z
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(10_000).default(15 * 60_000),
   })
   .superRefine((env, ctx) => {
+    if (env.EMAIL_DEV_LOG === 'true' && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({ code: 'custom', path: ['EMAIL_DEV_LOG'], message: 'must not be used in production; set RESEND_API_KEY instead' });
+    }
     if (env.AUTH_MODE === 'dev' && !env.AUTH_DEV_SECRET) {
       ctx.addIssue({ code: 'custom', path: ['AUTH_DEV_SECRET'], message: 'required when AUTH_MODE=dev' });
     }

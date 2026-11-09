@@ -33,7 +33,7 @@ services:
       # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET (with PAYMENTS_PROVIDER=stripe)
       # BILLING_STRIPE_SECRET_KEY / BILLING_STRIPE_WEBHOOK_SECRET (with BILLING_PROVIDER=stripe)
       # SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET
-      # RESEND_API_KEY / EMAIL_FROM (password-reset emails; without them owners make reset links on the Team page)
+      # RESEND_API_KEY / EMAIL_FROM (reset and confirmation emails; without them owners make reset links on the Team page)
 
 databases:
   - name: ample-pos-db
