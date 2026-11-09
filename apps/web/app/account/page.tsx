@@ -3,7 +3,7 @@ import { ActionForm } from '@/components/action-form';
 import { VerifyEmailBanner } from '@/components/verify-email-banner';
 import { api, authConfig } from '@/lib/api';
 import type { Me } from '@/lib/types';
-import { changePassword, signOut, signOutEverywhere } from '../session-actions';
+import { changeEmail, changePassword, signOut, signOutEverywhere } from '../session-actions';
 
 export default async function AccountPage() {
   const [me, config] = await Promise.all([api<Me>('/me'), authConfig()]);
@@ -24,13 +24,23 @@ export default async function AccountPage() {
         </p>
       </section>
 
+      {config.mode === 'password' && me.account.hasPassword && (
+        <ActionForm action={changeEmail} className="card grid gap-3">
+          <h2 className="font-medium">Change email</h2>
+          {config.passwordResetByEmail && <p className="text-sm text-stone-600">We’ll send a link to the new address; the change happens when you open it.</p>}
+          <input name="newEmail" type="email" autoComplete="email" placeholder="New email" required className="input" />
+          <input name="password" type="password" autoComplete="current-password" placeholder="Current password" required className="input" />
+          <button className="btn justify-self-start">Change email</button>
+        </ActionForm>
+      )}
+
       {config.mode === 'password' && (
         <ActionForm action={changePassword} className="card grid gap-3">
           <h2 className="font-medium">Change password</h2>
           <input name="currentPassword" type="password" autoComplete="current-password" placeholder="Current password" required className="input" />
           <input name="newPassword" type="password" autoComplete="new-password" minLength={10} placeholder="New password (at least 10 characters)" required className="input" />
           <input name="confirm" type="password" autoComplete="new-password" placeholder="Repeat new password" required className="input" />
-          <button className="btn">Change password</button>
+          <button className="btn justify-self-start">Change password</button>
         </ActionForm>
       )}
 

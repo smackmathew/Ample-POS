@@ -283,6 +283,10 @@ field) to an address the phone can reach, such as your machine's LAN IP.
   through an emailed link also confirms the email, so someone who signed up
   with your address can be locked out by you resetting it. Without email
   nothing is held back, since there would be no way to confirm.
+- **Changing email** (Your account page) needs the current password. With
+  email available, a link goes to the new address and the change happens when
+  it is opened; the old address is then told. Links already sent to the old
+  address stop working. Without email the change is immediate.
 - **Forgotten passwords.** With `RESEND_API_KEY` set, *Forgot password?* emails
   a link that works once for an hour. Without email, an owner (or anyone with
   *members.manage*) can create a one-time reset link on the Team page, valid 24
