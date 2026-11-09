@@ -61,6 +61,12 @@ export function SessionProvider({ defaultApiUrl, children }: { defaultApiUrl: st
         await save({ apiUrl: session.apiUrl, token: session.token, email: session.email });
       },
       signOut: async () => {
+        // End the session on the server too; signing out still works offline.
+        if (session.token) {
+          await new ApiClient({ baseUrl: session.apiUrl, token: session.token })
+            .post('/auth/logout')
+            .catch(() => {});
+        }
         await clearLocalData();
         await save({ apiUrl: session.apiUrl });
       },

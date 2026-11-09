@@ -1,5 +1,5 @@
 import 'server-only';
-import { cookies } from 'next/headers';
+import { cookies, headers as requestHeaders } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 export const TOKEN_COOKIE = 'pos_token';
@@ -32,6 +32,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     headers.Authorization = `Bearer ${token}`;
   }
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId;
+  // Pass the browser's address along so sign-in rate limits apply per visitor, not to this server.
+  const incoming = await requestHeaders();
+  const forwardedFor = incoming.get('x-forwarded-for') ?? incoming.get('x-real-ip');
+  if (forwardedFor) headers['X-Forwarded-For'] = forwardedFor;
+  const userAgent = incoming.get('user-agent');
+  if (userAgent) headers['User-Agent'] = userAgent;
 
   const res = await fetch(`${API_URL}${path}`, {
     method: options.method ?? 'GET',
@@ -85,3 +91,10 @@ export async function attempt(fn: () => Promise<ActionState | void>): Promise<Ac
     throw err;
   }
 }
+
+export interface AuthConfig {
+  mode: 'password' | 'dev' | 'jwks';
+  passwordResetByEmail: boolean;
+}
+
+export const authConfig = () => api<AuthConfig>('/auth/config', { anonymous: true });

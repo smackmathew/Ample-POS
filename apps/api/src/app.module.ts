@@ -3,6 +3,9 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CatalogController } from './catalog/catalog.controller';
 import { AuthGuard } from './core/auth.guard';
 import { AuthService } from './core/auth.service';
+import { MAIL_FETCH, Mailer } from './core/mailer';
+import { RateLimiter } from './core/rate-limit';
+import { AuthController } from './platform/auth.controller';
 import { APP_CONFIG, type AppConfig } from './core/config';
 import { Db, DB_HANDLE, dbHandleFactory } from './core/database';
 import { Events } from './core/events';
@@ -51,6 +54,7 @@ export class AppModule {
       module: AppModule,
       controllers: [
         IdentityController,
+        AuthController,
         TenantController,
         ModulesController,
         LocationsController,
@@ -81,6 +85,9 @@ export class AppModule {
         { provide: DB_HANDLE, useFactory: () => dbHandleFactory(config.DATABASE_URL) },
         Db,
         AuthService,
+        RateLimiter,
+        Mailer,
+        { provide: MAIL_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         Events,
         LedgerService,
         SalesService,

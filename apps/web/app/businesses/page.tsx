@@ -10,9 +10,14 @@ export default async function BusinessesPage() {
     <main className="mx-auto mt-16 max-w-2xl space-y-8 px-4">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Your businesses</h1>
-        <form action={signOut}>
-          <button className="btn-secondary">Sign out ({me.user.email})</button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link href="/account" className="text-sm text-stone-600 hover:underline">
+            {me.user.email}
+          </Link>
+          <form action={signOut}>
+            <button className="btn-secondary">Sign out</button>
+          </form>
+        </div>
       </header>
 
       {me.tenants.length > 0 ? (

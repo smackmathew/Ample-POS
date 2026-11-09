@@ -5,6 +5,8 @@ import type { Transaction } from '@pos/db';
 export interface AuthUser {
   userId: string;
   subject: string;
+  /** The sign-in session behind the request (built-in accounts only). */
+  sessionId: string | null;
 }
 
 export interface TenantMembership {

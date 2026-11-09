@@ -42,7 +42,7 @@ export class IdentityController {
   @Public()
   @Post('dev/token')
   async devToken(@Body(new ZodPipe(devTokenBody)) body: z.infer<typeof devTokenBody>) {
-    if (!this.auth.devMode) throw new NotFoundException();
+    if (this.auth.mode !== 'dev') throw new NotFoundException();
     return { token: await this.auth.issueDevToken(body.email, body.name ?? null) };
   }
 

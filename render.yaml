@@ -19,11 +19,9 @@ services:
       # Password for the restricted role the API connects as (created on first start).
       - key: APP_DB_PASSWORD
         generateValue: true
-      # Demo sign-in: anyone can sign in with any email. Test data only.
+      # Built-in accounts (email + password).
       - key: AUTH_MODE
-        value: dev
-      - key: AUTH_DEV_SECRET
-        generateValue: true
+        value: password
       # Encrypts stored Shopify credentials.
       - key: SECRETS_KEY
         generateValue: true
@@ -35,6 +33,7 @@ services:
       # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET (with PAYMENTS_PROVIDER=stripe)
       # BILLING_STRIPE_SECRET_KEY / BILLING_STRIPE_WEBHOOK_SECRET (with BILLING_PROVIDER=stripe)
       # SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET
+      # RESEND_API_KEY / EMAIL_FROM (password-reset emails; without them owners make reset links on the Team page)
 
 databases:
   - name: ample-pos-db
