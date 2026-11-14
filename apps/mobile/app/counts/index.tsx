@@ -1,6 +1,7 @@
-import { ApiError } from '@pos/sync';
+import { ApiError, Receiving } from '@pos/sync';
+import { randomUUID } from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { loadCatalog, refreshCatalog } from '@/catalog-cache';
 import { getMeta, setMeta } from '@/db';
@@ -27,7 +28,12 @@ export default function Counts() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [canReceive, setCanReceive] = useState(false);
   const locationId = session.device?.locationId;
+
+  useEffect(() => {
+    void new Receiving(api, randomUUID).available().then(setCanReceive, () => setCanReceive(false));
+  }, [api]);
 
   const load = useCallback(async () => {
     setError('');
@@ -129,6 +135,7 @@ export default function Counts() {
           </View>
           <ErrorText>{error}</ErrorText>
           {(revoked || last?.stopped === 'unauthorized') && <Button title="Pair again" onPress={() => router.push('/pair')} />}
+          {canReceive && <Button title="Receive a delivery" variant="secondary" onPress={() => router.push('/receiving')} />}
           <Field label="New count" placeholder="e.g. Back room shelf A" value={name} onChangeText={setName} />
           <Button title="Start count" onPress={start} disabled={!name.trim() || offline} busy={busy} />
           <Text style={[styles.label, { marginTop: 8 }]}>OPEN COUNTS AT {session.device?.locationName?.toUpperCase()}</Text>

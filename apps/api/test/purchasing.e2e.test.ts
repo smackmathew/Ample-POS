@@ -74,6 +74,9 @@ describe('purchase orders', () => {
     expect(placed.orderedAt).toBeTruthy();
     await owner.put(`/purchase-orders/${po.id}`, body).expect(409);
     expect((await owner.get('/purchase-orders?status=open').expect(200)).body.map((o: { reference: string }) => o.reference)).toEqual(['PO-2', 'PO-1']);
+    const elsewhere = (await owner.post('/locations', { name: 'Warehouse', timezone: 'America/Chicago' }).expect(201)).body;
+    expect((await owner.get(`/purchase-orders?status=open&locationId=${elsewhere.id}`).expect(200)).body).toEqual([]);
+    expect((await owner.get(`/purchase-orders?locationId=${po.locationId}`).expect(200)).body).toHaveLength(2);
   });
 
   it('receives deliveries into stock, in parts, without counting a retry twice', async () => {
