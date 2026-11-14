@@ -19,6 +19,7 @@ devices and an audit trail.
 | 5 | Shopify sync (mappings, field ownership, webhooks, reconciliation) | **Done** |
 | 6 | Time clock, tasks, scheduling, reporting | **Done** |
 | 7 | Subscription billing tied to enabled modules | **Done** |
+| 8 | Customers: profiles, purchase history, receipts to the customer | **Done** |
 
 Every tool has working screens, and businesses pay only for the tools they turn on.
 
@@ -119,8 +120,29 @@ emailed receipts always match. It shows:
     (AirPrint, Android printing), which most Epson and Star receipt printers
     support.
 - **Email** (needs `RESEND_API_KEY`): from the sale page or the register's paid
-  screen. The customer's address isn't stored; the audit log only notes that a
+  screen. A typed address isn't stored; the audit log only notes that a
   receipt was sent, with a masked address. A receipt can be sent 5 times an hour.
+  When the sale has a customer with an email, the receipt goes there by default.
+
+## Customers
+
+The **Customers** tool (free, needs Point of sale) keeps a list of the people
+who buy from the business.
+
+- **At checkout**, the web register and the register app have *Add customer*:
+  search by name, email or phone, or add someone new. A customer can also be
+  put on, changed or taken off a sale later from its page.
+- **Each customer** has a name and, optionally, an email, phone and note.
+  Emails are stored lowercased and phones as digits, and no two customers in a
+  business share an email or phone. Adding a duplicate picks the customer
+  already on file instead.
+- **A customer's page** shows their purchases, visits, total spent after
+  refunds, and last visit.
+- **Permissions:** `customers.use` (look up and add; managers and staff) and
+  `customers.manage` (edit and delete; managers).
+- **Deleting** a customer removes their details for good. Their sales stay, without a
+  customer. Customers belong to one business, like everything else (row-level
+  security).
 
 ## Shopify sync
 

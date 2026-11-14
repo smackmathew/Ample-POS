@@ -257,6 +257,8 @@ export interface Sale {
   pendingMinor: number;
   dueMinor: number;
   refundedMinor: number;
+  customerId: string | null;
+  customer: { id: string; name: string; email: string | null; phone: string | null } | null;
 }
 
 export interface SaleSummary {
@@ -271,4 +273,22 @@ export interface SaleSummary {
   cashier: string | null;
   cashierEmail: string | null;
   refundedMinor: number;
+  customerId: string | null;
+  customerName: string | null;
+}
+
+export interface CustomerSummary {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  createdAt: string;
+  visits: number;
+  spentMinor: number;
+  lastVisitAt: string | null;
+}
+
+export interface Customer extends CustomerSummary {
+  note: string | null;
+  sales: (Omit<SaleSummary, 'cashier' | 'cashierEmail' | 'customerId' | 'customerName'> & { completedAt: string | null })[];
 }

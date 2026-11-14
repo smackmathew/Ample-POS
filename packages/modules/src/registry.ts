@@ -9,6 +9,7 @@ export const MODULE_IDS = [
   'tasks',
   'ecommerce-sync',
   'reporting',
+  'customers',
 ] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];
@@ -159,6 +160,20 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'reports.read', description: 'View reports' }],
     nav: [{ label: 'Reports', path: '/reports', permission: 'reports.read' }],
     phase: 6,
+    monthlyPriceMinor: 0,
+  },
+  {
+    id: 'customers',
+    name: 'Customers',
+    description: 'Customer profiles, purchase history and receipts by email.',
+    version: '0.1.0',
+    dependsOn: ['pos'],
+    permissions: [
+      { key: 'customers.use', description: 'Look up and add customers at checkout' },
+      { key: 'customers.manage', description: 'Edit and delete customers' },
+    ],
+    nav: [{ label: 'Customers', path: '/customers', permission: 'customers.use' }],
+    phase: 8,
     monthlyPriceMinor: 0,
   },
 ];

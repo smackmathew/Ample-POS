@@ -308,6 +308,7 @@ export const sales = pgTable('sales', {
   totalMinor: money('total_minor').notNull(),
   taxRateBps: integer('tax_rate_bps').notNull(),
   receiptNumber: bigint('receipt_number', { mode: 'number' }),
+  customerId: uuid('customer_id'),
   note: text('note'),
   createdBy: uuid('created_by').notNull(),
   createdAt: createdAt(),
@@ -566,5 +567,19 @@ export const tenantBilling = pgTable('tenant_billing', {
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   items: jsonb('items').$type<BilledItem[]>().notNull().default([]),
   syncedAt: timestamp('synced_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Customers ---------------------------------------------------------------------
+
+export const customers = pgTable('customers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  note: text('note'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

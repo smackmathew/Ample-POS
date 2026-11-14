@@ -53,7 +53,7 @@ export async function findProducts(tenantId: string, query: string): Promise<Res
 
 export async function createSale(
   tenantId: string,
-  input: { id: string; registerSessionId: string; lines: { variantId: string; quantity: number; discountMinor: number }[] },
+  input: { id: string; registerSessionId: string; lines: { variantId: string; quantity: number; discountMinor: number }[]; customerId?: string | null },
 ): Promise<Result<Sale>> {
   return call(() => api<Sale>('/sales', { tenantId, method: 'POST', body: input }));
 }
@@ -130,7 +130,7 @@ export async function refundSale(tenantId: string, saleId: string, refundId: str
 export async function emailReceipt(tenantId: string, saleId: string, _: ActionState, form: FormData): Promise<ActionState> {
   return attempt(async () => {
     const email = String(form.get('email') ?? '').trim();
-    await api(`/sales/${saleId}/receipt/email`, { tenantId, method: 'POST', body: { email } });
+    await api(`/sales/${saleId}/receipt/email`, { tenantId, method: 'POST', body: { email: email || undefined } });
     return { ok: `Receipt sent to ${email}.` };
   });
 }

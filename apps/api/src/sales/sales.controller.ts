@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { schema } from '@pos/db';
 import { hasPermission } from '@pos/modules';
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
@@ -24,7 +24,9 @@ const saleBody = z.object({
     .min(1)
     .max(200),
   note: z.string().trim().max(500).optional(),
+  customerId: uuid.nullable().optional(),
 });
+const saleCustomerBody = z.object({ customerId: uuid.nullable() });
 
 const paymentBody = z.discriminatedUnion('method', [
   z.object({ id: uuid, method: z.literal('cash'), tenderedMinor: z.number().int().min(1).max(1_000_000_000_00) }),
@@ -130,10 +132,13 @@ export class SalesController {
         cashier: schema.users.displayName,
         cashierEmail: schema.users.email,
         refundedMinor: sql<number>`(select coalesce(sum(amount_minor), 0) from refunds r where r.sale_id = sales.id)`.mapWith(Number),
+        customerId: s.customerId,
+        customerName: schema.customers.name,
       })
       .from(s)
       .innerJoin(schema.locations, eq(schema.locations.id, s.locationId))
       .leftJoin(schema.users, eq(schema.users.id, s.createdBy))
+      .leftJoin(schema.customers, eq(schema.customers.id, s.customerId))
       .where(
         and(
           q.status ? eq(s.status, q.status) : undefined,
@@ -151,6 +156,14 @@ export class SalesController {
   @Get(':id')
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.sales.getSale(id);
+  }
+
+  /** Attach a customer to the sale, or take it off with null. Needs the Customers tool. */
+  @RequirePermission('pos.sell')
+  @Post(':id/customer')
+  @HttpCode(200)
+  setCustomer(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(saleCustomerBody)) body: z.infer<typeof saleCustomerBody>) {
+    return this.sales.setCustomer(id, body.customerId);
   }
 
   @RequirePermission('pos.sell')
