@@ -84,3 +84,33 @@ export function allocateRefund(amountMinor: number, payments: RefundablePayment[
   if (left > 0) throw new RangeError('Refund exceeds what was paid');
   return out;
 }
+
+/**
+ * Splits `amountMinor` across items in proportion to their weights, in whole
+ * minor units that add up exactly (largest remainder; ties go to earlier items).
+ * No item gets more than its weight, so a share never exceeds what a line costs.
+ */
+export function allocateProportionally(amountMinor: number, weights: number[]): number[] {
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (amountMinor < 0 || amountMinor > total) throw new RangeError('Amount must be between zero and the total');
+  if (amountMinor === 0) return weights.map(() => 0);
+  const exact = weights.map((w) => (BigInt(w) * BigInt(amountMinor)));
+  const shares = exact.map((e) => Number(e / BigInt(total)));
+  let left = amountMinor - shares.reduce((a, b) => a + b, 0);
+  const order = exact
+    .map((e, i) => ({ i, rem: e % BigInt(total) }))
+    .sort((a, b) => (a.rem === b.rem ? a.i - b.i : a.rem > b.rem ? -1 : 1));
+  for (const { i } of order) {
+    if (left === 0) break;
+    if (shares[i]! < weights[i]!) {
+      shares[i]!++;
+      left--;
+    }
+  }
+  return shares;
+}
+
+/** Points a purchase earns: whole dollars of the pre-tax amount times the rate. */
+export function pointsFor(amountMinor: number, pointsPerDollar: number): number {
+  return amountMinor <= 0 ? 0 : Math.floor(amountMinor / 100) * pointsPerDollar;
+}

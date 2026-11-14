@@ -20,6 +20,7 @@ devices and an audit trail.
 | 6 | Time clock, tasks, scheduling, reporting | **Done** |
 | 7 | Subscription billing tied to enabled modules | **Done** |
 | 8 | Customers: profiles, purchase history, receipts to the customer | **Done** |
+| 9 | Loyalty rewards: points on spending, rewards at the register | **Done** |
 
 Every tool has working screens, and businesses pay only for the tools they turn on.
 
@@ -143,6 +144,28 @@ who buy from the business.
 - **Deleting** a customer removes their details for good. Their sales stay, without a
   customer. Customers belong to one business, like everything else (row-level
   security).
+
+## Loyalty rewards
+
+The **Loyalty rewards** tool ($9/month, needs Customers) gives customers points
+for what they spend and lets them use the points for money off.
+
+- **Earning:** when a sale with a customer is paid, they earn points on whole
+  dollars spent after discounts and before tax (default 1 point per $1).
+  Refunds take back the points for what was refunded. Changing the customer
+  on a paid sale moves its points. Sales made while the tool was off don't
+  earn.
+- **Using points:** on the payment step (web register or register app), before
+  any payment, *Use reward* takes money off (default 100 points = $5). The
+  reward is a discount spread over the sale's lines, so tax is charged on
+  what's left. It can be taken back off until a payment is made. A voided
+  sale gives the points back. A reward can't be worth more than the items.
+- **Records:** points are kept in an append-only ledger
+  (`loyalty_entries`), so a balance can always be traced. Customer pages show
+  the balance and history. Managers (`loyalty.manage`) set the rates on the
+  Loyalty page and can add or take away points with a reason.
+- **Receipts** show the reward as its own row, plus points earned and the
+  new balance.
 
 ## Shopify sync
 

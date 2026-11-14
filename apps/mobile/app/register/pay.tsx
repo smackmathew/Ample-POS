@@ -1,6 +1,6 @@
 import type { Receipt } from '@pos/receipts';
 import { receiptHtml } from '@pos/receipts';
-import { formatMoney, parseMoney, quickCashAmounts, type CardOutcome, type Sale } from '@pos/sync';
+import { formatMoney, parseMoney, quickCashAmounts, rewardsUsable, type CardOutcome, type Sale } from '@pos/sync';
 import * as Print from 'expo-print';
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -19,7 +19,7 @@ export default function Pay() {
   const [change, setChange] = useState<number | null>(null);
   // Reused after a decline so "Try again" resumes the same card payment.
   const [cardPaymentId, setCardPaymentId] = useState(newId);
-  const [busy, setBusy] = useState<'cash' | 'card' | 'void' | null>(null);
+  const [busy, setBusy] = useState<'cash' | 'card' | 'void' | 'reward' | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -50,7 +50,7 @@ export default function Pay() {
 
   if (sale.status === 'completed') return <Paid sale={sale} change={change} onNewSale={finish} />;
 
-  const run = async (kind: 'cash' | 'card', fn: () => Promise<void>) => {
+  const run = async (kind: 'cash' | 'card' | 'reward', fn: () => Promise<void>) => {
     setBusy(kind);
     setError('');
     try {
@@ -121,11 +121,48 @@ export default function Pay() {
         ))}
         <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 6 }} />
         <Line label="Subtotal" value={money(sale.subtotalMinor)} />
-        {sale.discountMinor > 0 && <Line label="Discounts" value={`−${money(sale.discountMinor)}`} />}
+        {sale.discountMinor - sale.rewardMinor > 0 && <Line label="Discounts" value={`−${money(sale.discountMinor - sale.rewardMinor)}`} />}
+        {sale.rewardMinor > 0 && <Line label="Loyalty reward" value={`−${money(sale.rewardMinor)}`} />}
         <Line label="Tax" value={money(sale.taxMinor)} />
         <Line label="Total" value={money(sale.totalMinor)} bold />
         {sale.paidMinor > 0 && <Line label="Paid" value={money(sale.paidMinor)} />}
       </View>
+
+      {sale.loyalty && sale.customer && nothingTaken && sale.pendingMinor === 0 && (
+        <View style={[styles.card, { gap: 8 }]}>
+          {sale.rewardPoints > 0 ? (
+            <>
+              <Text>
+                Reward used: −{money(sale.rewardMinor)} ({sale.rewardPoints} points). {sale.loyalty.balance} points left.
+              </Text>
+              <Button title="Take reward off" variant="secondary" busy={busy === 'reward'} disabled={!!busy} onPress={() => run('reward', async () => setSale(await checkout.removeReward(sale.id)))} />
+            </>
+          ) : (
+            <>
+              <Text>
+                {sale.customer.name} has {sale.loyalty.balance} points.{' '}
+                {sale.loyalty.rewardsAvailable === 0
+                  ? `${sale.loyalty.rewardPoints - Math.max(0, sale.loyalty.balance)} more for ${money(sale.loyalty.rewardValueMinor)} off.`
+                  : `${sale.loyalty.rewardPoints} points = ${money(sale.loyalty.rewardValueMinor)} off.`}
+              </Text>
+              {rewardsUsable(sale) > 0 && (
+                <View style={[styles.row, { flexWrap: 'wrap' }]}>
+                  {Array.from({ length: Math.min(rewardsUsable(sale), 3) }, (_, i) => i + 1).map((n) => (
+                    <Button
+                      key={n}
+                      title={`Use ${money(n * sale.loyalty!.rewardValueMinor)}`}
+                      variant="secondary"
+                      busy={busy === 'reward'}
+                      disabled={!!busy}
+                      onPress={() => run('reward', async () => setSale(await checkout.redeemReward(sale.id, n)))}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
 
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
         <Text style={styles.title}>Due</Text>
@@ -258,6 +295,11 @@ function Paid({ sale, change, onNewSale }: { sale: Sale; change: number | null; 
         <Text style={{ fontSize: 16, color: colors.muted }}>Receipt #{sale.receiptNumber}</Text>
         <Text style={{ fontSize: 32, fontWeight: '700', color: colors.brand }}>{money(sale.totalMinor)}</Text>
         <Text style={styles.muted}>Paid in full</Text>
+        {sale.loyalty && sale.customer && (
+          <Text>
+            {sale.customer.name} earned {sale.loyalty.earnedPoints} points · balance {sale.loyalty.balance}
+          </Text>
+        )}
       </View>
       {change !== null && change > 0 && (
         <View style={[styles.card, { alignItems: 'center', gap: 4 }]}>

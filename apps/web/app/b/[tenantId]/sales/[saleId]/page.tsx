@@ -40,16 +40,17 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
               <tr key={l.id} className="border-t border-stone-100 first:border-0">
                 <td className="py-1.5">
                   {l.quantity} × {l.description}
-                  {l.discountMinor > 0 && <span className="ml-2 text-xs text-stone-500">−{money(l.discountMinor)} discount</span>}
+                  {l.discountMinor - l.rewardMinor > 0 && <span className="ml-2 text-xs text-stone-500">−{money(l.discountMinor - l.rewardMinor)} discount</span>}
                   {l.refundedQuantity > 0 && <span className="ml-2 text-xs text-red-700">{l.refundedQuantity} refunded</span>}
                 </td>
-                <td className="text-right tabular-nums">{money(l.unitPriceMinor * l.quantity - l.discountMinor)}</td>
+                <td className="text-right tabular-nums">{money(l.unitPriceMinor * l.quantity - (l.discountMinor - l.rewardMinor))}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <dl className="space-y-1 border-t border-stone-200 pt-2 text-sm">
-          <Line label="Subtotal" value={money(sale.subtotalMinor - sale.discountMinor)} />
+          <Line label="Subtotal" value={money(sale.subtotalMinor - sale.discountMinor + sale.rewardMinor)} />
+          {sale.rewardMinor > 0 && <Line label={`Loyalty reward (${sale.rewardPoints} points)`} value={`−${money(sale.rewardMinor)}`} />}
           <Line label={`Tax (${formatPercent(sale.taxRateBps)})`} value={money(sale.taxMinor)} />
           <Line label="Total" value={money(sale.totalMinor)} strong />
           {sale.payments
@@ -80,6 +81,11 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
           <div className="max-w-sm">
             <SaleCustomer tenantId={tenantId} saleId={sale.id} customer={sale.customer} />
           </div>
+          {sale.loyalty && sale.status === 'completed' && (
+            <p className="text-sm text-stone-600">
+              Earned {sale.loyalty.earnedPoints} points on this sale · balance {sale.loyalty.balance}
+            </p>
+          )}
         </section>
       ) : (
         sale.customer && <p className="text-sm text-stone-600">Customer: {sale.customer.name}</p>

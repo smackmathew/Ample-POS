@@ -26,7 +26,12 @@ export interface Receipt {
   lines: { description: string; quantity: number; unitPriceMinor: number; discountMinor: number; totalMinor: number }[];
   /** Before discounts (as stored on the sale); the receipt shows it net of them. */
   subtotalMinor: number;
+  /** All discounts, including any loyalty reward. */
   discountMinor: number;
+  /** Money off from a loyalty reward, shown as its own row. Line discounts don't include it. */
+  rewardMinor?: number;
+  /** The customer's points, when the sale has a customer in a rewards program. */
+  loyalty?: { earned: number; balance: number } | null;
   taxMinor: number;
   totalMinor: number;
   payments: { method: 'cash' | 'card'; amountMinor: number; tenderedMinor: number | null; changeMinor: number | null }[];
@@ -63,8 +68,10 @@ function receiptRows(r: Receipt) {
     note: l.quantity > 1 || l.discountMinor > 0 ? [l.quantity > 1 ? `${money(l.unitPriceMinor)} each` : null, l.discountMinor > 0 ? `${money(l.discountMinor)} off` : null].filter(Boolean).join(' · ') : null,
   }));
   // Lines are shown after their discounts, so the subtotal is too: everything adds up.
+  const reward = r.rewardMinor ?? 0;
   const totals = [
-    { left: 'Subtotal', right: money(r.subtotalMinor - r.discountMinor), strong: false },
+    { left: 'Subtotal', right: money(r.subtotalMinor - r.discountMinor + reward), strong: false },
+    ...(reward > 0 ? [{ left: 'Loyalty reward', right: `−${money(reward)}`, strong: false }] : []),
     { left: 'Tax', right: money(r.taxMinor), strong: false },
     { left: 'Total', right: money(r.totalMinor), strong: true },
   ];
@@ -80,7 +87,13 @@ function receiptRows(r: Receipt) {
     left: `Refund ${formatReceiptTime(f.createdAt, r.location.timezone)}${f.reason ? ` (${f.reason})` : ''}`,
     right: `−${money(f.amountMinor)}`,
   }));
-  const footer = [r.discountMinor > 0 ? `You saved ${money(r.discountMinor)}` : null, r.business.footer, r.business.website].filter(
+  const points = (n: number) => `${n.toLocaleString('en-US')} point${n === 1 || n === -1 ? '' : 's'}`;
+  const footer = [
+    r.discountMinor > 0 ? `You saved ${money(r.discountMinor)}` : null,
+    r.loyalty ? `${r.loyalty.earned > 0 ? `You earned ${points(r.loyalty.earned)}. ` : ''}Balance: ${points(r.loyalty.balance)}` : null,
+    r.business.footer,
+    r.business.website,
+  ].filter(
     (l): l is string => Boolean(l),
   );
   return { header, meta, items, totals, payments, refunds, footer };

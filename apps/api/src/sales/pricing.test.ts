@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateRefund, priceLine, refundAmountForLine, sumPrices } from './pricing';
+import { allocateProportionally, allocateRefund, pointsFor, priceLine, refundAmountForLine, sumPrices } from './pricing';
 
 describe('priceLine', () => {
   it('applies discount before tax and rounds tax half up per line', () => {
@@ -57,5 +57,26 @@ describe('allocateRefund', () => {
       { paymentId: 'cash', method: 'cash', amountMinor: 200 },
     ]);
     expect(() => allocateRefund(1201, payments)).toThrow(/exceeds/);
+  });
+});
+
+describe('allocateProportionally', () => {
+  it('splits exactly, in proportion, never more than a line is worth', () => {
+    expect(allocateProportionally(500, [900, 300])).toEqual([375, 125]);
+    const thirds = allocateProportionally(100, [100, 100, 100]);
+    expect(thirds).toEqual([34, 33, 33]);
+    expect(allocateProportionally(3, [1, 1, 1])).toEqual([1, 1, 1]);
+    expect(allocateProportionally(1200, [900, 300])).toEqual([900, 300]);
+    expect(allocateProportionally(0, [5, 5])).toEqual([0, 0]);
+    expect(() => allocateProportionally(11, [5, 5])).toThrow(RangeError);
+  });
+});
+
+describe('pointsFor', () => {
+  it('earns per whole dollar before tax', () => {
+    expect(pointsFor(999, 1)).toBe(9);
+    expect(pointsFor(1000, 2)).toBe(20);
+    expect(pointsFor(99, 5)).toBe(0);
+    expect(pointsFor(-500, 1)).toBe(0);
   });
 });

@@ -72,15 +72,18 @@ export class ReceiptsController {
       cashier: cashier?.name?.split(/\s+/)[0] ?? null,
       currency: sale.currency,
       // Lines before tax, so they add up to the subtotal; tax is its own row.
+      // A loyalty reward is its own row, so lines show only their own discounts.
       lines: sale.lines.map((l) => ({
         description: l.description,
         quantity: l.quantity,
         unitPriceMinor: l.unitPriceMinor,
-        discountMinor: l.discountMinor,
-        totalMinor: l.unitPriceMinor * l.quantity - l.discountMinor,
+        discountMinor: l.discountMinor - l.rewardMinor,
+        totalMinor: l.unitPriceMinor * l.quantity - (l.discountMinor - l.rewardMinor),
       })),
       subtotalMinor: sale.subtotalMinor,
       discountMinor: sale.discountMinor,
+      rewardMinor: sale.rewardMinor,
+      loyalty: sale.loyalty && sale.status === 'completed' ? { earned: sale.loyalty.earnedPoints, balance: sale.loyalty.balance } : null,
       taxMinor: sale.taxMinor,
       totalMinor: sale.totalMinor,
       payments: sale.payments

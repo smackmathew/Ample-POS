@@ -61,4 +61,15 @@ describe('receipts', () => {
     expect(text).toMatch(/Change\s+\$6\.80/);
     expect(text).toContain('Refund Nov 15, 2026, 9:00 AM (stale)');
   });
+
+  it('shows a loyalty reward as its own row and the customer’s points', () => {
+    // $12.00 of items, $5.00 reward, tax on the $7.00 left.
+    const text = receiptText({ ...receipt, discountMinor: 525, rewardMinor: 500, taxMinor: 70, totalMinor: 770, payments: [], loyalty: { earned: 7, balance: 32 } });
+    expect(text).toMatch(/Subtotal\s+\$12\.00/);
+    expect(text).toMatch(/Loyalty reward\s+−\$5\.00/);
+    expect(text).toMatch(/TOTAL\s+\$7\.70/);
+    expect(text).toContain('You saved $5.25');
+    expect(text).toContain('You earned 7 points. Balance: 32 points');
+    expect(receiptText({ ...receipt, loyalty: { earned: 0, balance: 1 } })).toContain('Balance: 1 point');
+  });
 });
