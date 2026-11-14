@@ -44,7 +44,10 @@ export default async function RegistersPage({ params }: { params: Promise<{ tena
                 <td className="text-right tabular-nums">
                   {s.totals.salesCount} · {money(s.totals.grossMinor)}
                 </td>
-                <td className="text-right tabular-nums">{money(s.totals.cardMinor)}</td>
+                <td className="text-right tabular-nums">
+                  {money(s.totals.cardMinor)}
+                  {s.totals.giftCardMinor > 0 && <div className="text-xs text-stone-500">+ {money(s.totals.giftCardMinor)} gift cards</div>}
+                </td>
                 <td className="text-right tabular-nums">{money(s.totals.cashMinor - s.totals.cashRefundsMinor)}</td>
                 <td className="text-right tabular-nums">{money(s.totals.expectedCashMinor)}</td>
                 <td className="text-right tabular-nums">{money(s.countedCashMinor)}</td>

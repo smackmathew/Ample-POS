@@ -14,6 +14,7 @@ import { Db } from '../core/database';
 import { Events } from '../core/events';
 import { currentContext, currentTenant, currentUserId } from '../core/request-context';
 import { LedgerService } from '../inventory/ledger.service';
+import { formatCode, GIFT_CARD_MAX_MINOR, GiftCardService, last4 } from '../gift-cards/gift-cards.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CARD_PROVIDER, ProviderUnavailableError, type CardPaymentProvider, type ProviderPayment } from '../payments/provider';
 import { SimulatedCardProvider } from '../payments/simulated.provider';
@@ -26,16 +27,19 @@ type Payment = typeof schema.payments.$inferSelect;
 export interface SaleInput {
   id: string;
   registerSessionId: string;
-  lines: { variantId: string; quantity: number; discountMinor: number }[];
+  /** Products, and gift cards being sold (a new code, an existing card to reload, or none to make one up). */
+  lines: ({ variantId: string; quantity: number; discountMinor: number } | { giftCard: { code?: string; amountMinor: number } })[];
   note?: string;
   customerId?: string | null;
 }
 
 export interface PaymentInput {
   id: string;
-  method: 'cash' | 'card';
-  /** Card: amount to charge (defaults to the amount due). */
+  method: 'cash' | 'card' | 'gift_card';
+  /** Card and gift card: amount to charge (defaults to the amount due, or a gift card's balance if less). */
   amountMinor?: number;
+  /** Gift card: its code. */
+  code?: string;
   /** Cash: what the customer handed over. */
   tenderedMinor?: number;
 }
@@ -58,6 +62,7 @@ export class SalesService {
     private readonly events: Events,
     private readonly ledger: LedgerService,
     private readonly loyalty: LoyaltyService,
+    private readonly giftCards: GiftCardService,
     @Inject(CARD_PROVIDER) private readonly provider: CardPaymentProvider,
   ) {}
 
@@ -129,6 +134,7 @@ export class SalesService {
       gross_minor: string;
       cash_minor: string;
       card_minor: string;
+      gift_card_minor: string;
       cash_refunds_minor: string;
     }>(sql`
       select
@@ -138,6 +144,8 @@ export class SalesService {
            where s.register_session_id = ${id} and p.method = 'cash' and p.status = 'succeeded') as cash_minor,
         (select coalesce(sum(p.amount_minor), 0) from payments p join sales s on s.id = p.sale_id
            where s.register_session_id = ${id} and p.method = 'card' and p.status = 'succeeded') as card_minor,
+        (select coalesce(sum(p.amount_minor), 0) from payments p join sales s on s.id = p.sale_id
+           where s.register_session_id = ${id} and p.method = 'gift_card' and p.status = 'succeeded') as gift_card_minor,
         (select coalesce(sum(rp.amount_minor), 0) from refund_payments rp
            join refunds r on r.id = rp.refund_id join payments p on p.id = rp.payment_id
            where r.register_session_id = ${id} and p.method = 'cash' and rp.status = 'succeeded') as cash_refunds_minor
@@ -154,6 +162,7 @@ export class SalesService {
         grossMinor: n(totals?.gross_minor),
         cashMinor: cash,
         cardMinor: n(totals?.card_minor),
+        giftCardMinor: n(totals?.gift_card_minor),
         cashRefundsMinor: cashRefunds,
         expectedCashMinor: session.session.status === 'closed' ? session.session.expectedCashMinor : expectedCashMinor,
       },
@@ -220,18 +229,30 @@ export class SalesService {
     const session = await this.lockSession(input.registerSessionId);
     if (session.status !== 'open') throw new ConflictException('This register is closed');
     if (!this.canUseSession(session)) throw new ForbiddenException('This register belongs to another cashier or device');
-    if (input.lines.some((l) => l.discountMinor > 0) && !hasPermission(currentTenant().permissions, 'pos.discount')) {
+    const itemInputs = input.lines.flatMap((line, position) => ('variantId' in line ? [{ line, position }] : []));
+    const cardInputs = input.lines.flatMap((line, position) => ('giftCard' in line ? [{ card: line.giftCard, position }] : []));
+    if (itemInputs.some(({ line }) => line.discountMinor > 0) && !hasPermission(currentTenant().permissions, 'pos.discount')) {
       throw new ForbiddenException('Missing permission: pos.discount');
     }
 
     if (input.customerId) await this.checkCustomer(input.customerId);
 
-    const variantIds = [...new Set(input.lines.map((l) => l.variantId))];
+    // Gift cards sold on this sale: checked now, put on the card when the sale is paid.
+    if (cardInputs.length && !(await this.giftCards.enabled())) throw new ForbiddenException('Gift cards are turned off for this business');
+    const cards: { code: string; reload: boolean; position: number; amountMinor: number }[] = [];
+    for (const { card, position } of cardInputs) {
+      if (card.amountMinor < 100 || card.amountMinor > GIFT_CARD_MAX_MINOR) throw new BadRequestException('A gift card can be sold for $1.00 to $10,000');
+      const { code, reload } = await this.giftCards.codeForSale(card.code, card.amountMinor);
+      if (cards.some((c) => c.code === code)) throw new BadRequestException('The same gift card is on this sale twice');
+      cards.push({ code, reload, position, amountMinor: card.amountMinor });
+    }
+
+    const variantIds = [...new Set(itemInputs.map(({ line }) => line.variantId))];
     const variants = await this.db.tx
       .select({ variant: schema.productVariants, productName: schema.products.name, productStatus: schema.products.status })
       .from(schema.productVariants)
       .innerJoin(schema.products, eq(schema.products.id, schema.productVariants.productId))
-      .where(inArray(schema.productVariants.id, variantIds));
+      .where(variantIds.length ? inArray(schema.productVariants.id, variantIds) : sql`false`);
     const byId = new Map(variants.map((v) => [v.variant.id, v]));
     const unavailable = variantIds.filter((id) => {
       const v = byId.get(id);
@@ -243,7 +264,7 @@ export class SalesService {
     const [tenant] = await this.db.tx.select({ currency: schema.tenants.currency }).from(schema.tenants);
     const taxRateBps = location!.taxRateBps;
 
-    const priced = input.lines.map((line, position) => {
+    const priced = itemInputs.map(({ line, position }) => {
       const v = byId.get(line.variantId)!;
       try {
         return { line, v, position, price: priceLine({ unitPriceMinor: v.variant.priceMinor, quantity: line.quantity, discountMinor: line.discountMinor }, taxRateBps) };
@@ -251,7 +272,11 @@ export class SalesService {
         throw new BadRequestException(`${v.productName}: ${(err as Error).message}`);
       }
     });
-    const totals = sumPrices(priced.map((p) => p.price));
+    // Gift cards aren't taxed or discounted: the money is spent (and taxed) later.
+    const totals = sumPrices([
+      ...priced.map((p) => p.price),
+      ...cards.map((c) => ({ subtotalMinor: c.amountMinor, discountMinor: 0, taxMinor: 0, totalMinor: c.amountMinor })),
+    ]);
 
     await this.db.tx.insert(schema.sales).values({
       id: input.id,
@@ -269,8 +294,8 @@ export class SalesService {
       customerId: input.customerId ?? null,
       createdBy: currentUserId(),
     });
-    await this.db.tx.insert(schema.saleLines).values(
-      priced.map(({ line, v, position, price }) => ({
+    await this.db.tx.insert(schema.saleLines).values([
+      ...priced.map(({ line, v, position, price }) => ({
         tenantId: session.tenantId,
         saleId: input.id,
         position,
@@ -284,7 +309,24 @@ export class SalesService {
         totalMinor: price.totalMinor,
         trackInventory: v.variant.trackInventory,
       })),
-    );
+      ...cards.map((c) => ({
+        tenantId: session.tenantId,
+        saleId: input.id,
+        position: c.position,
+        kind: 'gift_card' as const,
+        variantId: null,
+        giftCardCode: c.code,
+        // A new card's full code is on the receipt: it's how the buyer gets it.
+        description: c.reload ? `Gift card reload ••••${last4(c.code)}` : `Gift card ${formatCode(c.code)}`,
+        sku: null,
+        quantity: 1,
+        unitPriceMinor: c.amountMinor,
+        discountMinor: 0,
+        taxMinor: 0,
+        totalMinor: c.amountMinor,
+        trackInventory: false,
+      })),
+    ]);
     if (totals.totalMinor === 0) await this.tryComplete(await this.lockSale(input.id));
     return this.getSale(input.id);
   }
@@ -350,7 +392,9 @@ export class SalesService {
         const refunded = refundLines.filter((r) => r.saleLineId === l.id);
         return { ...l, refundedQuantity: sum(refunded.map((r) => r.quantity)), refundedMinor: sum(refunded.map((r) => r.amountMinor)) };
       }),
-      payments: payments.map(({ createdBy: _c, ...p }) => p),
+      payments: await Promise.all(
+        payments.map(async ({ createdBy: _c, ...p }) => ({ ...p, giftCard: p.giftCardId ? await this.giftCards.summary(p.giftCardId) : null })),
+      ),
       refunds: refunds.map((r) => ({
         ...r,
         lines: refundLines.filter((l) => l.refundId === r.id),
@@ -402,6 +446,29 @@ export class SalesService {
       return { payment: payment!, clientSecret: null, sale: await this.getSale(saleId) };
     }
 
+    if (input.method === 'gift_card') {
+      if (!(await this.giftCards.enabled())) throw new ForbiddenException('Gift cards are turned off for this business');
+      const card = input.code ? await this.giftCards.lockByCode(input.code) : null;
+      if (!card) throw new NotFoundException('No gift card has that code');
+      if (card.status !== 'active') throw new ConflictException('This gift card was voided');
+      const [own] = await this.db.tx
+        .select({ id: schema.saleLines.id })
+        .from(schema.saleLines)
+        .where(and(eq(schema.saleLines.saleId, saleId), eq(schema.saleLines.giftCardCode, card.code)));
+      if (own) throw new ConflictException('A gift card can’t pay for its own reload');
+      const balance = await this.giftCards.balance(card.id);
+      if (balance <= 0) throw new ConflictException('This gift card has no balance left');
+      if (input.amountMinor !== undefined && (input.amountMinor < 1 || input.amountMinor > due)) throw new BadRequestException('Gift card amount must be between 0.01 and the amount due');
+      const amount = Math.min(input.amountMinor ?? due, balance, due);
+      const [payment] = await this.db.tx
+        .insert(schema.payments)
+        .values({ ...base, method: 'gift_card', status: 'succeeded', amountMinor: amount, giftCardId: card.id })
+        .returning();
+      await this.giftCards.record({ giftCardId: card.id, kind: 'redeem', amountMinor: -amount, saleId, paymentId: input.id });
+      await this.tryComplete(sale);
+      return { payment: payment!, clientSecret: null, sale: await this.getSale(saleId) };
+    }
+
     const amount = input.amountMinor ?? due;
     if (amount < 1 || amount > due) throw new BadRequestException(`Card amount must be between 0.01 and the ${due} due`);
     // The payment id doubles as the provider idempotency key: a retried request reuses the same intent.
@@ -442,6 +509,11 @@ export class SalesService {
   async cancelPayment(saleId: string, paymentId: string) {
     const sale = await this.lockSale(saleId);
     const payment = await this.findPayment(saleId, paymentId);
+    if (payment.method === 'gift_card') {
+      if (sale.status !== 'open') throw new ConflictException('The sale is paid, so refund it instead');
+      await this.returnGiftCardPayment(payment, 'Payment canceled');
+      return this.getSale(saleId);
+    }
     if (payment.method !== 'card') throw new BadRequestException('Cash payments cannot be canceled; refund the sale instead');
     if (payment.status === 'pending') {
       const state = await this.callProvider(() => this.provider.cancel(payment.providerRef!));
@@ -479,6 +551,8 @@ export class SalesService {
       const state = await this.callProvider(() => this.provider.cancel(p.providerRef!));
       await this.applyProviderState(sale, p, state);
     }
+    // Gift card money goes straight back on the card.
+    for (const p of payments.filter((p) => p.method === 'gift_card' && p.status === 'succeeded')) await this.returnGiftCardPayment(p, 'Sale voided');
     const [{ paid }] = (await this.db.tx
       .select({ paid: sql<number>`coalesce(sum(${schema.payments.amountMinor}), 0)`.mapWith(Number) })
       .from(schema.payments)
@@ -528,6 +602,16 @@ export class SalesService {
           sum(current.refunds.flatMap((r) => r.payments).filter((rp) => rp.paymentId === p.id && rp.status !== 'failed').map((rp) => rp.amountMinor)),
       }));
     const allocation = allocateRefund(amountMinor, refundable);
+
+    // Refunding a gift card that was sold takes its money back off the card, so it must still be there.
+    const soldCards = lines.filter((l) => l.line.kind === 'gift_card');
+    for (const l of soldCards) {
+      const card = await this.giftCards.lockByCode(l.line.giftCardCode!);
+      const balance = card ? await this.giftCards.balance(card.id) : 0;
+      if (!card || balance < l.amountMinor) {
+        throw new ConflictException(`Only ${(balance / 100).toFixed(2)} is left on gift card ••••${last4(l.line.giftCardCode!)}, so it can’t be refunded`);
+      }
+    }
     const cashOut = sum(allocation.filter((a) => a.method === 'cash').map((a) => a.amountMinor));
 
     let registerSessionId: string | null = null;
@@ -551,7 +635,17 @@ export class SalesService {
     await this.db.tx.insert(schema.refundLines).values(
       lines.map((l) => ({ refundId: input.id, tenantId: sale.tenantId, saleLineId: l.line.id, quantity: l.quantity, amountMinor: l.amountMinor })),
     );
+    for (const l of soldCards) {
+      const card = (await this.giftCards.findByCode(l.line.giftCardCode!))!;
+      await this.giftCards.record({ giftCardId: card.id, kind: 'refund', amountMinor: -l.amountMinor, saleId, refundId: input.id, note: 'Gift card purchase refunded' });
+    }
     for (const a of allocation) {
+      if (a.method === 'gift_card') {
+        const payment = current.payments.find((p) => p.id === a.paymentId)!;
+        await this.db.tx.insert(schema.refundPayments).values({ refundId: input.id, tenantId: sale.tenantId, paymentId: a.paymentId, amountMinor: a.amountMinor, status: 'succeeded' });
+        await this.giftCards.record({ giftCardId: payment.giftCardId!, kind: 'refund', amountMinor: a.amountMinor, saleId, paymentId: a.paymentId, refundId: input.id });
+        continue;
+      }
       if (a.method === 'cash') {
         await this.db.tx.insert(schema.refundPayments).values({ refundId: input.id, tenantId: sale.tenantId, paymentId: a.paymentId, amountMinor: a.amountMinor, status: 'succeeded' });
         continue;
@@ -575,12 +669,12 @@ export class SalesService {
     }
 
     if (input.restock && (await this.inventoryEnabled())) {
-      const restockLines = lines.filter((l) => l.line.trackInventory);
+      const restockLines = lines.filter((l) => l.line.trackInventory && l.line.variantId);
       if (restockLines.length) {
         await this.ledger.record({
           kind: 'refund',
           reference: { type: 'refund', id: input.id },
-          lines: restockLines.map((l) => ({ locationId: sale.locationId, variantId: l.line.variantId, quantityDelta: l.quantity, reason: 'return' })),
+          lines: restockLines.map((l) => ({ locationId: sale.locationId, variantId: l.line.variantId!, quantityDelta: l.quantity, reason: 'return' })),
         });
       }
     }
@@ -617,7 +711,8 @@ export class SalesService {
     }
     const value = rewards * program.rewardValueMinor;
     const lines = await this.db.tx.select().from(schema.saleLines).where(eq(schema.saleLines.saleId, saleId)).orderBy(asc(schema.saleLines.position));
-    const nets = lines.map((l) => l.unitPriceMinor * l.quantity - l.discountMinor);
+    // Rewards come off products, not gift cards being sold.
+    const nets = lines.map((l) => (l.kind === 'item' ? l.unitPriceMinor * l.quantity - l.discountMinor : 0));
     if (value > sum(nets)) throw new BadRequestException('The reward is worth more than this sale. Add items or use fewer rewards.');
     const shares = allocateProportionally(value, nets);
     await this.reprice(sale, lines.map((l, i) => ({ line: l, discountMinor: l.discountMinor + shares[i]!, rewardMinor: shares[i]! })));
@@ -739,12 +834,12 @@ export class SalesService {
     sale.status = 'completed';
 
     const lines = await this.db.tx.select().from(schema.saleLines).where(eq(schema.saleLines.saleId, sale.id));
-    const tracked = lines.filter((l) => l.trackInventory);
+    const tracked = lines.filter((l) => l.trackInventory && l.variantId);
     if (tracked.length && (await this.inventoryEnabled())) {
       await this.ledger.record({
         kind: 'sale',
         reference: { type: 'sale', id: sale.id },
-        lines: tracked.map((l) => ({ locationId: sale.locationId, variantId: l.variantId, quantityDelta: -l.quantity, reason: 'sale' })),
+        lines: tracked.map((l) => ({ locationId: sale.locationId, variantId: l.variantId!, quantityDelta: -l.quantity, reason: 'sale' })),
       });
     }
     await this.events.record('sale.completed', { type: 'sale', id: sale.id }, {
@@ -753,7 +848,17 @@ export class SalesService {
       totalMinor: sale.totalMinor,
       lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity, totalMinor: l.totalMinor })),
     });
+    // Gift cards sold on this sale now hold their money.
+    for (const l of lines.filter((l) => l.kind === 'gift_card')) await this.giftCards.load(l.giftCardCode!, l.totalMinor, sale.id);
     await this.loyalty.syncEarned(sale, 0);
+  }
+
+  /** Puts a gift card payment's money back on the card and cancels the payment. */
+  private async returnGiftCardPayment(payment: Payment, note: string) {
+    if (payment.status !== 'succeeded') return;
+    await this.giftCards.lock(payment.giftCardId!);
+    await this.db.tx.update(schema.payments).set({ status: 'canceled', updatedAt: new Date() }).where(eq(schema.payments.id, payment.id));
+    await this.giftCards.record({ giftCardId: payment.giftCardId!, kind: 'refund', amountMinor: payment.amountMinor, saleId: payment.saleId, paymentId: payment.id, note });
   }
 
   private async inventoryEnabled(): Promise<boolean> {

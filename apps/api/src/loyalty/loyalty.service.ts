@@ -106,7 +106,12 @@ export class LoyaltyService {
     const program = await this.program();
     const desired = new Map<string, number>();
     if (sale.status === 'completed' && sale.customerId && sale.totalMinor > 0) {
-      const preTax = sale.totalMinor - sale.taxMinor;
+      // Buying a gift card doesn't earn points; spending it later does.
+      const [cards] = await this.db.tx
+        .select({ total: sql<number>`coalesce(sum(${schema.saleLines.totalMinor}), 0)`.mapWith(Number) })
+        .from(schema.saleLines)
+        .where(and(eq(schema.saleLines.saleId, sale.id), eq(schema.saleLines.kind, 'gift_card')));
+      const preTax = sale.totalMinor - sale.taxMinor - (cards?.total ?? 0);
       const kept = Math.max(0, sale.totalMinor - refundedMinor);
       const base = Number((BigInt(preTax) * BigInt(kept)) / BigInt(sale.totalMinor));
       desired.set(sale.customerId, pointsFor(base, program.pointsPerDollar));

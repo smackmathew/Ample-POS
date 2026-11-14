@@ -72,4 +72,15 @@ describe('receipts', () => {
     expect(text).toContain('You earned 7 points. Balance: 32 points');
     expect(receiptText({ ...receipt, loyalty: { earned: 0, balance: 1 } })).toContain('Balance: 1 point');
   });
+
+  it('puts a gift card’s code under its line', () => {
+    const text = receiptText({ ...receipt, lines: [{ description: 'Gift card', quantity: 1, unitPriceMinor: 2500, discountMinor: 0, totalMinor: 2500, detail: 'Code ABCD-EFGH-JKLM-NPQR' }] });
+    expect(text).toMatch(/1 × Gift card\s+\$25\.00\n\s+Code ABCD-EFGH-JKLM-NPQR/);
+  });
+
+  it('shows a gift card payment with what is left on the card', () => {
+    const text = receiptText({ ...receipt, payments: [{ method: 'gift_card', amountMinor: 1320, tenderedMinor: null, changeMinor: null, giftCard: { last4: 'Q7XZ', balanceMinor: 3680 } }] });
+    expect(text).toMatch(/Gift card ••••Q7XZ\s+\$13\.20/);
+    expect(text).toMatch(/Left on gift card ••••Q7XZ\s+\$36\.80/);
+  });
 });

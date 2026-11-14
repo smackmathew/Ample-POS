@@ -9,6 +9,7 @@ import { Events } from '../core/events';
 import { Mailer } from '../core/mailer';
 import { RateLimiter } from '../core/rate-limit';
 import { ZodPipe } from '../core/zod';
+import { formatCode } from '../gift-cards/gift-cards.service';
 import { SalesService } from './sales.service';
 
 /** Without an email, the receipt goes to the sale's customer. */
@@ -74,7 +75,10 @@ export class ReceiptsController {
       // Lines before tax, so they add up to the subtotal; tax is its own row.
       // A loyalty reward is its own row, so lines show only their own discounts.
       lines: sale.lines.map((l) => ({
-        description: l.description,
+        // A new gift card's code goes on its own line, where it's easy to read and copy.
+        ...(l.kind === 'gift_card' && l.description.startsWith('Gift card ') && !l.description.includes('reload')
+          ? { description: 'Gift card', detail: `Code ${formatCode(l.giftCardCode!)}` }
+          : { description: l.description }),
         quantity: l.quantity,
         unitPriceMinor: l.unitPriceMinor,
         discountMinor: l.discountMinor - l.rewardMinor,
@@ -88,7 +92,13 @@ export class ReceiptsController {
       totalMinor: sale.totalMinor,
       payments: sale.payments
         .filter((p) => p.status === 'succeeded')
-        .map((p) => ({ method: p.method, amountMinor: p.amountMinor, tenderedMinor: p.tenderedMinor, changeMinor: p.changeMinor })),
+        .map((p) => ({
+          method: p.method,
+          amountMinor: p.amountMinor,
+          tenderedMinor: p.tenderedMinor,
+          changeMinor: p.changeMinor,
+          giftCard: p.giftCard ? { last4: p.giftCard.last4, balanceMinor: p.giftCard.balanceMinor } : null,
+        })),
       refunds: sale.refunds.map((r) => ({ createdAt: r.createdAt.toISOString(), amountMinor: r.amountMinor, reason: r.reason })),
     };
   }

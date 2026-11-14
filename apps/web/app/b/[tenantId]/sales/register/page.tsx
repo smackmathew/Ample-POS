@@ -28,6 +28,7 @@ export default async function RegisterPage({ params }: { params: Promise<{ tenan
         taxRateBps={location?.taxRateBps ?? 0}
         canDiscount={can(current.membership.permissions, 'pos.discount')}
         simulatedReader={paymentsProvider === 'simulated'}
+        giftCards={current.enabledModules.includes('gift-cards')}
         customers={current.enabledModules.includes('customers') && can(current.membership.permissions, 'customers.use')}
       />
     </div>

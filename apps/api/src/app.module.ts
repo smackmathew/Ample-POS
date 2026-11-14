@@ -2,6 +2,8 @@ import { DynamicModule, Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CatalogController } from './catalog/catalog.controller';
 import { CustomersController } from './customers/customers.controller';
+import { GiftCardsController } from './gift-cards/gift-cards.controller';
+import { GiftCardService } from './gift-cards/gift-cards.service';
 import { LoyaltyController } from './loyalty/loyalty.controller';
 import { LoyaltyService } from './loyalty/loyalty.service';
 import { AuthGuard } from './core/auth.guard';
@@ -66,6 +68,7 @@ export class AppModule {
         TenantController,
         CustomersController,
         LoyaltyController,
+        GiftCardsController,
         ModulesController,
         LocationsController,
         RolesController,
@@ -105,6 +108,7 @@ export class AppModule {
         LedgerService,
         SalesService,
         LoyaltyService,
+        GiftCardService,
         OutboxWorker,
         ShopifySyncService,
         ShopifyJobs,

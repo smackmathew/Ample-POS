@@ -53,7 +53,7 @@ export class ReportsController {
     const top = await this.db.tx.execute<{ variant_id: string; description: string; quantity: string; revenue: string }>(sql`
       select sl.variant_id, min(sl.description) as description, sum(sl.quantity) as quantity, sum(sl.total_minor) as revenue
       from sale_lines sl join sales s on s.id = sl.sale_id join locations l on l.id = s.location_id
-      where s.status = 'completed' ${loc}
+      where s.status = 'completed' and sl.kind = 'item' ${loc}
         and (s.completed_at at time zone l.timezone)::date between ${q.from}::date and ${q.to}::date
       group by sl.variant_id order by sum(sl.total_minor) desc limit 10`);
 

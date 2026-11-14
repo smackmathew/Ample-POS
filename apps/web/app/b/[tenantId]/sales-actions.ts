@@ -53,7 +53,12 @@ export async function findProducts(tenantId: string, query: string): Promise<Res
 
 export async function createSale(
   tenantId: string,
-  input: { id: string; registerSessionId: string; lines: { variantId: string; quantity: number; discountMinor: number }[]; customerId?: string | null },
+  input: {
+    id: string;
+    registerSessionId: string;
+    lines: ({ variantId: string; quantity: number; discountMinor: number } | { giftCard: { code?: string; amountMinor: number } })[];
+    customerId?: string | null;
+  },
 ): Promise<Result<Sale>> {
   return call(() => api<Sale>('/sales', { tenantId, method: 'POST', body: input }));
 }
@@ -66,6 +71,14 @@ export async function payCash(tenantId: string, saleId: string, paymentId: strin
 
 export async function startCard(tenantId: string, saleId: string, paymentId: string, amountMinor: number): Promise<Result<PaymentResult>> {
   return call(() => api<PaymentResult>(`/sales/${saleId}/payments`, { tenantId, method: 'POST', body: { id: paymentId, method: 'card', amountMinor } }));
+}
+
+export async function payGiftCard(tenantId: string, saleId: string, paymentId: string, code: string): Promise<Result<PaymentResult>> {
+  return call(() => api<PaymentResult>(`/sales/${saleId}/payments`, { tenantId, method: 'POST', body: { id: paymentId, method: 'gift_card', code } }));
+}
+
+export async function cancelPayment(tenantId: string, saleId: string, paymentId: string): Promise<Result<Sale>> {
+  return call(() => api<Sale>(`/sales/${saleId}/payments/${paymentId}/cancel`, { tenantId, method: 'POST' }));
 }
 
 export async function cardStep(tenantId: string, saleId: string, paymentId: string, step: 'sync' | 'cancel' | 'approve' | 'decline'): Promise<Result<Sale>> {

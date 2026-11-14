@@ -32,6 +32,7 @@ export const SYSTEM_ROLES: readonly SystemRoleTemplate[] = [
       'customers.use',
       'customers.manage',
       'loyalty.manage',
+      'giftcards.manage',
       'timeclock.punch',
       'timeclock.manage',
       'scheduling.read',
