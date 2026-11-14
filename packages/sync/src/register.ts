@@ -87,6 +87,26 @@ export interface Sale {
   lines: { id: string; description: string; quantity: number; unitPriceMinor: number; totalMinor: number }[];
   payments: SalePayment[];
   customer: Customer | null;
+  /** Money off from a loyalty reward (part of discountMinor), and the points it cost. */
+  rewardMinor: number;
+  rewardPoints: number;
+  /** The customer's points; null without a customer or while Loyalty rewards is off. */
+  loyalty: SaleLoyalty | null;
+}
+
+export interface SaleLoyalty {
+  pointsPerDollar: number;
+  rewardPoints: number;
+  rewardValueMinor: number;
+  balance: number;
+  earnedPoints: number;
+  rewardsAvailable: number;
+}
+
+/** How many rewards a sale can take: what the customer has, and no more than its items are worth. */
+export function rewardsUsable(sale: Pick<Sale, 'subtotalMinor' | 'discountMinor' | 'loyalty'>): number {
+  if (!sale.loyalty) return 0;
+  return Math.max(0, Math.min(sale.loyalty.rewardsAvailable, Math.floor((sale.subtotalMinor - sale.discountMinor) / sale.loyalty.rewardValueMinor)));
 }
 
 /** A customer as the register sees them. */
@@ -172,6 +192,16 @@ export class Checkout {
   }
 
   // Customers ----------------------------------------------------------------------
+
+  /** Spends the customer's points for money off an unpaid sale. */
+  redeemReward(saleId: string, rewards = 1): Promise<Sale> {
+    return this.api.post(`/sales/${saleId}/reward`, { rewards });
+  }
+
+  /** Takes the reward back off (before payment), returning the points. */
+  removeReward(saleId: string): Promise<Sale> {
+    return this.api.request('DELETE', `/sales/${saleId}/reward`);
+  }
 
   /** Puts a customer on a sale, or takes them off with null. */
   setSaleCustomer(saleId: string, customerId: string | null): Promise<Sale> {

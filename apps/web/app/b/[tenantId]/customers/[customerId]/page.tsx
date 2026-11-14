@@ -3,7 +3,8 @@ import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
 import { formatDate, formatDateTime, homeTimeZone, zoneFinder } from '@/lib/time';
-import { can, type CurrentTenant, type Customer, type Location } from '@/lib/types';
+import { can, type CurrentTenant, type Customer, type CustomerPoints, type Location } from '@/lib/types';
+import { adjustPoints } from '../../loyalty-actions';
 import { deleteCustomer, updateCustomer } from '../../customer-actions';
 
 export default async function CustomerPage({ params }: { params: Promise<{ tenantId: string; customerId: string }> }) {
@@ -13,6 +14,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ tenan
     api<Customer>(`/customers/${customerId}`, { tenantId }),
     api<Location[]>('/locations?includeArchived=true', { tenantId }),
   ]);
+  const loyaltyOn = current.enabledModules.includes('loyalty');
+  const points = loyaltyOn ? await api<CustomerPoints>(`/loyalty/customers/${customerId}`, { tenantId }) : null;
+  const tz = homeTimeZone(locations);
   const zoneOf = zoneFinder(locations);
   const money = (n: number) => formatMoney(n, current.tenant.currency);
   const canManage = can(current.membership.permissions, 'customers.manage');
@@ -29,9 +33,64 @@ export default async function CustomerPage({ params }: { params: Promise<{ tenan
         <dl className="grid grid-cols-3 gap-4 pt-3 text-sm">
           <Stat label="Visits" value={String(customer.visits)} />
           <Stat label="Spent (after refunds)" value={money(customer.spentMinor)} />
-          <Stat label="Last visit" value={customer.lastVisitAt ? formatDate(customer.lastVisitAt, homeTimeZone(locations)) : '—'} />
+          <Stat label="Last visit" value={customer.lastVisitAt ? formatDate(customer.lastVisitAt, tz) : '—'} />
         </dl>
       </div>
+
+      {points && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Loyalty points</h2>
+          <div className="card space-y-3">
+            <p>
+              <span className="text-2xl font-semibold tabular-nums">{points.balance.toLocaleString('en-US')}</span> points
+              <span className="ml-2 text-sm text-stone-500">
+                {points.rewardsAvailable > 0
+                  ? `${points.rewardsAvailable} reward${points.rewardsAvailable === 1 ? '' : 's'} of ${money(points.program.rewardValueMinor)} ready to use`
+                  : `${points.program.rewardPoints - Math.max(0, points.balance)} more for ${money(points.program.rewardValueMinor)} off`}
+              </span>
+            </p>
+            {points.entries.length > 0 && (
+              <table className="w-full text-sm">
+                <tbody>
+                  {points.entries.map((e) => (
+                    <tr key={e.id} className="border-t border-stone-100">
+                      <td className="py-1.5 text-stone-500">{formatDate(e.createdAt, tz)}</td>
+                      <td>
+                        {e.kind === 'adjust' ? (
+                          `Adjusted: ${e.note}`
+                        ) : (
+                          <>
+                            {e.kind === 'earn' ? (e.points > 0 ? 'Earned on ' : 'Taken back on ') : e.points < 0 ? 'Reward used on ' : 'Reward returned on '}
+                            {e.saleId ? (
+                              <Link href={`/b/${tenantId}/sales/${e.saleId}`} className="hover:underline">
+                                {e.receiptNumber ? `receipt #${e.receiptNumber}` : 'a sale'}
+                              </Link>
+                            ) : (
+                              'a sale'
+                            )}
+                            {e.note && e.kind === 'redeem' && e.points > 0 && <span className="text-stone-500"> ({e.note.toLowerCase()})</span>}
+                          </>
+                        )}
+                      </td>
+                      <td className={`text-right tabular-nums ${e.points < 0 ? 'text-red-700' : 'text-teal-700'}`}>
+                        {e.points > 0 ? '+' : ''}
+                        {e.points}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {can(current.membership.permissions, 'loyalty.manage') && (
+              <ActionForm action={adjustPoints.bind(null, tenantId, customer.id)} className="flex flex-wrap items-start gap-2 border-t border-stone-100 pt-3">
+                <input name="points" inputMode="numeric" placeholder="Points (+ or −)" required className="input w-36" />
+                <input name="note" placeholder="Reason, e.g. moved from paper card" required className="input min-w-48 flex-1" />
+                <button className="btn-secondary">Adjust points</button>
+              </ActionForm>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-2">
         <h2 className="font-medium">Purchases</h2>

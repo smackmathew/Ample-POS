@@ -10,6 +10,7 @@ export const MODULE_IDS = [
   'ecommerce-sync',
   'reporting',
   'customers',
+  'loyalty',
 ] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];
@@ -175,6 +176,17 @@ export const MODULES: readonly ModuleDefinition[] = [
     nav: [{ label: 'Customers', path: '/customers', permission: 'customers.use' }],
     phase: 8,
     monthlyPriceMinor: 0,
+  },
+  {
+    id: 'loyalty',
+    name: 'Loyalty rewards',
+    description: 'Customers earn points on what they spend and redeem them for money off.',
+    version: '0.1.0',
+    dependsOn: ['customers'],
+    permissions: [{ key: 'loyalty.manage', description: 'Set up the rewards program and adjust points' }],
+    nav: [{ label: 'Loyalty', path: '/loyalty', permission: 'loyalty.manage' }],
+    phase: 9,
+    monthlyPriceMinor: 900,
   },
 ];
 

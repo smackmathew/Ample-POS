@@ -218,7 +218,9 @@ export interface SaleLine {
   sku: string | null;
   quantity: number;
   unitPriceMinor: number;
+  /** Includes this line's share of a loyalty reward. */
   discountMinor: number;
+  rewardMinor: number;
   taxMinor: number;
   totalMinor: number;
   refundedQuantity: number;
@@ -259,6 +261,23 @@ export interface Sale {
   refundedMinor: number;
   customerId: string | null;
   customer: { id: string; name: string; email: string | null; phone: string | null } | null;
+  rewardMinor: number;
+  rewardPoints: number;
+  /** The customer's points; null without a customer or while Loyalty rewards is off. */
+  loyalty: (LoyaltyProgram & { balance: number; earnedPoints: number; rewardsAvailable: number }) | null;
+}
+
+export interface LoyaltyProgram {
+  pointsPerDollar: number;
+  rewardPoints: number;
+  rewardValueMinor: number;
+}
+
+export interface CustomerPoints {
+  balance: number;
+  rewardsAvailable: number;
+  program: LoyaltyProgram;
+  entries: { id: string; kind: 'earn' | 'redeem' | 'adjust'; points: number; note: string | null; saleId: string | null; receiptNumber: number | null; createdAt: string }[];
 }
 
 export interface SaleSummary {

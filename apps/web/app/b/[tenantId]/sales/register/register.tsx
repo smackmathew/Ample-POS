@@ -6,6 +6,7 @@ import { formatMoney, parseMoney } from '@/lib/money';
 import { estimateLine } from '@/lib/pricing';
 import type { Sale } from '@/lib/types';
 import { emailReceiptToCustomer, type CustomerPick } from '../../customer-actions';
+import { redeemReward, removeReward } from '../../loyalty-actions';
 import { cardStep, createSale, findProducts, payCash, startCard, voidSale, type CatalogHit } from '../../sales-actions';
 import { CustomerPicker } from '../customer-picker';
 
@@ -134,6 +135,11 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
         <h2 className="text-xl font-semibold">{sale.status === 'completed' ? `Sale #${sale.receiptNumber} complete` : 'Sale voided'}</h2>
         {change !== null && change > 0 && <p className="rounded-md bg-amber-50 p-3 text-lg font-semibold">Change due: {money(change)}</p>}
         <SaleTotals sale={sale} money={money} />
+        {sale.status === 'completed' && sale.loyalty && (
+          <p className="text-sm">
+            {sale.customer!.name} earned <strong>{sale.loyalty.earnedPoints} points</strong> · balance {sale.loyalty.balance}
+          </p>
+        )}
         {sale.status === 'completed' && sale.customer?.email && (
           <div className="text-sm">
             {receiptSent ? (
@@ -235,6 +241,16 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
                 Charge {money(sale.dueMinor)} to card
               </button>
             </>
+          )}
+
+          {sale.loyalty && sale.customer && sale.paidMinor === 0 && !pendingCard && (
+            <RewardPanel
+              sale={sale}
+              money={money}
+              disabled={pending}
+              onRedeem={(n) => run(() => redeemReward(tenantId, sale.id, n), setSale)}
+              onRemove={() => run(() => removeReward(tenantId, sale.id), setSale)}
+            />
           )}
 
           {sale.paidMinor === 0 && !pendingCard && (
@@ -381,11 +397,12 @@ function SaleTotals({ sale, money }: { sale: Sale; money: (n: number) => string 
           <span>
             {l.quantity} × {l.description}
           </span>
-          <span className="tabular-nums">{money(l.unitPriceMinor * l.quantity - l.discountMinor)}</span>
+          <span className="tabular-nums">{money(l.unitPriceMinor * l.quantity - (l.discountMinor - l.rewardMinor))}</span>
         </div>
       ))}
       <div className="mt-2 border-t border-stone-200 pt-2">
-        <Row label="Subtotal" value={money(sale.subtotalMinor - sale.discountMinor)} />
+        <Row label="Subtotal" value={money(sale.subtotalMinor - sale.discountMinor + sale.rewardMinor)} />
+        {sale.rewardMinor > 0 && <Row label="Loyalty reward" value={`−${money(sale.rewardMinor)}`} />}
         <Row label="Tax" value={money(sale.taxMinor)} />
         <Row label="Total" value={money(sale.totalMinor)} strong />
       </div>
@@ -393,6 +410,70 @@ function SaleTotals({ sale, money }: { sale: Sale; money: (n: number) => string 
         .filter((p) => p.status === 'succeeded')
         .map((p) => (
           <Row key={p.id} label={p.method === 'cash' ? `Cash (tendered ${money(p.tenderedMinor ?? p.amountMinor)})` : 'Card'} value={money(p.amountMinor)} />
+        ))}
+    </div>
+  );
+}
+
+/** The customer's points before payment: use a reward, or take it back off. */
+function RewardPanel({
+  sale,
+  money,
+  disabled,
+  onRedeem,
+  onRemove,
+}: {
+  sale: Sale;
+  money: (n: number) => string;
+  disabled: boolean;
+  onRedeem: (rewards: number) => void;
+  onRemove: () => void;
+}) {
+  const loyalty = sale.loyalty!;
+  const name = sale.customer!.name.split(/\s+/)[0];
+  // No more rewards than the customer has, or than the items are worth.
+  const itemsMinor = sale.subtotalMinor - sale.discountMinor;
+  const most = Math.min(loyalty.rewardsAvailable, Math.floor(itemsMinor / loyalty.rewardValueMinor));
+  const [count, setCount] = useState(1);
+
+  if (sale.rewardPoints > 0) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md bg-teal-50 p-3 text-sm">
+        <span>
+          Reward used: <strong>−{money(sale.rewardMinor)}</strong> ({sale.rewardPoints} points). {name} has {loyalty.balance} left.
+        </span>
+        <button className="text-stone-600 hover:underline" disabled={disabled} onClick={onRemove}>
+          Take off
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-stone-200 p-3 text-sm">
+      <p>
+        {name} has <strong>{loyalty.balance} points</strong>.{' '}
+        {loyalty.rewardsAvailable === 0
+          ? `${loyalty.rewardPoints - Math.max(0, loyalty.balance)} more for ${money(loyalty.rewardValueMinor)} off.`
+          : `${loyalty.rewardPoints} points = ${money(loyalty.rewardValueMinor)} off.`}
+      </p>
+      {loyalty.rewardsAvailable > 0 &&
+        (most > 0 ? (
+          <div className="flex items-center gap-2">
+            {most > 1 && (
+              <select className="input w-auto" value={Math.min(count, most)} onChange={(e) => setCount(Number(e.target.value))} aria-label="Rewards to use">
+                {Array.from({ length: most }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n} × {money(loyalty.rewardValueMinor)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button className="btn-secondary" disabled={disabled} onClick={() => onRedeem(Math.min(count, most))}>
+              Use {money(loyalty.rewardValueMinor * Math.min(count, most))} reward
+            </button>
+          </div>
+        ) : (
+          <p className="text-stone-500">The reward is worth more than this sale.</p>
         ))}
     </div>
   );

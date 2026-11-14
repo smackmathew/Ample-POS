@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { schema } from '@pos/db';
 import { hasPermission } from '@pos/modules';
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
@@ -27,6 +27,7 @@ const saleBody = z.object({
   customerId: uuid.nullable().optional(),
 });
 const saleCustomerBody = z.object({ customerId: uuid.nullable() });
+const rewardBody = z.object({ rewards: z.number().int().min(1).max(100).default(1) });
 
 const paymentBody = z.discriminatedUnion('method', [
   z.object({ id: uuid, method: z.literal('cash'), tenderedMinor: z.number().int().min(1).max(1_000_000_000_00) }),
@@ -164,6 +165,20 @@ export class SalesController {
   @HttpCode(200)
   setCustomer(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(saleCustomerBody)) body: z.infer<typeof saleCustomerBody>) {
     return this.sales.setCustomer(id, body.customerId);
+  }
+
+  /** Spend the customer's points for money off this unpaid sale. Needs Loyalty rewards. */
+  @RequirePermission('pos.sell')
+  @Post(':id/reward')
+  @HttpCode(200)
+  redeemReward(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(rewardBody)) body: z.infer<typeof rewardBody>) {
+    return this.sales.redeemReward(id, body.rewards);
+  }
+
+  @RequirePermission('pos.sell')
+  @Delete(':id/reward')
+  removeReward(@Param('id', ParseUUIDPipe) id: string) {
+    return this.sales.removeReward(id);
   }
 
   @RequirePermission('pos.sell')

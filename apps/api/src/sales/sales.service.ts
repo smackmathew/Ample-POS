@@ -14,9 +14,10 @@ import { Db } from '../core/database';
 import { Events } from '../core/events';
 import { currentContext, currentTenant, currentUserId } from '../core/request-context';
 import { LedgerService } from '../inventory/ledger.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CARD_PROVIDER, ProviderUnavailableError, type CardPaymentProvider, type ProviderPayment } from '../payments/provider';
 import { SimulatedCardProvider } from '../payments/simulated.provider';
-import { allocateRefund, priceLine, refundAmountForLine, sumPrices } from './pricing';
+import { allocateProportionally, allocateRefund, priceLine, refundAmountForLine, sumPrices } from './pricing';
 
 type Session = typeof schema.registerSessions.$inferSelect;
 type Sale = typeof schema.sales.$inferSelect;
@@ -56,6 +57,7 @@ export class SalesService {
     private readonly db: Db,
     private readonly events: Events,
     private readonly ledger: LedgerService,
+    private readonly loyalty: LoyaltyService,
     @Inject(CARD_PROVIDER) private readonly provider: CardPaymentProvider,
   ) {}
 
@@ -293,8 +295,11 @@ export class SalesService {
     if (customerId) await this.checkCustomer(customerId);
     else if (!hasPermission(currentTenant().permissions, 'customers.use')) throw new ForbiddenException('Missing permission: customers.use');
     if (sale.customerId !== customerId) {
+      if (sale.rewardPoints > 0) throw new ConflictException('This sale used the customer’s reward points, so its customer can’t change. Take the reward off first.');
       await this.db.tx.update(schema.sales).set({ customerId }).where(eq(schema.sales.id, saleId));
       await this.events.audit(customerId ? 'sale.customer_set' : 'sale.customer_removed', { type: 'sale', id: saleId }, { customerId: customerId ?? sale.customerId });
+      // A completed sale's points move to the new customer.
+      await this.loyalty.syncEarned({ ...sale, customerId }, await this.refundedMinor(saleId));
     }
     return this.getSale(saleId);
   }
@@ -340,6 +345,7 @@ export class SalesService {
     return {
       ...sale,
       customer: customer ?? null,
+      loyalty: customer ? await this.saleLoyalty(sale.id, customer.id) : null,
       lines: lines.map((l) => {
         const refunded = refundLines.filter((r) => r.saleLineId === l.id);
         return { ...l, refundedQuantity: sum(refunded.map((r) => r.quantity)), refundedMinor: sum(refunded.map((r) => r.amountMinor)) };
@@ -479,6 +485,10 @@ export class SalesService {
       .where(and(eq(schema.payments.saleId, id), eq(schema.payments.status, 'succeeded')))) as [{ paid: number }];
     if (paid > 0) throw new ConflictException('Money was already taken on this sale. Complete it and issue a refund instead.');
     await this.db.tx.update(schema.sales).set({ status: 'voided', voidedAt: new Date() }).where(eq(schema.sales.id, id));
+    // The reward wasn't used after all: give the points back.
+    if (sale.rewardPoints > 0 && sale.customerId) {
+      await this.loyalty.record({ customerId: sale.customerId, saleId: id, kind: 'redeem', points: sale.rewardPoints, note: 'Sale voided' });
+    }
     await this.events.record('sale.voided', { type: 'sale', id });
     return this.getSale(id);
   }
@@ -580,7 +590,96 @@ export class SalesService {
       restock: input.restock,
       lines: lines.map((l) => ({ saleLineId: l.line.id, variantId: l.line.variantId, quantity: l.quantity, amountMinor: l.amountMinor })),
     });
+    // Refunded spending stops counting toward points.
+    await this.loyalty.syncEarned(sale, await this.refundedMinor(saleId));
     return this.getSale(saleId);
+  }
+
+  // Loyalty rewards -----------------------------------------------------------
+
+  /**
+   * Takes rewards off an unpaid sale, spending the customer's points. The
+   * money off is a discount spread over the lines, so tax is on what's left.
+   */
+  async redeemReward(saleId: string, rewards: number) {
+    const sale = await this.lockSale(saleId);
+    await this.requireLoyalty();
+    if (sale.status !== 'open') throw new ConflictException('Rewards can only be used before the sale is paid');
+    if (!sale.customerId) throw new BadRequestException('Add the customer to the sale first');
+    if (sale.rewardPoints > 0) throw new ConflictException('This sale already has a reward. Take it off to change it.');
+    if ((await this.paidAndPending(saleId)) > 0) throw new ConflictException('Use rewards before taking any payment');
+    const program = await this.loyalty.program();
+    if (!(await this.loyalty.lockCustomer(sale.customerId))) throw new BadRequestException('That customer no longer exists');
+    const balance = await this.loyalty.balance(sale.customerId);
+    const cost = rewards * program.rewardPoints;
+    if (balance < cost) {
+      throw new ConflictException(`Not enough points: ${rewards === 1 ? 'a reward needs' : `${rewards} rewards need`} ${cost} and the customer has ${balance}`);
+    }
+    const value = rewards * program.rewardValueMinor;
+    const lines = await this.db.tx.select().from(schema.saleLines).where(eq(schema.saleLines.saleId, saleId)).orderBy(asc(schema.saleLines.position));
+    const nets = lines.map((l) => l.unitPriceMinor * l.quantity - l.discountMinor);
+    if (value > sum(nets)) throw new BadRequestException('The reward is worth more than this sale. Add items or use fewer rewards.');
+    const shares = allocateProportionally(value, nets);
+    await this.reprice(sale, lines.map((l, i) => ({ line: l, discountMinor: l.discountMinor + shares[i]!, rewardMinor: shares[i]! })));
+    await this.db.tx.update(schema.sales).set({ rewardMinor: value, rewardPoints: cost }).where(eq(schema.sales.id, saleId));
+    await this.loyalty.record({ customerId: sale.customerId, saleId, kind: 'redeem', points: -cost });
+    await this.events.audit('sale.reward_redeemed', { type: 'sale', id: saleId }, { customerId: sale.customerId, rewards, points: cost, amountMinor: value });
+    const updated = await this.lockSale(saleId);
+    if (updated.totalMinor === 0) await this.tryComplete(updated);
+    return this.getSale(saleId);
+  }
+
+  /** Puts the points back and the prices back, while the sale is still unpaid. */
+  async removeReward(saleId: string) {
+    const sale = await this.lockSale(saleId);
+    await this.requireLoyalty();
+    if (sale.rewardPoints === 0) return this.getSale(saleId);
+    if (sale.status !== 'open') throw new ConflictException('The sale is already paid, so its reward stays');
+    if ((await this.paidAndPending(saleId)) > 0) throw new ConflictException('A payment was already made on this sale, so its reward stays');
+    const lines = await this.db.tx.select().from(schema.saleLines).where(eq(schema.saleLines.saleId, saleId)).orderBy(asc(schema.saleLines.position));
+    await this.reprice(sale, lines.map((l) => ({ line: l, discountMinor: l.discountMinor - l.rewardMinor, rewardMinor: 0 })));
+    await this.db.tx.update(schema.sales).set({ rewardMinor: 0, rewardPoints: 0 }).where(eq(schema.sales.id, saleId));
+    if (sale.customerId) await this.loyalty.record({ customerId: sale.customerId, saleId, kind: 'redeem', points: sale.rewardPoints, note: 'Reward taken off' });
+    await this.events.audit('sale.reward_removed', { type: 'sale', id: saleId }, { points: sale.rewardPoints });
+    return this.getSale(saleId);
+  }
+
+  private async requireLoyalty() {
+    if (!(await this.loyalty.enabled())) throw new ForbiddenException('Loyalty rewards are turned off for this business');
+    if (!hasPermission(currentTenant().permissions, 'customers.use')) throw new ForbiddenException('Missing permission: customers.use');
+  }
+
+  /** Re-prices lines with new discounts and updates the sale's totals. */
+  private async reprice(sale: Sale, changes: { line: typeof schema.saleLines.$inferSelect; discountMinor: number; rewardMinor: number }[]) {
+    const prices = [];
+    for (const { line, discountMinor, rewardMinor } of changes) {
+      const price = priceLine({ unitPriceMinor: line.unitPriceMinor, quantity: line.quantity, discountMinor }, sale.taxRateBps);
+      prices.push(price);
+      await this.db.tx
+        .update(schema.saleLines)
+        .set({ discountMinor: price.discountMinor, rewardMinor, taxMinor: price.taxMinor, totalMinor: price.totalMinor })
+        .where(eq(schema.saleLines.id, line.id));
+    }
+    const totals = sumPrices(prices);
+    await this.db.tx
+      .update(schema.sales)
+      .set({ subtotalMinor: totals.subtotalMinor, discountMinor: totals.discountMinor, taxMinor: totals.taxMinor, totalMinor: totals.totalMinor })
+      .where(eq(schema.sales.id, sale.id));
+  }
+
+  /** The customer's points as the register needs them, or null while the tool is off. */
+  private async saleLoyalty(saleId: string, customerId: string) {
+    if (!(await this.loyalty.enabled())) return null;
+    const [program, balance, earnedPoints] = await Promise.all([this.loyalty.program(), this.loyalty.balance(customerId), this.loyalty.earnedOnSale(saleId, customerId)]);
+    return { ...program, balance, earnedPoints, rewardsAvailable: Math.max(0, Math.floor(balance / program.rewardPoints)) };
+  }
+
+  private async refundedMinor(saleId: string): Promise<number> {
+    const [row] = await this.db.tx
+      .select({ total: sql<number>`coalesce(sum(${schema.refunds.amountMinor}), 0)`.mapWith(Number) })
+      .from(schema.refunds)
+      .where(eq(schema.refunds.saleId, saleId));
+    return row?.total ?? 0;
   }
 
   // Internals ----------------------------------------------------------------
@@ -654,6 +753,7 @@ export class SalesService {
       totalMinor: sale.totalMinor,
       lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity, totalMinor: l.totalMinor })),
     });
+    await this.loyalty.syncEarned(sale, 0);
   }
 
   private async inventoryEnabled(): Promise<boolean> {

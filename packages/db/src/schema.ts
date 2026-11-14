@@ -309,6 +309,8 @@ export const sales = pgTable('sales', {
   taxRateBps: integer('tax_rate_bps').notNull(),
   receiptNumber: bigint('receipt_number', { mode: 'number' }),
   customerId: uuid('customer_id'),
+  rewardMinor: money('reward_minor').notNull().default(0),
+  rewardPoints: integer('reward_points').notNull().default(0),
   note: text('note'),
   createdBy: uuid('created_by').notNull(),
   createdAt: createdAt(),
@@ -327,6 +329,8 @@ export const saleLines = pgTable('sale_lines', {
   quantity: integer('quantity').notNull(),
   unitPriceMinor: money('unit_price_minor').notNull(),
   discountMinor: money('discount_minor').notNull().default(0),
+  /** This line's share of a loyalty reward; already part of discountMinor. */
+  rewardMinor: money('reward_minor').notNull().default(0),
   taxMinor: money('tax_minor').notNull(),
   totalMinor: money('total_minor').notNull(),
   trackInventory: boolean('track_inventory').notNull(),
@@ -582,4 +586,24 @@ export const customers = pgTable('customers', {
   createdBy: uuid('created_by'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const loyaltyPrograms = pgTable('loyalty_programs', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  pointsPerDollar: integer('points_per_dollar').notNull().default(1),
+  rewardPoints: integer('reward_points').notNull().default(100),
+  rewardValueMinor: money('reward_value_minor').notNull().default(500),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const loyaltyEntries = pgTable('loyalty_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  customerId: uuid('customer_id').notNull(),
+  saleId: uuid('sale_id'),
+  kind: text('kind', { enum: ['earn', 'redeem', 'adjust'] }).notNull(),
+  points: integer('points').notNull(),
+  note: text('note'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
 });

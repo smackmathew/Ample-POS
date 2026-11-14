@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiClient, Cart, CatalogIndex, Checkout, formatMoney, parseMoney, quickCashAmounts, type CardReader, type CatalogVariant, type CollectResult } from './index';
+import { ApiClient, Cart, CatalogIndex, Checkout, formatMoney, parseMoney, quickCashAmounts, rewardsUsable, type CardReader, type CatalogVariant, type CollectResult } from './index';
 
 const variant = (id: string, priceMinor: number, name = 'Default'): CatalogVariant => ({
   id,
@@ -212,5 +212,15 @@ describe('Checkout customers', () => {
     expect(await tenant(['pos', 'customers'], ['*']).customersAvailable()).toBe(true);
     expect(await tenant(['pos'], ['*']).customersAvailable()).toBe(false);
     expect(await tenant(['pos', 'customers'], ['pos.sell']).customersAvailable()).toBe(false);
+  });
+});
+
+describe('rewardsUsable', () => {
+  const loyalty = { pointsPerDollar: 1, rewardPoints: 100, rewardValueMinor: 500, balance: 350, earnedPoints: 0, rewardsAvailable: 3 };
+  it('is limited by points and by what the items are worth', () => {
+    expect(rewardsUsable({ subtotalMinor: 5000, discountMinor: 0, loyalty })).toBe(3);
+    expect(rewardsUsable({ subtotalMinor: 1200, discountMinor: 100, loyalty })).toBe(2);
+    expect(rewardsUsable({ subtotalMinor: 400, discountMinor: 0, loyalty })).toBe(0);
+    expect(rewardsUsable({ subtotalMinor: 5000, discountMinor: 0, loyalty: null })).toBe(0);
   });
 });
