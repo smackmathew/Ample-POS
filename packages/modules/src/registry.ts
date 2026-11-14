@@ -81,10 +81,12 @@ export const MODULES: readonly ModuleDefinition[] = [
       { key: 'pos.refund', description: 'Issue refunds' },
       { key: 'pos.discount', description: 'Apply manual discounts' },
       { key: 'pos.register.manage', description: 'Open, close and reconcile registers' },
+      { key: 'pos.receipts.manage', description: 'Change what receipts show' },
     ],
     nav: [
       { label: 'Sales', path: '/sales', permission: 'pos.sell' },
       { label: 'Registers', path: '/registers', permission: 'pos.register.manage' },
+      { label: 'Receipts', path: '/receipts', permission: 'pos.receipts.manage' },
     ],
     phase: 4,
     monthlyPriceMinor: 4900,

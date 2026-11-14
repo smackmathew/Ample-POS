@@ -101,6 +101,27 @@ Quantities are whole units for now; weighed and measured items come later.
 
 ![Register](docs/screenshots/register.png)
 
+## Receipts
+
+One layout (`packages/receipts`) is used for every receipt, so printed and
+emailed receipts always match. It shows:
+- the business name, the store's name and address (from Locations), and the
+  phone, website and footer message from Point of sale → Receipts;
+- the receipt number, the time in the store's time zone, and the cashier's
+  first name;
+- the lines after discounts, which add up to the subtotal, then tax and total;
+- cash given and change, card amounts, and refunds.
+
+- **Printing** works without printer integrations:
+  - *Web hub:* a sale's page has *Print receipt*, which opens a printable page
+    sized for 80 mm receipt paper. Any printer the computer can use works.
+  - *Register app:* *Print receipt* goes through the phone's print service
+    (AirPrint, Android printing), which most Epson and Star receipt printers
+    support.
+- **Email** (needs `RESEND_API_KEY`): from the sale page or the register's paid
+  screen. The customer's address isn't stored; the audit log only notes that a
+  receipt was sent, with a masked address. A receipt can be sent 5 times an hour.
+
 ## Shopify sync
 
 Turn on **Website sync**, then connect a store from the Website sync page.

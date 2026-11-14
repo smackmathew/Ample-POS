@@ -28,6 +28,7 @@ export const SYSTEM_ROLES: readonly SystemRoleTemplate[] = [
       'pos.refund',
       'pos.discount',
       'pos.register.manage',
+      'pos.receipts.manage',
       'timeclock.punch',
       'timeclock.manage',
       'scheduling.read',

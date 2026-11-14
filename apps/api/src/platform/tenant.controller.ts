@@ -4,7 +4,7 @@ import { hasPermission, MODULES } from '@pos/modules';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { Db } from '../core/database';
-import { RequirePermission } from '../core/decorators';
+import { RequireModule, RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
 import { currentTenant } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
@@ -12,6 +12,8 @@ import { standing } from '../billing/standing';
 import { enabledModuleIds } from './modules.controller';
 
 const updateTenantBody = z.object({ name: z.string().trim().min(1).max(100) });
+const optionalText = (max: number) => z.string().trim().max(max).optional().transform((v) => v || undefined);
+const receiptSettingsBody = z.object({ footer: optionalText(300), phone: optionalText(40), website: optionalText(200) });
 
 const PLATFORM_NAV = [
   { label: 'Tools', path: '/tools', permission: 'modules.manage' },
@@ -59,6 +61,18 @@ export class TenantController {
       .returning();
     await this.events.record('tenant.updated', { type: 'tenant', id: tenantId }, { name: body.name });
     return tenant;
+  }
+
+  /** What every receipt prints under the business name and at the bottom. */
+  @RequireModule('pos')
+  @RequirePermission('pos.receipts.manage')
+  @Patch('tenant/receipt-settings')
+  async updateReceiptSettings(@Body(new ZodPipe(receiptSettingsBody)) body: z.infer<typeof receiptSettingsBody>) {
+    const { tenantId } = currentTenant();
+    const settings = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+    await this.db.tx.update(schema.tenants).set({ receiptSettings: settings }).where(eq(schema.tenants.id, tenantId));
+    await this.events.audit('tenant.receipt_settings_updated', { type: 'tenant', id: tenantId }, settings);
+    return settings;
   }
 
   /** Navigation for the admin hub: platform pages plus enabled modules, filtered by permission. */

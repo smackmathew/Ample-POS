@@ -6,7 +6,7 @@ export interface Me {
 }
 
 export interface CurrentTenant {
-  tenant: { id: string; name: string; slug: string; currency: string };
+  tenant: { id: string; name: string; slug: string; currency: string; receiptSettings: { footer?: string; phone?: string; website?: string } };
   membership: { id: string; role: { id: string; key: string }; permissions: string[] };
   enabledModules: string[];
   billing: TenantBilling | null;

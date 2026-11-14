@@ -126,3 +126,20 @@ export async function refundSale(tenantId: string, saleId: string, refundId: str
     return { ok: 'Refund recorded' };
   });
 }
+
+export async function emailReceipt(tenantId: string, saleId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    const email = String(form.get('email') ?? '').trim();
+    await api(`/sales/${saleId}/receipt/email`, { tenantId, method: 'POST', body: { email } });
+    return { ok: `Receipt sent to ${email}.` };
+  });
+}
+
+export async function saveReceiptSettings(tenantId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    const field = (k: string) => String(form.get(k) ?? '');
+    await api('/tenant/receipt-settings', { tenantId, method: 'PATCH', body: { footer: field('footer'), phone: field('phone'), website: field('website') } });
+    revalidatePath(`/b/${tenantId}/receipts`);
+    return { ok: 'Saved. New receipts will show this.' };
+  });
+}
