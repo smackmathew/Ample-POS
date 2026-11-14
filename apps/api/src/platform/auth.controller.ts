@@ -60,7 +60,7 @@ export class AuthController {
   @Get('config')
   authConfig() {
     const byEmail = this.auth.mode === 'password' && this.mailer.enabled;
-    return { mode: this.auth.mode, passwordResetByEmail: byEmail, emailVerification: this.verification.enforced };
+    return { mode: this.auth.mode, passwordResetByEmail: byEmail, emailVerification: this.verification.enforced, emailEnabled: this.mailer.enabled };
   }
 
   @Public()

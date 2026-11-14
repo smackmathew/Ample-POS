@@ -12,6 +12,7 @@ export const MODULE_IDS = [
   'customers',
   'loyalty',
   'gift-cards',
+  'purchasing',
 ] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];
@@ -199,6 +200,23 @@ export const MODULES: readonly ModuleDefinition[] = [
     nav: [{ label: 'Gift cards', path: '/gift-cards', permission: 'giftcards.manage' }],
     phase: 10,
     monthlyPriceMinor: 900,
+  },
+  {
+    id: 'purchasing',
+    name: 'Purchase orders',
+    description: 'Suppliers, purchase orders, and receiving deliveries into stock.',
+    version: '0.1.0',
+    dependsOn: ['inventory'],
+    permissions: [
+      { key: 'purchasing.manage', description: 'Manage suppliers and create, send and cancel purchase orders' },
+      { key: 'purchasing.receive', description: 'Receive deliveries against purchase orders' },
+    ],
+    nav: [
+      { label: 'Purchase orders', path: '/purchasing', permission: 'purchasing.receive' },
+      { label: 'Suppliers', path: '/purchasing/suppliers', permission: 'purchasing.manage' },
+    ],
+    phase: 11,
+    monthlyPriceMinor: 0,
   },
 ];
 

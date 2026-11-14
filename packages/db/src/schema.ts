@@ -633,3 +633,63 @@ export const giftCardEntries = pgTable('gift_card_entries', {
   createdBy: uuid('created_by'),
   createdAt: createdAt(),
 });
+
+export const suppliers = pgTable('suppliers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  contactName: text('contact_name'),
+  email: text('email'),
+  phone: text('phone'),
+  notes: text('notes'),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const PURCHASE_ORDER_STATUSES = ['draft', 'ordered', 'partially_received', 'received', 'canceled'] as const;
+export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number];
+
+export const purchaseOrders = pgTable('purchase_orders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  number: bigint('number', { mode: 'number' }).notNull(),
+  supplierId: uuid('supplier_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  status: text('status', { enum: PURCHASE_ORDER_STATUSES }).notNull().default('draft'),
+  note: text('note'),
+  expectedOn: date('expected_on', { mode: 'string' }),
+  orderedAt: timestamp('ordered_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const purchaseOrderLines = pgTable('purchase_order_lines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  purchaseOrderId: uuid('purchase_order_id').notNull(),
+  position: integer('position').notNull(),
+  variantId: uuid('variant_id').notNull(),
+  quantityOrdered: integer('quantity_ordered').notNull(),
+  quantityReceived: integer('quantity_received').notNull().default(0),
+  unitCostMinor: money('unit_cost_minor').notNull(),
+});
+
+export const purchaseOrderReceipts = pgTable('purchase_order_receipts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  purchaseOrderId: uuid('purchase_order_id').notNull(),
+  inventoryOperationId: uuid('inventory_operation_id').notNull(),
+  note: text('note'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+});
+
+export const purchaseOrderReceiptLines = pgTable('purchase_order_receipt_lines', {
+  tenantId: uuid('tenant_id').notNull(),
+  receiptId: uuid('receipt_id').notNull(),
+  lineId: uuid('line_id').notNull(),
+  quantity: integer('quantity').notNull(),
+});
