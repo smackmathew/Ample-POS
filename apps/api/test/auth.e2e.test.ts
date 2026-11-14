@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MAIL_FETCH } from '../src/core/mailer';
+import { base32Decode, currentStep, hotp } from '../src/core/totp';
 import { appDatabaseUrl, Client, createTestApp, unique } from './helpers';
 
 const PASSWORD = 'correct horse battery';
@@ -190,7 +191,7 @@ describe('built-in accounts', () => {
     const token = (await signup(email).expect(201)).body.token;
     const mail = outbox.findLast((m) => m.to[0] === email.toLowerCase())!;
     expect(mail.subject).toBe('Confirm your email for Ample POS');
-    expect((await as(token).get('/me').expect(200)).body.account).toEqual({ hasPassword: true, emailVerified: false });
+    expect((await as(token).get('/me').expect(200)).body.account).toEqual({ hasPassword: true, emailVerified: false, twoFactor: { enabled: false, setupPending: false, recoveryCodesLeft: 0 } });
 
     const blocked = await as(token).post('/tenants', { name: 'Shop', slug: unique('shop') }).expect(403);
     expect(blocked.body.code).toBe('email_unverified');
@@ -290,6 +291,63 @@ describe('built-in accounts', () => {
     expect((await as(token).get('/me').expect(200)).body.user.email).toBe(second.toLowerCase());
   });
 
+  it('adds a second step with an authenticator app, recovery codes and no code reuse', async () => {
+    const { email, token } = await verifiedAccount();
+    const me = as(token);
+    await me.post('/auth/2fa/setup', { password: 'wrong password!' }).expect(400);
+    const setup = (await me.post('/auth/2fa/setup', { password: PASSWORD }).expect(200)).body;
+    expect(setup.otpauthUri).toContain(`secret=${setup.secret}`);
+    const code = (step: number) => hotp(base32Decode(setup.secret), step);
+    const now = currentStep();
+
+    await me.post('/auth/2fa/enable', { code: '000000' === code(now) ? '111111' : '000000' }).expect(400);
+    const recovery: string[] = (await me.post('/auth/2fa/enable', { code: code(now) }).expect(200)).body.recoveryCodes;
+    expect(recovery).toHaveLength(10);
+    expect((await me.get('/me').expect(200)).body.account.twoFactor).toEqual({ enabled: true, setupPending: false, recoveryCodesLeft: 10 });
+    await me.post('/auth/2fa/setup', { password: PASSWORD }).expect(409);
+
+    // The password alone now gets a challenge, not a session.
+    const step1 = (await login(email).expect(200)).body;
+    expect(step1.token).toBeUndefined();
+    expect(step1.twoFactor).toBe(true);
+    await http().post('/auth/login/2fa').send({ challenge: step1.challenge, code: '123' }).expect(400);
+    await http().post('/auth/login/2fa').send({ challenge: step1.challenge, code: '999999' === code(now + 1) ? '888888' : '999999' }).expect(401);
+    const session = (await http().post('/auth/login/2fa').send({ challenge: step1.challenge, code: code(now + 1) }).expect(200)).body.token;
+    await as(session).get('/me').expect(200);
+    // The challenge is spent, and the same code can't be used again.
+    await http().post('/auth/login/2fa').send({ challenge: step1.challenge, code: code(now + 1) }).expect(401);
+    const again = (await login(email).expect(200)).body.challenge;
+    const replay = await http().post('/auth/login/2fa').send({ challenge: again, code: code(now + 1) }).expect(401);
+    expect(replay.body.code).toBe('bad_code');
+
+    // Recovery codes work once each, in any format.
+    await http().post('/auth/login/2fa').send({ challenge: again, code: recovery[0]!.toUpperCase() }).expect(200);
+    const third = (await login(email).expect(200)).body.challenge;
+    await http().post('/auth/login/2fa').send({ challenge: third, code: recovery[0] }).expect(401);
+    expect((await me.get('/me').expect(200)).body.account.twoFactor.recoveryCodesLeft).toBe(9);
+
+    // Five wrong tries end the challenge.
+    const guessed = (await login(email).expect(200)).body.challenge;
+    for (let i = 0; i < 5; i++) await http().post('/auth/login/2fa').send({ challenge: guessed, code: `00000${i}` === code(now) ? '777777' : `00000${i}` }).expect(401);
+    const ended = await http().post('/auth/login/2fa').send({ challenge: guessed, code: recovery[1] }).expect(401);
+    expect(ended.body.code).toBe('challenge_expired');
+
+    // A password reset by email still asks for the code.
+    await http().post('/auth/password/forgot').send({ email }).expect(200);
+    const reset = (await http().post('/auth/password/reset').send({ token: linkToken(email, 'reset'), password: 'a new long password' }).expect(200)).body;
+    expect(reset.token).toBeUndefined();
+    const afterReset = (await http().post('/auth/login/2fa').send({ challenge: reset.challenge, code: recovery[1] }).expect(200)).body.token;
+
+    // New recovery codes replace the old ones; turning it off needs password and a code.
+    const fresh: string[] = (await as(afterReset).post('/auth/2fa/recovery-codes', { password: 'a new long password', code: recovery[2] }).expect(200)).body.recoveryCodes;
+    const old = (await login(email, 'a new long password').expect(200)).body.challenge;
+    await http().post('/auth/login/2fa').send({ challenge: old, code: recovery[3] }).expect(401);
+    await as(afterReset).post('/auth/2fa/disable', { password: 'a new long password', code: 'nope-nope-nope' }).expect(400);
+    await as(afterReset).post('/auth/2fa/disable', { password: 'a new long password', code: fresh[0] }).expect(200);
+    expect((await login(email, 'a new long password').expect(200)).body.token).toBeDefined();
+    await as(afterReset).post('/auth/2fa/disable', { password: 'a new long password', code: fresh[1] }).expect(409);
+  });
+
   it('carries a demo-mode user (and their businesses) over to a password account', async () => {
     const email = `${unique('demo')}@example.com`;
     const demo = await Client.signIn(devApp, email);
@@ -304,7 +362,7 @@ describe('built-in accounts', () => {
   it('keeps credentials and sessions out of reach of the application role', async () => {
     const sql = postgres(appDatabaseUrl(), { max: 1, onnotice: () => {} });
     try {
-      for (const table of ['credentials', 'auth_sessions', 'password_resets']) {
+      for (const table of ['credentials', 'auth_sessions', 'password_resets', 'two_factor', 'recovery_codes', 'login_challenges']) {
         await expect(sql.unsafe(`select * from ${table} limit 1`)).rejects.toThrow(/permission denied/);
       }
     } finally {

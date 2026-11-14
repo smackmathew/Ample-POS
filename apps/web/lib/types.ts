@@ -1,7 +1,7 @@
 export interface Me {
   user: { id: string; email: string | null; displayName: string | null };
   /** emailVerified is true for accounts whose email needs no confirming. */
-  account: { hasPassword: boolean; emailVerified: boolean };
+  account: { hasPassword: boolean; emailVerified: boolean; twoFactor: { enabled: boolean; setupPending: boolean; recoveryCodesLeft: number } };
   tenants: { id: string; name: string; slug: string; role: { key: string; name: string } }[];
 }
 

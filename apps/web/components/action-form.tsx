@@ -13,11 +13,14 @@ export function ActionForm({
   children,
   className,
   secretLabel,
+  qrCaption = 'Open the Ample POS app on the device and scan this code to pair it.',
 }: {
   action: (state: ActionState, form: FormData) => Promise<ActionState>;
   children: ReactNode;
   className?: string;
   secretLabel?: string;
+  /** Shown beside a returned QR code. */
+  qrCaption?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const formRef = useRef<HTMLFormElement>(null);
@@ -47,7 +50,7 @@ export function ActionForm({
             <div className="mt-3 flex flex-wrap items-center gap-4">
               {/* Generated server-side by the qrcode library from our own data. */}
               <div className="w-48 bg-white" dangerouslySetInnerHTML={{ __html: state.qrSvg }} />
-              <p className="max-w-xs text-stone-700">Open the Ample POS app on the device and scan this code to pair it.</p>
+              <p className="max-w-xs text-stone-700">{qrCaption}</p>
             </div>
           )}
         </div>
