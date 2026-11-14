@@ -218,7 +218,7 @@ function Line({ label, value, bold }: { label: string; value: string; bold?: boo
 /** After payment: change due, then the receipt, printed or emailed. */
 function Paid({ sale, change, onNewSale }: { sale: Sale; change: number | null; onNewSale: () => void }) {
   const { api } = useSession();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(sale.customer?.email ?? '');
   const [busy, setBusy] = useState<'print' | 'email' | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const money = (minor: number) => formatMoney(minor, sale.currency);

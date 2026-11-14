@@ -74,7 +74,7 @@ function confirmLeave(onConfirm: () => void) {
 }
 
 function Sell() {
-  const { catalog, cart, setCart, checkout, register, saleId, terminal, refreshCatalog } = useRegister();
+  const { catalog, cart, setCart, checkout, register, saleId, terminal, refreshCatalog, customersOn, customer } = useRegister();
   const reader = useTerminal();
   const [permission, requestPermission] = useCameraPermissions();
   const [camera, setCamera] = useState(false);
@@ -106,7 +106,9 @@ function Sell() {
     setCharging(true);
     try {
       // The same sale id is sent again on retry; the server returns the sale it already made.
-      await checkout.createSale(saleId, register!.id, cart);
+      const sale = await checkout.createSale(saleId, register!.id, cart, customer?.id ?? null);
+      // Back from payment with a different customer chosen: the sale already exists, so update it.
+      if ((sale.customer?.id ?? null) !== (customer?.id ?? null)) await checkout.setSaleCustomer(sale.id, customer?.id ?? null);
       router.push('/register/pay');
     } catch (err) {
       Alert.alert('Could not start the sale', (err as Error).message);
@@ -221,6 +223,11 @@ function Sell() {
       )}
 
       <View style={{ padding: 16, gap: 8, borderTopWidth: 1, borderColor: colors.border, backgroundColor: '#fff' }}>
+        {customersOn && (
+          <Pressable onPress={() => router.push('/register/customer')} hitSlop={8}>
+            <Text style={{ color: colors.brand }}>{customer ? `Customer: ${customer.name} — change` : '+ Add customer'}</Text>
+          </Pressable>
+        )}
         <View style={[styles.row, { justifyContent: 'space-between' }]}>
           <Text style={styles.muted}>
             {cart.itemCount} item{cart.itemCount === 1 ? '' : 's'} · before tax

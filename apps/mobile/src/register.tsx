@@ -1,4 +1,4 @@
-import { Cart, CatalogIndex, Checkout, type RegisterSession, type TerminalConfig } from '@pos/sync';
+import { Cart, CatalogIndex, Checkout, type Customer, type RegisterSession, type TerminalConfig } from '@pos/sync';
 import { randomUUID } from 'expo-crypto';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { loadCatalog, refreshCatalog } from './catalog-cache';
@@ -22,6 +22,11 @@ interface RegisterValue {
   newSale(): void;
   /** Keeps the cart but uses a new sale id, after the previous sale for it was voided. */
   reopenCart(): void;
+  /** The Customers tool is on and this person may use it. */
+  customersOn: boolean;
+  /** The customer for the sale being rung up. */
+  customer: Customer | null;
+  setCustomer(customer: Customer | null): void;
   error: string | null;
 }
 
@@ -38,6 +43,8 @@ export function RegisterProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState(Cart.empty);
   const [saleId, setSaleId] = useState(randomUUID);
   const [error, setError] = useState<string | null>(null);
+  const [customersOn, setCustomersOn] = useState(false);
+  const [customer, setCustomer] = useState<Customer | null>(null);
 
   const reloadRegister = useCallback(async () => {
     try {
@@ -45,6 +52,8 @@ export function RegisterProvider({ children }: { children: ReactNode }) {
       setRegister(current.session);
       setTerminal(config);
       setError(null);
+      // Optional: the register works the same without customers.
+      void checkout.customersAvailable().then(setCustomersOn, () => setCustomersOn(false));
     } catch (err) {
       setError((err as Error).message);
       setRegister((r) => (r === undefined ? null : r));
@@ -82,12 +91,16 @@ export function RegisterProvider({ children }: { children: ReactNode }) {
       saleId,
       newSale: () => {
         setCart(Cart.empty());
+        setCustomer(null);
         setSaleId(randomUUID());
       },
       reopenCart: () => setSaleId(randomUUID()),
+      customersOn,
+      customer,
+      setCustomer,
       error,
     }),
-    [checkout, catalog, catalogSyncedAt, refresh, register, reloadRegister, terminal, cart, saleId, error],
+    [checkout, catalog, catalogSyncedAt, refresh, register, reloadRegister, terminal, cart, saleId, customersOn, customer, error],
   );
   return <RegisterContext.Provider value={value}>{children}</RegisterContext.Provider>;
 }

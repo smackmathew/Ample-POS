@@ -7,6 +7,7 @@ import { formatPercent } from '@/lib/pricing';
 import { formatDate, formatDateTime, zoneFinder } from '@/lib/time';
 import { can, type CurrentTenant, type Location, type Sale } from '@/lib/types';
 import { emailReceipt, refundSale } from '../../sales-actions';
+import { SaleCustomer } from './sale-customer';
 
 export default async function SalePage({ params }: { params: Promise<{ tenantId: string; saleId: string }> }) {
   const { tenantId, saleId } = await params;
@@ -18,6 +19,7 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
   const tz = zoneFinder(locations)(sale.locationId);
   const money = (n: number) => formatMoney(n, sale.currency);
   const refundable = sale.lines.filter((l) => l.quantity > l.refundedQuantity);
+  const customersOn = current.enabledModules.includes('customers') && can(current.membership.permissions, 'customers.use');
   const canRefund = sale.status === 'completed' && refundable.length > 0 && can(current.membership.permissions, 'pos.refund');
 
   return (
@@ -65,6 +67,24 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
         </dl>
       </div>
 
+      {customersOn ? (
+        <section className="card space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-medium">Customer</h2>
+            {sale.customer && (
+              <Link href={`/b/${tenantId}/customers/${sale.customer.id}`} className="text-sm text-stone-500 hover:underline">
+                View history
+              </Link>
+            )}
+          </div>
+          <div className="max-w-sm">
+            <SaleCustomer tenantId={tenantId} saleId={sale.id} customer={sale.customer} />
+          </div>
+        </section>
+      ) : (
+        sale.customer && <p className="text-sm text-stone-600">Customer: {sale.customer.name}</p>
+      )}
+
       {sale.status !== 'open' && (
         <section className="card flex flex-wrap items-end gap-3">
           <a href={`/b/${tenantId}/sales/${sale.id}/receipt?print=1`} target="_blank" rel="noopener" className="btn-secondary">
@@ -72,7 +92,15 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
           </a>
           {sale.status === 'completed' && (
             <ActionForm action={emailReceipt.bind(null, tenantId, sale.id)} className="flex flex-1 flex-wrap items-center gap-2">
-              <input name="email" type="email" placeholder="Customer’s email" required className="input min-w-48 flex-1" />
+              <input
+                key={sale.customer?.email ?? ''}
+                name="email"
+                type="email"
+                placeholder="Customer’s email"
+                defaultValue={sale.customer?.email ?? ''}
+                required
+                className="input min-w-48 flex-1"
+              />
               <button className="btn-secondary">Email receipt</button>
             </ActionForm>
           )}

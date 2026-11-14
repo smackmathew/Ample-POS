@@ -5,7 +5,9 @@ import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } f
 import { formatMoney, parseMoney } from '@/lib/money';
 import { estimateLine } from '@/lib/pricing';
 import type { Sale } from '@/lib/types';
+import { emailReceiptToCustomer, type CustomerPick } from '../../customer-actions';
 import { cardStep, createSale, findProducts, payCash, startCard, voidSale, type CatalogHit } from '../../sales-actions';
+import { CustomerPicker } from '../customer-picker';
 
 interface CartLine extends CatalogHit {
   quantity: number;
@@ -20,12 +22,14 @@ interface Props {
   canDiscount: boolean;
   /** True when payments go to the simulated processor, so the screen offers approve/decline. */
   simulatedReader: boolean;
+  /** The Customers tool is on and this cashier may use it. */
+  customers: boolean;
 }
 
 /** How often to ask the processor about a card payment while waiting on the reader. */
 const CARD_POLL_MS = 2000;
 
-export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscount, simulatedReader }: Props) {
+export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscount, simulatedReader, customers }: Props) {
   const money = (minor: number) => formatMoney(minor, currency);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [query, setQuery] = useState('');
@@ -34,6 +38,8 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
   const [change, setChange] = useState<number | null>(null);
   const [tendered, setTendered] = useState('');
   const [error, setError] = useState('');
+  const [customer, setCustomer] = useState<CustomerPick | null>(null);
+  const [receiptSent, setReceiptSent] = useState(false);
   const [pending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -88,6 +94,7 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
           id: crypto.randomUUID(),
           registerSessionId: sessionId,
           lines: cart.map((l) => ({ variantId: l.variantId, quantity: l.quantity, discountMinor: l.discountMinor })),
+          customerId: customer?.id ?? null,
         }),
       (s) => {
         setSale(s);
@@ -111,6 +118,8 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
   const newSale = () => {
     setSale(null);
     setCart([]);
+    setCustomer(null);
+    setReceiptSent(false);
     setChange(null);
     setError('');
     searchRef.current?.focus();
@@ -125,6 +134,18 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
         <h2 className="text-xl font-semibold">{sale.status === 'completed' ? `Sale #${sale.receiptNumber} complete` : 'Sale voided'}</h2>
         {change !== null && change > 0 && <p className="rounded-md bg-amber-50 p-3 text-lg font-semibold">Change due: {money(change)}</p>}
         <SaleTotals sale={sale} money={money} />
+        {sale.status === 'completed' && sale.customer?.email && (
+          <div className="text-sm">
+            {receiptSent ? (
+              <p className="text-teal-700">Receipt sent to {sale.customer.email}.</p>
+            ) : (
+              <button className="btn-secondary" disabled={pending} onClick={() => run(() => emailReceiptToCustomer(tenantId, sale.id), () => setReceiptSent(true))}>
+                Email receipt to {sale.customer.email}
+              </button>
+            )}
+            {error && <p className="mt-1 text-red-700">{error}</p>}
+          </div>
+        )}
         <div className="flex gap-2">
           <button className="btn" onClick={newSale} autoFocus>
             New sale
@@ -144,7 +165,10 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
     return (
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card space-y-2">
-          <h2 className="font-medium">Order</h2>
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-medium">Order</h2>
+            {sale.customer && <span className="text-sm text-stone-500">for {sale.customer.name}</span>}
+          </div>
           <SaleTotals sale={sale} money={money} />
         </div>
         <div className="card space-y-4">
@@ -318,6 +342,11 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
       </div>
 
       <div className="card h-fit space-y-2">
+        {customers && (
+          <div className="border-b border-stone-100 pb-3">
+            <CustomerPicker tenantId={tenantId} value={customer} onChange={setCustomer} disabled={pending} />
+          </div>
+        )}
         <Row label="Subtotal" value={money(estimate.subtotal)} />
         {estimate.discount > 0 && <Row label="Discounts" value={`−${money(estimate.discount)}`} />}
         <Row label="Tax" value={money(estimate.tax)} />

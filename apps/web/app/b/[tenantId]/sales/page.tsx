@@ -111,6 +111,7 @@ export default async function SalesPage({
                 <th className="pb-2">When</th>
                 <th className="pb-2">Location</th>
                 <th className="pb-2">Cashier</th>
+                <th className="pb-2">Customer</th>
                 <th className="pb-2">Status</th>
                 <th className="pb-2 text-right">Total</th>
               </tr>
@@ -127,6 +128,15 @@ export default async function SalesPage({
                   <td>{s.locationName}</td>
                   <td>{s.cashier ?? s.cashierEmail}</td>
                   <td>
+                    {s.customerId ? (
+                      <Link href={`/b/${tenantId}/customers/${s.customerId}`} className="hover:underline">
+                        {s.customerName}
+                      </Link>
+                    ) : (
+                      <span className="text-stone-400">—</span>
+                    )}
+                  </td>
+                  <td>
                     <span className={`rounded px-2 py-0.5 text-xs capitalize ${STATUS[s.status]}`}>{s.status}</span>
                     {s.refundedMinor > 0 && <span className="ml-2 text-xs text-red-700">refunded {money(s.refundedMinor)}</span>}
                   </td>
@@ -135,7 +145,7 @@ export default async function SalesPage({
               ))}
               {sales.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-4 text-stone-500">
+                  <td colSpan={7} className="py-4 text-stone-500">
                     No sales yet.
                   </td>
                 </tr>

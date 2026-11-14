@@ -27,6 +27,7 @@ export interface SaleInput {
   registerSessionId: string;
   lines: { variantId: string; quantity: number; discountMinor: number }[];
   note?: string;
+  customerId?: string | null;
 }
 
 export interface PaymentInput {
@@ -221,6 +222,8 @@ export class SalesService {
       throw new ForbiddenException('Missing permission: pos.discount');
     }
 
+    if (input.customerId) await this.checkCustomer(input.customerId);
+
     const variantIds = [...new Set(input.lines.map((l) => l.variantId))];
     const variants = await this.db.tx
       .select({ variant: schema.productVariants, productName: schema.products.name, productStatus: schema.products.status })
@@ -261,6 +264,7 @@ export class SalesService {
       totalMinor: totals.totalMinor,
       taxRateBps,
       note: input.note ?? null,
+      customerId: input.customerId ?? null,
       createdBy: currentUserId(),
     });
     await this.db.tx.insert(schema.saleLines).values(
@@ -283,9 +287,39 @@ export class SalesService {
     return this.getSale(input.id);
   }
 
+  /** Attaches a customer to a sale (or takes it off with null), at any point in the sale's life. */
+  async setCustomer(saleId: string, customerId: string | null) {
+    const sale = await this.lockSale(saleId);
+    if (customerId) await this.checkCustomer(customerId);
+    else if (!hasPermission(currentTenant().permissions, 'customers.use')) throw new ForbiddenException('Missing permission: customers.use');
+    if (sale.customerId !== customerId) {
+      await this.db.tx.update(schema.sales).set({ customerId }).where(eq(schema.sales.id, saleId));
+      await this.events.audit(customerId ? 'sale.customer_set' : 'sale.customer_removed', { type: 'sale', id: saleId }, { customerId: customerId ?? sale.customerId });
+    }
+    return this.getSale(saleId);
+  }
+
+  /** Customers must be turned on, the cashier allowed to use them, and the customer must exist in this business. */
+  private async checkCustomer(customerId: string) {
+    const [on] = await this.db.tx
+      .select({ enabled: schema.tenantModules.enabled })
+      .from(schema.tenantModules)
+      .where(and(eq(schema.tenantModules.moduleId, 'customers'), eq(schema.tenantModules.enabled, true)));
+    if (!on) throw new ForbiddenException('The Customers tool is turned off for this business');
+    if (!hasPermission(currentTenant().permissions, 'customers.use')) throw new ForbiddenException('Missing permission: customers.use');
+    const [customer] = await this.db.tx.select({ id: schema.customers.id }).from(schema.customers).where(eq(schema.customers.id, customerId));
+    if (!customer) throw new BadRequestException('That customer no longer exists');
+  }
+
   async getSale(id: string) {
     const [sale] = await this.db.tx.select().from(schema.sales).where(eq(schema.sales.id, id));
     if (!sale) throw new NotFoundException('Sale not found');
+    const [customer] = sale.customerId
+      ? await this.db.tx
+          .select({ id: schema.customers.id, name: schema.customers.name, email: schema.customers.email, phone: schema.customers.phone })
+          .from(schema.customers)
+          .where(eq(schema.customers.id, sale.customerId))
+      : [];
     const [lines, payments, refunds, refundLines, refundPayments] = await Promise.all([
       this.db.tx.select().from(schema.saleLines).where(eq(schema.saleLines.saleId, id)).orderBy(asc(schema.saleLines.position)),
       this.db.tx.select().from(schema.payments).where(eq(schema.payments.saleId, id)).orderBy(asc(schema.payments.createdAt), asc(schema.payments.id)),
@@ -305,6 +339,7 @@ export class SalesService {
     const pendingMinor = sum(payments.filter((p) => p.status === 'pending').map((p) => p.amountMinor));
     return {
       ...sale,
+      customer: customer ?? null,
       lines: lines.map((l) => {
         const refunded = refundLines.filter((r) => r.saleLineId === l.id);
         return { ...l, refundedQuantity: sum(refunded.map((r) => r.quantity)), refundedMinor: sum(refunded.map((r) => r.amountMinor)) };

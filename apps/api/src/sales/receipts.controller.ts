@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { schema } from '@pos/db';
 import { receiptHtml, receiptText, type Receipt } from '@pos/receipts';
 import { eq } from 'drizzle-orm';
@@ -11,7 +11,8 @@ import { RateLimiter } from '../core/rate-limit';
 import { ZodPipe } from '../core/zod';
 import { SalesService } from './sales.service';
 
-const emailBody = z.object({ email: z.string().trim().email('Enter a valid email').max(254) });
+/** Without an email, the receipt goes to the sale's customer. */
+const emailBody = z.object({ email: z.string().trim().email('Enter a valid email').max(254).optional() });
 
 /** Receipts for a sale: the data every receipt layout uses, and sending it by email. */
 @Controller('sales')
@@ -27,8 +28,8 @@ export class ReceiptsController {
   ) {}
 
   @Get(':id/receipt')
-  receipt(@Param('id', ParseUUIDPipe) id: string): Promise<Receipt> {
-    return this.build(id);
+  async receipt(@Param('id', ParseUUIDPipe) id: string): Promise<Receipt> {
+    return this.build(await this.sales.getSale(id));
   }
 
   /** Emails the receipt to the customer. The address isn't kept, only that a receipt was sent. */
@@ -36,18 +37,20 @@ export class ReceiptsController {
   @HttpCode(200)
   async email(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(emailBody)) body: z.infer<typeof emailBody>) {
     if (!this.mailer.enabled) throw new ConflictException({ code: 'email_off', message: 'Email isn’t set up for this business yet, so receipts can only be printed.' });
-    const receipt = await this.build(id);
+    const sale = await this.sales.getSale(id);
+    const to = body.email ?? sale.customer?.email;
+    if (!to) throw new BadRequestException('Enter an email address to send the receipt to');
+    const receipt = await this.build(sale);
     if (receipt.status !== 'completed') throw new ConflictException('Only completed sales have a receipt to send');
     this.limiter.check(`receipt:${id}`, 5, 'This receipt was just sent several times. Try again in a few minutes.');
     this.limiter.hit(`receipt:${id}`, 60 * 60_000);
     const subject = `Your receipt from ${receipt.business.name}${receipt.receiptNumber ? ` (#${receipt.receiptNumber})` : ''}`;
-    await this.mailer.send(body.email, subject, receiptText(receipt), receiptHtml(receipt, { title: subject }));
-    await this.events.audit('sale.receipt_emailed', { type: 'sale', id }, { to: body.email.replace(/^(.).*(@.*)$/, '$1…$2') });
+    await this.mailer.send(to, subject, receiptText(receipt), receiptHtml(receipt, { title: subject }));
+    await this.events.audit('sale.receipt_emailed', { type: 'sale', id }, { to: to.replace(/^(.).*(@.*)$/, '$1…$2'), ...(body.email ? {} : { toCustomer: true }) });
     return { sent: true };
   }
 
-  private async build(id: string): Promise<Receipt> {
-    const sale = await this.sales.getSale(id);
+  private async build(sale: Awaited<ReturnType<SalesService['getSale']>>): Promise<Receipt> {
     const tx = this.db.tx;
     const [[tenant], [location], [cashier]] = await Promise.all([
       tx.select({ name: schema.tenants.name, settings: schema.tenants.receiptSettings }).from(schema.tenants),

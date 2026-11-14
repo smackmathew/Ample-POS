@@ -1,6 +1,7 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CatalogController } from './catalog/catalog.controller';
+import { CustomersController } from './customers/customers.controller';
 import { AuthGuard } from './core/auth.guard';
 import { AuthService } from './core/auth.service';
 import { EmailVerification } from './core/email-verification';
@@ -61,6 +62,7 @@ export class AppModule {
         AuthController,
         TwoFactorController,
         TenantController,
+        CustomersController,
         ModulesController,
         LocationsController,
         RolesController,

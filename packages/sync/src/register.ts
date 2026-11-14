@@ -86,6 +86,15 @@ export interface Sale {
   dueMinor: number;
   lines: { id: string; description: string; quantity: number; unitPriceMinor: number; totalMinor: number }[];
   payments: SalePayment[];
+  customer: Customer | null;
+}
+
+/** A customer as the register sees them. */
+export interface Customer {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
 }
 
 interface PaymentResponse {
@@ -153,12 +162,48 @@ export class Checkout {
   }
 
   /** `saleId` should be made once per cart and reused if the request is retried. */
-  createSale(saleId: string, registerSessionId: string, cart: Cart): Promise<Sale> {
+  createSale(saleId: string, registerSessionId: string, cart: Cart, customerId: string | null = null): Promise<Sale> {
     return this.api.post('/sales', {
       id: saleId,
       registerSessionId,
       lines: cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+      ...(customerId ? { customerId } : {}),
     });
+  }
+
+  // Customers ----------------------------------------------------------------------
+
+  /** Puts a customer on a sale, or takes them off with null. */
+  setSaleCustomer(saleId: string, customerId: string | null): Promise<Sale> {
+    return this.api.post(`/sales/${saleId}/customer`, { customerId });
+  }
+
+  /** Whether this register can look up customers: the tool is on and the signed-in person may use it. */
+  async customersAvailable(): Promise<boolean> {
+    const t = await this.api.get<{ enabledModules: string[]; membership: { permissions: string[] } }>('/tenant');
+    const p = t.membership.permissions;
+    return t.enabledModules.includes('customers') && (p.includes('*') || p.includes('customers.use'));
+  }
+
+  async findCustomers(search: string): Promise<Customer[]> {
+    const found = await this.api.get<Customer[]>(`/customers?limit=10&search=${encodeURIComponent(search.trim())}`);
+    return found.map(({ id, name, email, phone }) => ({ id, name, email, phone }));
+  }
+
+  /**
+   * Adds a customer. When their email or phone is already on file, returns that
+   * customer instead, with `existing` set, rather than failing.
+   */
+  async addCustomer(input: { name: string; email?: string; phone?: string }): Promise<{ customer: Customer; existing: boolean }> {
+    try {
+      const c = await this.api.post<Customer>('/customers', input);
+      return { customer: { id: c.id, name: c.name, email: c.email, phone: c.phone }, existing: false };
+    } catch (err) {
+      const existing = err instanceof ApiError && err.status === 409 ? (err.body as { customer?: { id: string } } | undefined)?.customer : undefined;
+      if (!existing) throw err;
+      const c = await this.api.get<Customer>(`/customers/${existing.id}`);
+      return { customer: { id: c.id, name: c.name, email: c.email, phone: c.phone }, existing: true };
+    }
   }
 
   getSale(saleId: string): Promise<Sale> {

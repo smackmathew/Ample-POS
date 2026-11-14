@@ -183,3 +183,34 @@ describe('Checkout card payments', () => {
     expect(res.sale.status).toBe('completed');
   });
 });
+
+describe('Checkout customers', () => {
+  it('picks the customer already on file instead of failing on a duplicate', async () => {
+    const calls: string[] = [];
+    const impl = (async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      calls.push(`${init?.method} ${path}`);
+      if (path === '/customers' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 'customer_exists', message: 'Ana already has this email', customer: { id: 'c-1', name: 'Ana' } }), { status: 409 });
+      }
+      if (path === '/customers/c-1') return new Response(JSON.stringify({ id: 'c-1', name: 'Ana', email: 'ana@example.com', phone: null, visits: 3, sales: [] }));
+      return new Response('{}', { status: 404 });
+    }) as unknown as typeof fetch;
+    const checkout = new Checkout(new ApiClient({ baseUrl: 'http://pos.test', fetch: impl }), () => 'id');
+    const result = await checkout.addCustomer({ name: 'Ana L', email: 'ana@example.com' });
+    expect(result).toEqual({ existing: true, customer: { id: 'c-1', name: 'Ana', email: 'ana@example.com', phone: null } });
+    expect(calls).toEqual(['POST /customers', 'GET /customers/c-1']);
+  });
+
+  it('knows whether this person can use customers', async () => {
+    const tenant = (modules: string[], permissions: string[]) =>
+      new Checkout(
+        new ApiClient({ baseUrl: 'http://pos.test', fetch: (async () => new Response(JSON.stringify({ enabledModules: modules, membership: { permissions } }))) as unknown as typeof fetch }),
+        () => 'id',
+      );
+    expect(await tenant(['pos', 'customers'], ['customers.use']).customersAvailable()).toBe(true);
+    expect(await tenant(['pos', 'customers'], ['*']).customersAvailable()).toBe(true);
+    expect(await tenant(['pos'], ['*']).customersAvailable()).toBe(false);
+    expect(await tenant(['pos', 'customers'], ['pos.sell']).customersAvailable()).toBe(false);
+  });
+});
