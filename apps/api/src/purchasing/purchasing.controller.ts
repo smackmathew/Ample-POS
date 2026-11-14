@@ -47,6 +47,7 @@ const draftBody = z.object({
 const listQuery = z.object({
   status: z.enum([...PURCHASE_ORDER_STATUSES, 'open']).optional(),
   supplierId: uuid.optional(),
+  locationId: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 const orderBody = z.object({ email: z.boolean().default(false), message: z.string().trim().max(2000).optional() });
@@ -161,6 +162,7 @@ export class PurchaseOrdersController {
         and(
           q.status === 'open' ? sql`${po.status} in ('draft', 'ordered', 'partially_received')` : q.status ? eq(po.status, q.status) : undefined,
           q.supplierId ? eq(po.supplierId, q.supplierId) : undefined,
+          q.locationId ? eq(po.locationId, q.locationId) : undefined,
         ),
       )
       .orderBy(desc(po.number))

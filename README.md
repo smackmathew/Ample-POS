@@ -99,6 +99,8 @@ suppliers.
   ends a short order, and an order nothing arrived for can be canceled.
 - **Permissions:** `purchasing.manage` (suppliers and orders; managers) and
   `purchasing.receive` (receive deliveries; managers and staff).
+- **On the phone:** deliveries can also be received by scanning, in the
+  mobile app (see *Mobile counting app*).
 
 ## Checkout and payments
 
@@ -371,6 +373,15 @@ The sync engine (`packages/sync`) retries when the network returns; the
 server ignores entries it already has, so a lost response never double-counts.
 Entries undone before syncing are never sent. If the count was closed on the
 web in the meantime, its entries are shown as refused rather than lost.
+
+**Receiving deliveries** (with Purchase orders on, for people who may
+receive): *Receive a delivery* on the counts screen, or in the register's
+*More* menu, lists the orders placed for the device's location. On an order,
+each scan adds one of that item (an item that isn't on the order is called
+out). Use − / + or type a number to adjust, or tap *Everything arrived*.
+*Receive* puts the stock in, and item costs update unless turned off.
+Receiving needs a connection. If it drops, the counts stay on screen and
+the retry reuses the delivery's ID, so nothing is counted twice.
 
 Run it with `pnpm --filter @pos/mobile start` and open it in Expo Go or a
 development build. Set `PUBLIC_API_URL` for the web app (and the app's server

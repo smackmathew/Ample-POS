@@ -20,6 +20,8 @@ export default function RootLayout() {
             <Stack.Screen name="counts/index" options={{ title: 'Counts' }} />
             <Stack.Screen name="counts/[id]" options={{ title: 'Count' }} />
             <Stack.Screen name="register" options={{ headerShown: false }} />
+            <Stack.Screen name="receiving/index" options={{ title: 'Receive a delivery' }} />
+            <Stack.Screen name="receiving/[id]" options={{ title: 'Receive' }} />
           </Stack>
         </TerminalProvider>
       </SyncProvider>

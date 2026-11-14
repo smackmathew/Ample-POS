@@ -1,7 +1,8 @@
-import { formatMoney, parseMoney, type CatalogVariant } from '@pos/sync';
+import { formatMoney, parseMoney, Receiving, type CatalogVariant } from '@pos/sync';
+import { randomUUID } from 'expo-crypto';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, Stack } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, TextInput, Vibration, View } from 'react-native';
 import { useRegister } from '@/register';
 import { useSession } from '@/session';
@@ -75,6 +76,11 @@ function confirmLeave(onConfirm: () => void) {
 
 function Sell() {
   const { catalog, cart, setCart, checkout, register, saleId, terminal, refreshCatalog, customersOn, customer } = useRegister();
+  const { api } = useSession();
+  const [canReceive, setCanReceive] = useState(false);
+  useEffect(() => {
+    void new Receiving(api, randomUUID).available().then(setCanReceive, () => setCanReceive(false));
+  }, [api]);
   const reader = useTerminal();
   const [permission, requestPermission] = useCameraPermissions();
   const [camera, setCamera] = useState(false);
@@ -126,7 +132,7 @@ function Sell() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <Pressable onPress={() => menu(refreshCatalog)} hitSlop={12}>
+            <Pressable onPress={() => menu(refreshCatalog, canReceive)} hitSlop={12}>
               <Text style={{ color: colors.brand, fontSize: 16 }}>More</Text>
             </Pressable>
           ),
@@ -240,7 +246,7 @@ function Sell() {
   );
 }
 
-function menu(refreshCatalog: () => Promise<void>) {
+function menu(refreshCatalog: () => Promise<void>, canReceive: boolean) {
   Alert.alert('Register', undefined, [
     { text: 'Card reader', onPress: () => router.push('/register/reader') },
     {
@@ -251,6 +257,7 @@ function menu(refreshCatalog: () => Promise<void>) {
           (err: Error) => Alert.alert('Could not update products', err.message),
         ),
     },
+    ...(canReceive ? [{ text: 'Receive a delivery', onPress: () => router.push('/receiving') }] : []),
     { text: 'Close register', onPress: () => router.push('/register/close') },
     { text: 'Cancel', style: 'cancel' },
   ]);
