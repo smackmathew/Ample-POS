@@ -3,6 +3,8 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CatalogController } from './catalog/catalog.controller';
 import { CustomersController } from './customers/customers.controller';
 import { GiftCardsController } from './gift-cards/gift-cards.controller';
+import { PurchaseOrdersController, SuppliersController } from './purchasing/purchasing.controller';
+import { PurchasingService } from './purchasing/purchasing.service';
 import { GiftCardService } from './gift-cards/gift-cards.service';
 import { LoyaltyController } from './loyalty/loyalty.controller';
 import { LoyaltyService } from './loyalty/loyalty.service';
@@ -69,6 +71,8 @@ export class AppModule {
         CustomersController,
         LoyaltyController,
         GiftCardsController,
+        SuppliersController,
+        PurchaseOrdersController,
         ModulesController,
         LocationsController,
         RolesController,
@@ -109,6 +113,7 @@ export class AppModule {
         SalesService,
         LoyaltyService,
         GiftCardService,
+        PurchasingService,
         OutboxWorker,
         ShopifySyncService,
         ShopifyJobs,

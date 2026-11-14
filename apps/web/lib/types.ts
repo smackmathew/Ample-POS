@@ -336,3 +336,59 @@ export interface GiftCard {
   balanceMinor: number;
   entries: { id: string; kind: 'load' | 'redeem' | 'refund' | 'adjust' | 'void'; amountMinor: number; note: string | null; saleId: string | null; receiptNumber: number | null; createdAt: string }[];
 }
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  archivedAt: string | null;
+  openOrders: number;
+}
+
+export type PurchaseOrderStatus = 'draft' | 'ordered' | 'partially_received' | 'received' | 'canceled';
+
+export interface PurchaseOrderSummary {
+  id: string;
+  reference: string;
+  number: number;
+  status: PurchaseOrderStatus;
+  supplierId: string;
+  supplierName: string;
+  locationId: string;
+  locationName: string;
+  expectedOn: string | null;
+  orderedAt: string | null;
+  createdAt: string;
+  totalMinor: number;
+  itemCount: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  reference: string;
+  number: number;
+  status: PurchaseOrderStatus;
+  supplierId: string;
+  locationId: string;
+  locationName: string;
+  supplier: { id: string; name: string; email: string | null; contactName: string | null; phone: string | null };
+  note: string | null;
+  expectedOn: string | null;
+  orderedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  totalMinor: number;
+  lines: { id: string; variantId: string; description: string; sku: string | null; quantityOrdered: number; quantityReceived: number; unitCostMinor: number; onHand: number }[];
+  receipts: { id: string; note: string | null; createdAt: string; receivedBy: string | null; units: number }[];
+}
+
+export interface LowStockItem {
+  variantId: string;
+  description: string;
+  sku: string | null;
+  costMinor: number | null;
+  onHand: number;
+}

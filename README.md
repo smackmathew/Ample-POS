@@ -22,6 +22,7 @@ devices and an audit trail.
 | 8 | Customers: profiles, purchase history, receipts to the customer | **Done** |
 | 9 | Loyalty rewards: points on spending, rewards at the register | **Done** |
 | 10 | Gift cards: sell, reload, pay with, refund | **Done** |
+| 11 | Purchase orders: suppliers, ordering, receiving into stock | **Done** |
 
 Every tool has working screens, and businesses pay only for the tools they turn on.
 
@@ -74,6 +75,30 @@ packages/sync    API client and offline sync engine shared by devices
 ![Count review](docs/screenshots/count-review.png)
 
 Quantities are whole units for now; weighed and measured items come later.
+
+## Purchase orders
+
+The **Purchase orders** tool (included with Inventory) covers buying stock from
+suppliers.
+
+- **Suppliers** have a name, contact person, email, phone and notes. They can
+  be archived when no longer used.
+- **Ordering:** start an order for a supplier and a location, then add
+  stocked items with a quantity and cost each. Costs start from each item's
+  current cost. *Add everything with N or fewer in stock* adds the
+  location's low items that aren't already on an open order.
+- **Placing:** email the order to the supplier from the app (when email is
+  set up), or mark it placed after sending it another way. Only drafts can be
+  edited.
+- **Receiving:** enter what arrived. Stock goes in at the order's location
+  through the inventory ledger (`receive` movements that point at the
+  order), and item costs update to what the order paid (optional). Deliveries
+  can come in parts; extra units are fine. A retried *Receive* never adds
+  stock twice.
+- **Finishing:** an order is received once everything has arrived. *Close*
+  ends a short order, and an order nothing arrived for can be canceled.
+- **Permissions:** `purchasing.manage` (suppliers and orders; managers) and
+  `purchasing.receive` (receive deliveries; managers and staff).
 
 ## Checkout and payments
 

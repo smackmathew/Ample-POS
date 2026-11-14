@@ -97,6 +97,8 @@ export interface AuthConfig {
   passwordResetByEmail: boolean;
   /** New accounts confirm their email before creating a business. */
   emailVerification: boolean;
+  /** The API can send email (receipts, purchase orders). */
+  emailEnabled: boolean;
 }
 
 export const authConfig = () => api<AuthConfig>('/auth/config', { anonymous: true });

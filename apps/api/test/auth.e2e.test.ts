@@ -60,7 +60,7 @@ async function verifiedAccount(email = newEmail()): Promise<{ email: string; tok
 describe('built-in accounts', () => {
   it('signs up, signs in with any letter case, and rejects duplicates and weak passwords', async () => {
     const email = newEmail();
-    expect((await http().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: true, emailVerification: true });
+    expect((await http().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: true, emailVerification: true, emailEnabled: true });
     expect((await signup(email, 'short')).status).toBe(400);
     expect((await signup(email, email.toLowerCase())).body.message).toBe('Don’t use your email as your password');
 
@@ -384,7 +384,7 @@ describe('built-in accounts without email', () => {
 
   it('doesn’t hold anything back when there is no way to send a confirmation', async () => {
     const q = () => request(quiet.getHttpServer());
-    expect((await q().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: false, emailVerification: false });
+    expect((await q().get('/auth/config').expect(200)).body).toEqual({ mode: 'password', passwordResetByEmail: false, emailVerification: false, emailEnabled: false });
     const token = (await q().post('/auth/signup').send({ email: newEmail(), password: PASSWORD, name: 'Pat' }).expect(201)).body.token;
     await q().post('/tenants').set('Authorization', `Bearer ${token}`).send({ name: 'Shop', slug: unique('shop') }).expect(201);
     await q().post('/auth/email/verify-request').set('Authorization', `Bearer ${token}`).expect(404);
