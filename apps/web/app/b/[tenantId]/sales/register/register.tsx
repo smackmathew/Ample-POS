@@ -7,7 +7,7 @@ import { estimateLine } from '@/lib/pricing';
 import type { Sale } from '@/lib/types';
 import { emailReceiptToCustomer, type CustomerPick } from '../../customer-actions';
 import { redeemReward, removeReward } from '../../loyalty-actions';
-import { cardStep, createSale, findProducts, payCash, startCard, voidSale, type CatalogHit } from '../../sales-actions';
+import { cancelPayment, cardStep, createSale, findProducts, payCash, payGiftCard, startCard, voidSale, type CatalogHit } from '../../sales-actions';
 import { CustomerPicker } from '../customer-picker';
 
 interface CartLine extends CatalogHit {
@@ -25,12 +25,21 @@ interface Props {
   simulatedReader: boolean;
   /** The Customers tool is on and this cashier may use it. */
   customers: boolean;
+  /** The Gift cards tool is on: sell them, and take them as payment. */
+  giftCards: boolean;
+}
+
+/** A gift card being sold on this sale: a printed card's code, or blank to make one up. */
+interface GiftCardLine {
+  key: string;
+  code: string;
+  amountMinor: number;
 }
 
 /** How often to ask the processor about a card payment while waiting on the reader. */
 const CARD_POLL_MS = 2000;
 
-export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscount, simulatedReader, customers }: Props) {
+export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscount, simulatedReader, customers, giftCards }: Props) {
   const money = (minor: number) => formatMoney(minor, currency);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [query, setQuery] = useState('');
@@ -40,6 +49,9 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
   const [tendered, setTendered] = useState('');
   const [error, setError] = useState('');
   const [customer, setCustomer] = useState<CustomerPick | null>(null);
+  const [cards, setCards] = useState<GiftCardLine[]>([]);
+  const [cardForm, setCardForm] = useState<{ amount: string; code: string } | null>(null);
+  const [giftCode, setGiftCode] = useState('');
   const [receiptSent, setReceiptSent] = useState(false);
   const [pending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -58,9 +70,11 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
       subtotal: cart.reduce((n, l) => n + l.priceMinor * l.quantity, 0),
       discount: cart.reduce((n, l) => n + l.discountMinor, 0),
       tax: lines.reduce((n, l) => n + l.taxMinor, 0),
-      total: lines.reduce((n, l) => n + l.totalMinor, 0),
+      // Gift cards aren't taxed.
+      total: lines.reduce((n, l) => n + l.totalMinor, 0) + cards.reduce((n, c) => n + c.amountMinor, 0),
+      cards: cards.reduce((n, c) => n + c.amountMinor, 0),
     };
-  }, [cart, taxRateBps]);
+  }, [cart, cards, taxRateBps]);
 
   const add = (hit: CatalogHit) => {
     setCart((c) => {
@@ -94,7 +108,10 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
         createSale(tenantId, {
           id: crypto.randomUUID(),
           registerSessionId: sessionId,
-          lines: cart.map((l) => ({ variantId: l.variantId, quantity: l.quantity, discountMinor: l.discountMinor })),
+          lines: [
+            ...cart.map((l) => ({ variantId: l.variantId, quantity: l.quantity, discountMinor: l.discountMinor })),
+            ...cards.map((c) => ({ giftCard: { code: c.code.trim() || undefined, amountMinor: c.amountMinor } })),
+          ],
           customerId: customer?.id ?? null,
         }),
       (s) => {
@@ -119,6 +136,8 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
   const newSale = () => {
     setSale(null);
     setCart([]);
+    setCards([]);
+    setCardForm(null);
     setCustomer(null);
     setReceiptSent(false);
     setChange(null);
@@ -135,6 +154,14 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
         <h2 className="text-xl font-semibold">{sale.status === 'completed' ? `Sale #${sale.receiptNumber} complete` : 'Sale voided'}</h2>
         {change !== null && change > 0 && <p className="rounded-md bg-amber-50 p-3 text-lg font-semibold">Change due: {money(change)}</p>}
         <SaleTotals sale={sale} money={money} />
+        {sale.status === 'completed' &&
+          sale.lines
+            .filter((l) => l.kind === 'gift_card')
+            .map((l) => (
+              <p key={l.id} className="rounded-md bg-teal-50 p-3 text-sm">
+                <strong>{l.description}</strong> now holds {money(l.totalMinor)} more. The code is on the receipt.
+              </p>
+            ))}
         {sale.status === 'completed' && sale.loyalty && (
           <p className="text-sm">
             {sale.customer!.name} earned <strong>{sale.loyalty.earnedPoints} points</strong> · balance {sale.loyalty.balance}
@@ -240,6 +267,39 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
               >
                 Charge {money(sale.dueMinor)} to card
               </button>
+              {giftCards && (
+                <form
+                  className="flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!giftCode.trim()) return setError('Enter or scan the gift card code');
+                    run(
+                      () => payGiftCard(tenantId, sale.id, crypto.randomUUID(), giftCode),
+                      (r) => {
+                        setSale(r.sale);
+                        setGiftCode('');
+                      },
+                    );
+                  }}
+                >
+                  <input className="input" value={giftCode} onChange={(e) => setGiftCode(e.target.value)} placeholder="Gift card code" autoComplete="off" />
+                  <button className="btn-secondary whitespace-nowrap" disabled={pending || sale.dueMinor === 0}>
+                    Pay with gift card
+                  </button>
+                </form>
+              )}
+              {sale.payments
+                .filter((p) => p.method === 'gift_card' && p.status === 'succeeded')
+                .map((p) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-md bg-stone-50 px-3 py-2 text-sm">
+                    <span>
+                      Gift card ••••{p.giftCard?.last4}: {money(p.amountMinor)} · {money(p.giftCard?.balanceMinor ?? 0)} left
+                    </span>
+                    <button className="text-stone-500 hover:underline" disabled={pending} onClick={() => run(() => cancelPayment(tenantId, sale.id, p.id), setSale)}>
+                      Undo
+                    </button>
+                  </div>
+                ))}
             </>
           )}
 
@@ -253,7 +313,7 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
             />
           )}
 
-          {sale.paidMinor === 0 && !pendingCard && (
+          {sale.payments.every((p) => p.status !== 'succeeded' || p.method === 'gift_card') && !pendingCard && (
             <button className="text-sm text-red-700 hover:underline" disabled={pending} onClick={() => run(() => voidSale(tenantId, sale.id), setSale)}>
               Void sale
             </button>
@@ -345,7 +405,22 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
                   <td className="text-right tabular-nums">{money(l.priceMinor * l.quantity - l.discountMinor)}</td>
                 </tr>
               ))}
-              {cart.length === 0 && (
+              {cards.map((c) => (
+                <tr key={c.key} className="border-t border-stone-100">
+                  <td className="py-2">
+                    Gift card{c.code.trim() ? ` ${c.code.trim()}` : ''}
+                    <div className="text-xs text-stone-500">{c.code.trim() ? 'Printed card, or reload' : 'New code, printed on the receipt'} · no tax</div>
+                  </td>
+                  <td>
+                    <button className="text-xs text-stone-500 hover:underline" onClick={() => setCards((cs) => cs.filter((x) => x.key !== c.key))}>
+                      Remove
+                    </button>
+                  </td>
+                  {canDiscount && <td />}
+                  <td className="text-right tabular-nums">{money(c.amountMinor)}</td>
+                </tr>
+              ))}
+              {cart.length === 0 && cards.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-6 text-center text-stone-500">
                     Scan or search to add items.
@@ -355,6 +430,37 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
             </tbody>
           </table>
         </div>
+        {giftCards &&
+          (cardForm ? (
+            <form
+              className="card flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const amount = parseMoney(cardForm.amount);
+                if (!amount || amount < 100) return setError('Enter the gift card amount, $1.00 or more');
+                setError('');
+                setCards((cs) => [...cs, { key: crypto.randomUUID(), code: cardForm.code, amountMinor: amount }]);
+                setCardForm(null);
+              }}
+            >
+              <label className="text-sm">
+                Amount
+                <input className="input mt-1 w-28" inputMode="decimal" placeholder="25.00" value={cardForm.amount} onChange={(e) => setCardForm({ ...cardForm, amount: e.target.value })} autoFocus />
+              </label>
+              <label className="flex-1 text-sm">
+                Card code <span className="text-stone-400">(printed card or reload; blank for a new code)</span>
+                <input className="input mt-1" value={cardForm.code} onChange={(e) => setCardForm({ ...cardForm, code: e.target.value })} autoComplete="off" />
+              </label>
+              <button className="btn-secondary">Add gift card</button>
+              <button type="button" className="text-sm text-stone-500 hover:underline" onClick={() => setCardForm(null)}>
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <button className="text-sm text-stone-600 hover:underline" onClick={() => setCardForm({ amount: '', code: '' })}>
+              + Sell a gift card
+            </button>
+          ))}
       </div>
 
       <div className="card h-fit space-y-2">
@@ -365,13 +471,20 @@ export function Register({ tenantId, sessionId, currency, taxRateBps, canDiscoun
         )}
         <Row label="Subtotal" value={money(estimate.subtotal)} />
         {estimate.discount > 0 && <Row label="Discounts" value={`−${money(estimate.discount)}`} />}
+        {estimate.cards > 0 && <Row label="Gift cards" value={money(estimate.cards)} />}
         <Row label="Tax" value={money(estimate.tax)} />
         <Row label="Total" value={money(estimate.total)} strong />
-        <button className="btn mt-2 w-full py-3 text-base" disabled={!cart.length || pending} onClick={charge}>
+        <button className="btn mt-2 w-full py-3 text-base" disabled={(!cart.length && !cards.length) || pending} onClick={charge}>
           Charge {money(estimate.total)}
         </button>
-        {cart.length > 0 && (
-          <button className="w-full text-sm text-stone-500 hover:underline" onClick={() => setCart([])}>
+        {cart.length + cards.length > 0 && (
+          <button
+            className="w-full text-sm text-stone-500 hover:underline"
+            onClick={() => {
+              setCart([]);
+              setCards([]);
+            }}
+          >
             Clear cart
           </button>
         )}
@@ -409,7 +522,11 @@ function SaleTotals({ sale, money }: { sale: Sale; money: (n: number) => string 
       {sale.payments
         .filter((p) => p.status === 'succeeded')
         .map((p) => (
-          <Row key={p.id} label={p.method === 'cash' ? `Cash (tendered ${money(p.tenderedMinor ?? p.amountMinor)})` : 'Card'} value={money(p.amountMinor)} />
+          <Row
+            key={p.id}
+            label={p.method === 'cash' ? `Cash (tendered ${money(p.tenderedMinor ?? p.amountMinor)})` : p.method === 'gift_card' ? `Gift card ••••${p.giftCard?.last4 ?? ''}` : 'Card'}
+            value={money(p.amountMinor)}
+          />
         ))}
     </div>
   );
@@ -432,7 +549,7 @@ function RewardPanel({
   const loyalty = sale.loyalty!;
   const name = sale.customer!.name.split(/\s+/)[0];
   // No more rewards than the customer has, or than the items are worth.
-  const itemsMinor = sale.subtotalMinor - sale.discountMinor;
+  const itemsMinor = sale.lines.filter((l) => l.kind === 'item').reduce((n, l) => n + l.unitPriceMinor * l.quantity - l.discountMinor, 0);
   const most = Math.min(loyalty.rewardsAvailable, Math.floor(itemsMinor / loyalty.rewardValueMinor));
   const [count, setCount] = useState(1);
 

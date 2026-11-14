@@ -57,19 +57,21 @@ export interface RegisterSession {
 export interface RegisterSummary extends RegisterSession {
   locationName: string;
   countedCashMinor: number | null;
-  totals: { salesCount: number; grossMinor: number; cashMinor: number; cardMinor: number; cashRefundsMinor: number; expectedCashMinor: number | null };
+  totals: { salesCount: number; grossMinor: number; cashMinor: number; cardMinor: number; giftCardMinor?: number; cashRefundsMinor: number; expectedCashMinor: number | null };
   /** Counted minus expected, once closed. */
   varianceMinor: number | null;
 }
 
 export interface SalePayment {
   id: string;
-  method: 'cash' | 'card';
+  method: 'cash' | 'card' | 'gift_card';
   status: 'pending' | 'succeeded' | 'canceled' | 'failed';
   amountMinor: number;
   tenderedMinor: number | null;
   changeMinor: number | null;
   lastError: string | null;
+  /** Gift card payments: the card's last 4 and what's left on it now. */
+  giftCard?: { last4: string; balanceMinor: number } | null;
 }
 
 export interface Sale {
@@ -215,6 +217,12 @@ export class Checkout {
     return t.enabledModules.includes('customers') && (p.includes('*') || p.includes('customers.use'));
   }
 
+  /** Whether the business has a tool turned on. */
+  async toolEnabled(moduleId: string): Promise<boolean> {
+    const t = await this.api.get<{ enabledModules: string[] }>('/tenant');
+    return t.enabledModules.includes(moduleId);
+  }
+
   async findCustomers(search: string): Promise<Customer[]> {
     const found = await this.api.get<Customer[]>(`/customers?limit=10&search=${encodeURIComponent(search.trim())}`);
     return found.map(({ id, name, email, phone }) => ({ id, name, email, phone }));
@@ -247,6 +255,23 @@ export class Checkout {
   async payCash(saleId: string, tenderedMinor: number, paymentId = this.newId()): Promise<{ sale: Sale; changeMinor: number }> {
     const res = await this.api.post<PaymentResponse>(`/sales/${saleId}/payments`, { id: paymentId, method: 'cash', tenderedMinor });
     return { sale: res.sale, changeMinor: res.payment.changeMinor ?? 0 };
+  }
+
+  /**
+   * Pays what's due (or as much as the card holds) from a gift card. The money
+   * comes off the card at once; `undoGiftCard` puts it back while the sale is open.
+   */
+  async payGiftCard(saleId: string, code: string, paymentId = this.newId()): Promise<Sale> {
+    return (await this.api.post<PaymentResponse>(`/sales/${saleId}/payments`, { id: paymentId, method: 'gift_card', code })).sale;
+  }
+
+  undoGiftCard(saleId: string, paymentId: string): Promise<Sale> {
+    return this.api.post(`/sales/${saleId}/payments/${paymentId}/cancel`);
+  }
+
+  /** What's left on a gift card. */
+  giftCardBalance(code: string): Promise<{ last4: string; status: 'active' | 'void'; balanceMinor: number }> {
+    return this.api.get(`/gift-cards/balance?code=${encodeURIComponent(code)}`);
   }
 
   /** Starts (or, with the same `paymentId`, resumes) a card payment for what's due. */

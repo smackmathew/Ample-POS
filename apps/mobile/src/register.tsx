@@ -24,6 +24,8 @@ interface RegisterValue {
   reopenCart(): void;
   /** The Customers tool is on and this person may use it. */
   customersOn: boolean;
+  /** The Gift cards tool is on. */
+  giftCardsOn: boolean;
   /** The customer for the sale being rung up. */
   customer: Customer | null;
   setCustomer(customer: Customer | null): void;
@@ -44,6 +46,7 @@ export function RegisterProvider({ children }: { children: ReactNode }) {
   const [saleId, setSaleId] = useState(randomUUID);
   const [error, setError] = useState<string | null>(null);
   const [customersOn, setCustomersOn] = useState(false);
+  const [giftCardsOn, setGiftCardsOn] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
 
   const reloadRegister = useCallback(async () => {
@@ -54,6 +57,7 @@ export function RegisterProvider({ children }: { children: ReactNode }) {
       setError(null);
       // Optional: the register works the same without customers.
       void checkout.customersAvailable().then(setCustomersOn, () => setCustomersOn(false));
+      void checkout.toolEnabled('gift-cards').then(setGiftCardsOn, () => setGiftCardsOn(false));
     } catch (err) {
       setError((err as Error).message);
       setRegister((r) => (r === undefined ? null : r));
@@ -96,11 +100,12 @@ export function RegisterProvider({ children }: { children: ReactNode }) {
       },
       reopenCart: () => setSaleId(randomUUID()),
       customersOn,
+      giftCardsOn,
       customer,
       setCustomer,
       error,
     }),
-    [checkout, catalog, catalogSyncedAt, refresh, register, reloadRegister, terminal, cart, saleId, customersOn, customer, error],
+    [checkout, catalog, catalogSyncedAt, refresh, register, reloadRegister, terminal, cart, saleId, customersOn, giftCardsOn, customer, error],
   );
   return <RegisterContext.Provider value={value}>{children}</RegisterContext.Provider>;
 }

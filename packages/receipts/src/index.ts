@@ -23,7 +23,8 @@ export interface Receipt {
   issuedAt: string;
   cashier: string | null;
   currency: string;
-  lines: { description: string; quantity: number; unitPriceMinor: number; discountMinor: number; totalMinor: number }[];
+  /** `detail` is an extra line under the item, such as a gift card's code. */
+  lines: { description: string; quantity: number; unitPriceMinor: number; discountMinor: number; totalMinor: number; detail?: string | null }[];
   /** Before discounts (as stored on the sale); the receipt shows it net of them. */
   subtotalMinor: number;
   /** All discounts, including any loyalty reward. */
@@ -34,7 +35,14 @@ export interface Receipt {
   loyalty?: { earned: number; balance: number } | null;
   taxMinor: number;
   totalMinor: number;
-  payments: { method: 'cash' | 'card'; amountMinor: number; tenderedMinor: number | null; changeMinor: number | null }[];
+  payments: {
+    method: 'cash' | 'card' | 'gift_card';
+    amountMinor: number;
+    tenderedMinor: number | null;
+    changeMinor: number | null;
+    /** Gift card payments: the card's last 4 and what's left on it. */
+    giftCard?: { last4: string; balanceMinor: number } | null;
+  }[];
   refunds: { createdAt: string; amountMinor: number; reason: string | null }[];
 }
 
@@ -65,7 +73,9 @@ function receiptRows(r: Receipt) {
   const items = r.lines.map((l) => ({
     left: `${l.quantity} × ${l.description}`,
     right: money(l.totalMinor),
-    note: l.quantity > 1 || l.discountMinor > 0 ? [l.quantity > 1 ? `${money(l.unitPriceMinor)} each` : null, l.discountMinor > 0 ? `${money(l.discountMinor)} off` : null].filter(Boolean).join(' · ') : null,
+    note:
+      [l.quantity > 1 ? `${money(l.unitPriceMinor)} each` : null, l.discountMinor > 0 ? `${money(l.discountMinor)} off` : null, l.detail ?? null].filter(Boolean).join(' · ') ||
+      null,
   }));
   // Lines are shown after their discounts, so the subtotal is too: everything adds up.
   const reward = r.rewardMinor ?? 0;
@@ -81,7 +91,12 @@ function receiptRows(r: Receipt) {
           { left: 'Cash', right: money(p.tenderedMinor ?? p.amountMinor) },
           ...(p.changeMinor ? [{ left: 'Change', right: money(p.changeMinor) }] : []),
         ]
-      : [{ left: 'Card', right: money(p.amountMinor) }],
+      : p.method === 'gift_card'
+        ? [
+            { left: `Gift card ••••${p.giftCard?.last4 ?? ''}`, right: money(p.amountMinor) },
+            ...(p.giftCard ? [{ left: `Left on gift card ••••${p.giftCard.last4}`, right: money(p.giftCard.balanceMinor) }] : []),
+          ]
+        : [{ left: 'Card', right: money(p.amountMinor) }],
   );
   const refunds = r.refunds.map((f) => ({
     left: `Refund ${formatReceiptTime(f.createdAt, r.location.timezone)}${f.reason ? ` (${f.reason})` : ''}`,

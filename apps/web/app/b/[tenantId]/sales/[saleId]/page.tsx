@@ -58,7 +58,13 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
             .map((p) => (
               <Line
                 key={p.id}
-                label={p.method === 'cash' ? `Cash — tendered ${money(p.tenderedMinor ?? 0)}, change ${money(p.changeMinor ?? 0)}` : 'Card'}
+                label={
+                  p.method === 'cash'
+                    ? `Cash — tendered ${money(p.tenderedMinor ?? 0)}, change ${money(p.changeMinor ?? 0)}`
+                    : p.method === 'gift_card'
+                      ? `Gift card ••••${p.giftCard?.last4 ?? ''}`
+                      : 'Card'
+                }
                 value={money(p.amountMinor)}
               />
             ))}

@@ -64,15 +64,15 @@ export function refundAmountForLine(
 
 export interface RefundablePayment {
   id: string;
-  method: 'cash' | 'card';
+  method: 'cash' | 'card' | 'gift_card';
   /** Succeeded amount minus what earlier refunds already took from it. */
   refundableMinor: number;
 }
 
 /** Spreads a refund across the original payments, most recent first. */
-export function allocateRefund(amountMinor: number, payments: RefundablePayment[]): { paymentId: string; method: 'cash' | 'card'; amountMinor: number }[] {
+export function allocateRefund(amountMinor: number, payments: RefundablePayment[]): { paymentId: string; method: RefundablePayment['method']; amountMinor: number }[] {
   let left = amountMinor;
-  const out: { paymentId: string; method: 'cash' | 'card'; amountMinor: number }[] = [];
+  const out: { paymentId: string; method: RefundablePayment['method']; amountMinor: number }[] = [];
   for (const p of [...payments].reverse()) {
     if (left === 0) break;
     const take = Math.min(left, p.refundableMinor);

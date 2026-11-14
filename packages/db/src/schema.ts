@@ -323,7 +323,10 @@ export const saleLines = pgTable('sale_lines', {
   tenantId: uuid('tenant_id').notNull(),
   saleId: uuid('sale_id').notNull(),
   position: integer('position').notNull(),
-  variantId: uuid('variant_id').notNull(),
+  /** item: a product. gift_card: selling (or reloading) a gift card, with no product. */
+  kind: text('kind', { enum: ['item', 'gift_card'] }).notNull().default('item'),
+  variantId: uuid('variant_id'),
+  giftCardCode: text('gift_card_code'),
   description: text('description').notNull(),
   sku: text('sku'),
   quantity: integer('quantity').notNull(),
@@ -343,10 +346,11 @@ export const payments = pgTable('payments', {
   id: uuid('id').primaryKey(),
   tenantId: uuid('tenant_id').notNull(),
   saleId: uuid('sale_id').notNull(),
-  method: text('method', { enum: ['cash', 'card'] }).notNull(),
+  method: text('method', { enum: ['cash', 'card', 'gift_card'] }).notNull(),
   status: text('status', { enum: PAYMENT_STATUSES }).notNull(),
   amountMinor: money('amount_minor').notNull(),
   tenderedMinor: money('tendered_minor'),
+  giftCardId: uuid('gift_card_id'),
   changeMinor: money('change_minor'),
   provider: text('provider'),
   providerRef: text('provider_ref'),
@@ -603,6 +607,28 @@ export const loyaltyEntries = pgTable('loyalty_entries', {
   saleId: uuid('sale_id'),
   kind: text('kind', { enum: ['earn', 'redeem', 'adjust'] }).notNull(),
   points: integer('points').notNull(),
+  note: text('note'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+});
+
+export const giftCards = pgTable('gift_cards', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  code: text('code').notNull(),
+  status: text('status', { enum: ['active', 'void'] }).notNull().default('active'),
+  createdAt: createdAt(),
+});
+
+export const giftCardEntries = pgTable('gift_card_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  giftCardId: uuid('gift_card_id').notNull(),
+  kind: text('kind', { enum: ['load', 'redeem', 'refund', 'adjust', 'void'] }).notNull(),
+  amountMinor: money('amount_minor').notNull(),
+  saleId: uuid('sale_id'),
+  paymentId: uuid('payment_id'),
+  refundId: uuid('refund_id'),
   note: text('note'),
   createdBy: uuid('created_by'),
   createdAt: createdAt(),

@@ -20,7 +20,13 @@ const saleBody = z.object({
   id: uuid,
   registerSessionId: uuid,
   lines: z
-    .array(z.object({ variantId: uuid, quantity: z.number().int().min(1).max(10_000), discountMinor: minor.default(0) }))
+    .array(
+      z.union([
+        z.object({ variantId: uuid, quantity: z.number().int().min(1).max(10_000), discountMinor: minor.default(0) }),
+        // Selling a gift card: a new or existing code (to reload), or none to make one up.
+        z.object({ giftCard: z.object({ code: z.string().trim().max(64).optional(), amountMinor: z.number().int().min(1).max(1_000_000) }) }),
+      ]),
+    )
     .min(1)
     .max(200),
   note: z.string().trim().max(500).optional(),
@@ -32,6 +38,7 @@ const rewardBody = z.object({ rewards: z.number().int().min(1).max(100).default(
 const paymentBody = z.discriminatedUnion('method', [
   z.object({ id: uuid, method: z.literal('cash'), tenderedMinor: z.number().int().min(1).max(1_000_000_000_00) }),
   z.object({ id: uuid, method: z.literal('card'), amountMinor: z.number().int().min(1).optional() }),
+  z.object({ id: uuid, method: z.literal('gift_card'), code: z.string().trim().min(1, 'Enter the gift card code').max(64), amountMinor: z.number().int().min(1).optional() }),
 ]);
 
 const simulateBody = z.object({ outcome: z.enum(['approve', 'decline']) });

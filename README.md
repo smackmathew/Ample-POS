@@ -21,6 +21,7 @@ devices and an audit trail.
 | 7 | Subscription billing tied to enabled modules | **Done** |
 | 8 | Customers: profiles, purchase history, receipts to the customer | **Done** |
 | 9 | Loyalty rewards: points on spending, rewards at the register | **Done** |
+| 10 | Gift cards: sell, reload, pay with, refund | **Done** |
 
 Every tool has working screens, and businesses pay only for the tools they turn on.
 
@@ -166,6 +167,32 @@ for what they spend and lets them use the points for money off.
   Loyalty page and can add or take away points with a reason.
 - **Receipts** show the reward as its own row, plus points earned and the
   new balance.
+
+## Gift cards
+
+The **Gift cards** tool ($9/month, needs Point of sale) sells gift cards at the
+register and takes them as payment.
+
+- **Selling** (web register, *Sell a gift card*): add an amount to the sale,
+  with no tax and no discount. Leave the code blank to make up a 16-character
+  code; the receipt shows it. Or scan or type a printed card's code. A code
+  that's already in use reloads that card. The money goes on the card when
+  the sale is paid.
+- **Paying** (web register and register app): enter or scan the code. The
+  card pays what's due, or as much as it holds; the rest can go on another
+  card, cash or a bank card. *Undo* puts the money back while the sale is
+  open, and canceling the sale returns it too.
+- **Refunds** follow the money. Refunding a sale paid by gift card puts the
+  money back on the card. Refunding a gift card purchase takes it off the
+  card, so only money still on it can be refunded.
+- **Balances** live in an append-only ledger (`gift_card_entries`). The
+  register can check a card's balance by code (limited to 30 lookups per 10
+  minutes per person). Managers (`giftcards.manage`) see full codes and
+  history, give out cards without a sale, adjust balances with a reason, and
+  void lost or stolen cards.
+- Gift card purchases don't earn loyalty points (spending the card does), and
+  aren't counted as product sales in reports. Register summaries and the sales
+  report show gift card payments separately.
 
 ## Shopify sync
 

@@ -12,14 +12,15 @@ import { Button, colors, ErrorText, Field, styles } from '@/ui';
 
 /** Takes payment for the sale made from the cart: cash, card, or both. */
 export default function Pay() {
-  const { checkout, saleId, newSale, reopenCart, terminal, newId } = useRegister();
+  const { checkout, saleId, newSale, reopenCart, terminal, newId, giftCardsOn } = useRegister();
   const reader = useTerminal();
   const [sale, setSale] = useState<Sale | null>(null);
   const [tendered, setTendered] = useState('');
+  const [giftCode, setGiftCode] = useState('');
   const [change, setChange] = useState<number | null>(null);
   // Reused after a decline so "Try again" resumes the same card payment.
   const [cardPaymentId, setCardPaymentId] = useState(newId);
-  const [busy, setBusy] = useState<'cash' | 'card' | 'void' | 'reward' | null>(null);
+  const [busy, setBusy] = useState<'cash' | 'card' | 'void' | 'reward' | 'gift' | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -50,7 +51,7 @@ export default function Pay() {
 
   if (sale.status === 'completed') return <Paid sale={sale} change={change} onNewSale={finish} />;
 
-  const run = async (kind: 'cash' | 'card' | 'reward', fn: () => Promise<void>) => {
+  const run = async (kind: 'cash' | 'card' | 'reward' | 'gift', fn: () => Promise<void>) => {
     setBusy(kind);
     setError('');
     try {
@@ -105,6 +106,8 @@ export default function Pay() {
     }
   };
   const nothingTaken = sale.paidMinor === 0;
+  // Gift card payments go back on the card when a sale is canceled; cash and card don't.
+  const canCancel = sale.payments.every((p) => p.status !== 'succeeded' || p.method === 'gift_card');
   const cashMinor = parseMoney(tendered);
 
   return (
@@ -200,6 +203,39 @@ export default function Pay() {
         />
       )}
 
+      {giftCardsOn && (
+        <>
+          <Text style={[styles.label, { marginTop: 8 }]}>GIFT CARD</Text>
+          {sale.payments
+            .filter((p) => p.method === 'gift_card' && p.status === 'succeeded')
+            .map((p) => (
+              <View key={p.id} style={[styles.card, styles.row, { justifyContent: 'space-between' }]}>
+                <Text style={{ flex: 1 }}>
+                  ••••{p.giftCard?.last4}: {money(p.amountMinor)} · {money(p.giftCard?.balanceMinor ?? 0)} left
+                </Text>
+                <Button title="Undo" variant="secondary" disabled={!!busy} onPress={() => run('gift', async () => setSale(await checkout.undoGiftCard(sale.id, p.id)))} />
+              </View>
+            ))}
+          <View style={[styles.row, { alignItems: 'flex-end' }]}>
+            <View style={{ flex: 1 }}>
+              <Field label="Gift card code" value={giftCode} onChangeText={setGiftCode} autoCapitalize="characters" placeholder="ABCD-EFGH-…" />
+            </View>
+            <Button
+              title="Use"
+              variant="secondary"
+              busy={busy === 'gift'}
+              disabled={!!busy || !giftCode.trim() || sale.dueMinor === 0}
+              onPress={() =>
+                run('gift', async () => {
+                  setSale(await checkout.payGiftCard(sale.id, giftCode));
+                  setGiftCode('');
+                })
+              }
+            />
+          </View>
+        </>
+      )}
+
       <Text style={[styles.label, { marginTop: 8 }]}>CASH</Text>
       <View style={[styles.row, { flexWrap: 'wrap' }]}>
         {quickCashAmounts(sale.dueMinor).map((amount) => (
@@ -215,7 +251,7 @@ export default function Pay() {
       {sale.dueMinor === 0 && sale.pendingMinor > 0 && <Text style={styles.muted}>A card payment is in progress. Finish or cancel it first.</Text>}
 
       <View style={{ height: 16 }} />
-      {nothingTaken && (
+      {canCancel && (
         <Button
           title="Edit cart"
           variant="secondary"
@@ -226,7 +262,7 @@ export default function Pay() {
           })}
         />
       )}
-      {nothingTaken && (
+      {canCancel && (
         <Button
           title="Cancel sale"
           variant="danger"

@@ -11,6 +11,7 @@ export const MODULE_IDS = [
   'reporting',
   'customers',
   'loyalty',
+  'gift-cards',
 ] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];
@@ -186,6 +187,17 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'loyalty.manage', description: 'Set up the rewards program and adjust points' }],
     nav: [{ label: 'Loyalty', path: '/loyalty', permission: 'loyalty.manage' }],
     phase: 9,
+    monthlyPriceMinor: 900,
+  },
+  {
+    id: 'gift-cards',
+    name: 'Gift cards',
+    description: 'Sell gift cards at the register and take them as payment.',
+    version: '0.1.0',
+    dependsOn: ['pos'],
+    permissions: [{ key: 'giftcards.manage', description: 'See full gift card codes, adjust balances and void cards' }],
+    nav: [{ label: 'Gift cards', path: '/gift-cards', permission: 'giftcards.manage' }],
+    phase: 10,
     monthlyPriceMinor: 900,
   },
 ];

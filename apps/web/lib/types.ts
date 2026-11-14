@@ -207,13 +207,16 @@ export interface RegisterSummary {
   openedAt: string;
   closedAt: string | null;
   countedCashMinor: number | null;
-  totals: { salesCount: number; grossMinor: number; cashMinor: number; cardMinor: number; cashRefundsMinor: number; expectedCashMinor: number | null };
+  totals: { salesCount: number; grossMinor: number; cashMinor: number; cardMinor: number; giftCardMinor: number; cashRefundsMinor: number; expectedCashMinor: number | null };
   varianceMinor: number | null;
 }
 
 export interface SaleLine {
   id: string;
-  variantId: string;
+  /** gift_card: selling or reloading a gift card (no product, no tax). */
+  kind: 'item' | 'gift_card';
+  variantId: string | null;
+  giftCardCode: string | null;
   description: string;
   sku: string | null;
   quantity: number;
@@ -229,8 +232,10 @@ export interface SaleLine {
 
 export interface SalePayment {
   id: string;
-  method: 'cash' | 'card';
+  method: 'cash' | 'card' | 'gift_card';
   status: 'pending' | 'succeeded' | 'failed' | 'canceled';
+  /** Gift card payments: the card's last 4 and what's left on it now. */
+  giftCard: { id: string; last4: string; status: 'active' | 'void'; balanceMinor: number } | null;
   amountMinor: number;
   tenderedMinor: number | null;
   changeMinor: number | null;
@@ -310,4 +315,24 @@ export interface CustomerSummary {
 export interface Customer extends CustomerSummary {
   note: string | null;
   sales: (Omit<SaleSummary, 'cashier' | 'cashierEmail' | 'customerId' | 'customerName'> & { completedAt: string | null })[];
+}
+
+export interface GiftCardSummary {
+  id: string;
+  code: string;
+  last4: string;
+  status: 'active' | 'void';
+  createdAt: string;
+  balanceMinor: number;
+  lastUsedAt: string | null;
+}
+
+export interface GiftCard {
+  id: string;
+  code: string;
+  last4: string;
+  status: 'active' | 'void';
+  createdAt: string;
+  balanceMinor: number;
+  entries: { id: string; kind: 'load' | 'redeem' | 'refund' | 'adjust' | 'void'; amountMinor: number; note: string | null; saleId: string | null; receiptNumber: number | null; createdAt: string }[];
 }
