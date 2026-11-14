@@ -11,6 +11,7 @@
     "bundle:check": "expo export --platform android --output-dir dist-check --no-minify"
   },
   "dependencies": {
+    "@pos/receipts": "workspace:*",
     "@pos/sync": "workspace:*",
     "@stripe/stripe-terminal-react-native": "0.0.1-beta.33",
     "expo": "54.0.38",
@@ -19,6 +20,7 @@
     "expo-constants": "~18.0.14",
     "expo-crypto": "~15.0.9",
     "expo-linking": "~8.0.12",
+    "expo-print": "~15.0.8",
     "expo-router": "~6.0.24",
     "expo-secure-store": "~15.0.8",
     "expo-sqlite": "~16.0.10",

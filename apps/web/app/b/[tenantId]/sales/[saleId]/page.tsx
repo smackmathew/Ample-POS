@@ -6,7 +6,7 @@ import { formatMoney } from '@/lib/money';
 import { formatPercent } from '@/lib/pricing';
 import { formatDate, formatDateTime, zoneFinder } from '@/lib/time';
 import { can, type CurrentTenant, type Location, type Sale } from '@/lib/types';
-import { refundSale } from '../../sales-actions';
+import { emailReceipt, refundSale } from '../../sales-actions';
 
 export default async function SalePage({ params }: { params: Promise<{ tenantId: string; saleId: string }> }) {
   const { tenantId, saleId } = await params;
@@ -64,6 +64,20 @@ export default async function SalePage({ params }: { params: Promise<{ tenantId:
           ))}
         </dl>
       </div>
+
+      {sale.status !== 'open' && (
+        <section className="card flex flex-wrap items-end gap-3">
+          <a href={`/b/${tenantId}/sales/${sale.id}/receipt?print=1`} target="_blank" rel="noopener" className="btn-secondary">
+            Print receipt
+          </a>
+          {sale.status === 'completed' && (
+            <ActionForm action={emailReceipt.bind(null, tenantId, sale.id)} className="flex flex-1 flex-wrap items-center gap-2">
+              <input name="email" type="email" placeholder="Customer’s email" required className="input min-w-48 flex-1" />
+              <button className="btn-secondary">Email receipt</button>
+            </ActionForm>
+          )}
+        </section>
+      )}
 
       {canRefund && (
         <ActionForm action={refundSale.bind(null, tenantId, sale.id, randomUUID())} className="card space-y-3">

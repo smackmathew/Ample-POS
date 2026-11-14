@@ -1,8 +1,12 @@
+import type { Receipt } from '@pos/receipts';
+import { receiptHtml } from '@pos/receipts';
 import { formatMoney, parseMoney, quickCashAmounts, type CardOutcome, type Sale } from '@pos/sync';
+import * as Print from 'expo-print';
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
 import { useRegister } from '@/register';
+import { useSession } from '@/session';
 import { useTerminal } from '@/terminal';
 import { Button, colors, ErrorText, Field, styles } from '@/ui';
 
@@ -44,25 +48,7 @@ export default function Pay() {
     router.dismissTo('/register');
   };
 
-  if (sale.status === 'completed') {
-    return (
-      <ScrollView contentContainerStyle={[styles.screen, { alignItems: 'stretch' }]}>
-        <Stack.Screen options={{ title: 'Paid', headerBackVisible: false, gestureEnabled: false }} />
-        <View style={[styles.card, { alignItems: 'center', gap: 6, paddingVertical: 28 }]}>
-          <Text style={{ fontSize: 16, color: colors.muted }}>Receipt #{sale.receiptNumber}</Text>
-          <Text style={{ fontSize: 32, fontWeight: '700', color: colors.brand }}>{money(sale.totalMinor)}</Text>
-          <Text style={styles.muted}>Paid in full</Text>
-        </View>
-        {change !== null && change > 0 && (
-          <View style={[styles.card, { alignItems: 'center', gap: 4 }]}>
-            <Text style={styles.muted}>Change due</Text>
-            <Text style={{ fontSize: 40, fontWeight: '700' }}>{money(change)}</Text>
-          </View>
-        )}
-        <Button title="New sale" onPress={finish} />
-      </ScrollView>
-    );
-  }
+  if (sale.status === 'completed') return <Paid sale={sale} change={change} onNewSale={finish} />;
 
   const run = async (kind: 'cash' | 'card', fn: () => Promise<void>) => {
     setBusy(kind);
@@ -226,5 +212,68 @@ function Line({ label, value, bold }: { label: string; value: string; bold?: boo
       <Text style={bold ? { fontWeight: '700', fontSize: 16 } : styles.muted}>{label}</Text>
       <Text style={bold ? { fontWeight: '700', fontSize: 16 } : undefined}>{value}</Text>
     </View>
+  );
+}
+
+/** After payment: change due, then the receipt, printed or emailed. */
+function Paid({ sale, change, onNewSale }: { sale: Sale; change: number | null; onNewSale: () => void }) {
+  const { api } = useSession();
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState<'print' | 'email' | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const money = (minor: number) => formatMoney(minor, sale.currency);
+
+  const print = async () => {
+    setBusy('print');
+    setNote(null);
+    try {
+      const receipt = await api.get<Receipt>(`/sales/${sale.id}/receipt`);
+      // The phone's own print service: AirPrint on iOS, Android printing (most receipt printers support one).
+      await Print.printAsync({ html: receiptHtml(receipt) });
+    } catch (err) {
+      setNote({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const send = async () => {
+    setBusy('email');
+    setNote(null);
+    try {
+      await api.post(`/sales/${sale.id}/receipt/email`, { email: email.trim() });
+      setNote({ ok: true, text: `Receipt sent to ${email.trim()}` });
+      setEmail('');
+    } catch (err) {
+      setNote({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={[styles.screen, { alignItems: 'stretch' }]} keyboardShouldPersistTaps="handled">
+      <Stack.Screen options={{ title: 'Paid', headerBackVisible: false, gestureEnabled: false }} />
+      <View style={[styles.card, { alignItems: 'center', gap: 6, paddingVertical: 28 }]}>
+        <Text style={{ fontSize: 16, color: colors.muted }}>Receipt #{sale.receiptNumber}</Text>
+        <Text style={{ fontSize: 32, fontWeight: '700', color: colors.brand }}>{money(sale.totalMinor)}</Text>
+        <Text style={styles.muted}>Paid in full</Text>
+      </View>
+      {change !== null && change > 0 && (
+        <View style={[styles.card, { alignItems: 'center', gap: 4 }]}>
+          <Text style={styles.muted}>Change due</Text>
+          <Text style={{ fontSize: 40, fontWeight: '700' }}>{money(change)}</Text>
+        </View>
+      )}
+      <Button title="Print receipt" variant="secondary" onPress={print} busy={busy === 'print'} disabled={busy !== null} />
+      <View style={[styles.row, { alignItems: 'flex-end' }]}>
+        <View style={{ flex: 1 }}>
+          <Field label="Email receipt" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" placeholder="customer@example.com" />
+        </View>
+        <Button title="Send" variant="secondary" onPress={send} busy={busy === 'email'} disabled={busy !== null || !email.includes('@')} />
+      </View>
+      {note && <Text style={{ color: note.ok ? colors.brand : colors.danger }}>{note.text}</Text>}
+      <Button title="New sale" onPress={onNewSale} />
+    </ScrollView>
   );
 }

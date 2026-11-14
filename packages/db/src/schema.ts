@@ -22,8 +22,16 @@ export const tenants = pgTable('tenants', {
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   currency: text('currency').notNull().default('USD'),
+  /** Printed on every receipt; empty fields are left off. */
+  receiptSettings: jsonb('receipt_settings').$type<ReceiptSettings>().notNull().default({}),
   createdAt: createdAt(),
 });
+
+export interface ReceiptSettings {
+  footer?: string;
+  phone?: string;
+  website?: string;
+}
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),

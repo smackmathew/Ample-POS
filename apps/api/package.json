@@ -16,6 +16,7 @@
     "@nestjs/platform-express": "11.2.7",
     "@pos/db": "workspace:*",
     "@pos/modules": "workspace:*",
+    "@pos/receipts": "workspace:*",
     "drizzle-orm": "0.45.4",
     "jose": "5.10.0",
     "reflect-metadata": "0.2.2",

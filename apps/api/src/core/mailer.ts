@@ -20,7 +20,7 @@ export class Mailer {
     return Boolean(this.config.RESEND_API_KEY) || this.config.EMAIL_DEV_LOG === 'true';
   }
 
-  async send(to: string, subject: string, text: string): Promise<void> {
+  async send(to: string, subject: string, text: string, html?: string): Promise<void> {
     if (!this.config.RESEND_API_KEY) {
       this.logger.log(`[dev email] to ${to}: ${subject}\n${text}`);
       return;
@@ -28,7 +28,7 @@ export class Mailer {
     const res = await this.fetchImpl('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.config.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: this.config.EMAIL_FROM, to: [to], subject, text }),
+      body: JSON.stringify({ from: this.config.EMAIL_FROM, to: [to], subject, text, ...(html ? { html } : {}) }),
     });
     if (!res.ok) {
       this.logger.error(`Email to ${to.replace(/^(.).*(@.*)$/, '$1…$2')} failed: ${res.status} ${await res.text().catch(() => '')}`);
