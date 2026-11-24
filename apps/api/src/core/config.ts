@@ -29,6 +29,8 @@ const schema = z
     PAYMENTS_PROVIDER: z.enum(['simulated', 'stripe']).default('simulated'),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    /** Signing secret of the Connect webhook endpoint (/api/webhooks/stripe-connect): Express accounts' events. */
+    STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
     /** Connect account to charge on behalf of (per-business accounts come later). */
     STRIPE_ACCOUNT: z.string().optional(),
     /** simulated: subscriptions start at once with no charge. stripe: Checkout and the customer portal on Ample POS's Stripe account. */

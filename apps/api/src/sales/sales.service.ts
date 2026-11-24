@@ -16,7 +16,8 @@ import { currentContext, currentTenant, currentUserId } from '../core/request-co
 import { LedgerService } from '../inventory/ledger.service';
 import { formatCode, GIFT_CARD_MAX_MINOR, GiftCardService, last4 } from '../gift-cards/gift-cards.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
-import { CARD_PROVIDER, ProviderUnavailableError, type CardPaymentProvider, type ProviderPayment } from '../payments/provider';
+import { CardProviders } from '../payments/card-providers';
+import { ProviderUnavailableError, type ProviderPayment } from '../payments/provider';
 import { SimulatedCardProvider } from '../payments/simulated.provider';
 import { allocateProportionally, allocateRefund, priceLine, refundAmountForLine, sumPrices } from './pricing';
 
@@ -63,12 +64,12 @@ export class SalesService {
     private readonly ledger: LedgerService,
     private readonly loyalty: LoyaltyService,
     private readonly giftCards: GiftCardService,
-    @Inject(CARD_PROVIDER) private readonly provider: CardPaymentProvider,
+    private readonly cards: CardProviders,
   ) {}
 
-  /** Which card processor is configured, so registers can offer the simulator. */
-  get providerName(): string {
-    return this.provider.name;
+  /** Which card processor this business uses ("none" until set up), so registers can offer the simulator. */
+  async providerName(): Promise<string> {
+    return (await this.cards.current()).provider?.name ?? 'none';
   }
 
   // Register sessions --------------------------------------------------------
@@ -414,7 +415,7 @@ export class SalesService {
       // A retry after a lost response still needs the secret to drive the reader.
       const clientSecret =
         existing.method === 'card' && existing.status === 'pending' && existing.providerRef
-          ? (await this.callProvider(() => this.provider.retrieve(existing.providerRef!))).clientSecret
+          ? (await this.callProvider(async () => (await this.cards.forPayment(existing)).retrieve(existing.providerRef!))).clientSecret
           : null;
       return { payment: existing, clientSecret, sale: await this.getSale(saleId) };
     }
@@ -471,9 +472,12 @@ export class SalesService {
 
     const amount = input.amountMinor ?? due;
     if (amount < 1 || amount > due) throw new BadRequestException(`Card amount must be between 0.01 and the ${due} due`);
+    const setup = await this.cards.current();
+    if (!setup.provider) throw new ConflictException({ code: 'card_payments_not_set_up', message: setup.message });
+    const provider = setup.provider;
     // The payment id doubles as the provider idempotency key: a retried request reuses the same intent.
     const intent = await this.callProvider(() =>
-      this.provider.createCardPayment({
+      provider.createCardPayment({
         amountMinor: amount,
         currency: sale.currency,
         idempotencyKey: input.id,
@@ -487,7 +491,8 @@ export class SalesService {
         method: 'card',
         status: intent.status === 'canceled' ? 'canceled' : intent.status,
         amountMinor: amount,
-        provider: this.provider.name,
+        provider: provider.name,
+        providerAccount: provider.account ?? null,
         providerRef: intent.ref,
         lastError: intent.error,
       })
@@ -501,7 +506,7 @@ export class SalesService {
     const sale = await this.lockSale(saleId);
     const payment = await this.findPayment(saleId, paymentId);
     if (payment.method === 'card' && payment.status === 'pending' && payment.providerRef) {
-      await this.applyProviderState(sale, payment, await this.callProvider(() => this.provider.retrieve(payment.providerRef!)));
+      await this.applyProviderState(sale, payment, await this.callProvider(async () => (await this.cards.forPayment(payment)).retrieve(payment.providerRef!)));
     }
     return this.getSale(saleId);
   }
@@ -516,7 +521,7 @@ export class SalesService {
     }
     if (payment.method !== 'card') throw new BadRequestException('Cash payments cannot be canceled; refund the sale instead');
     if (payment.status === 'pending') {
-      const state = await this.callProvider(() => this.provider.cancel(payment.providerRef!));
+      const state = await this.callProvider(async () => (await this.cards.forPayment(payment)).cancel(payment.providerRef!));
       await this.applyProviderState(sale, payment, state);
       if (state.status === 'succeeded') throw new ConflictException({ message: 'The card payment had already gone through', sale: await this.getSale(saleId) });
     }
@@ -525,10 +530,11 @@ export class SalesService {
 
   /** Development only: pretend the customer tapped a card on the simulated reader. */
   async simulateCardPresent(saleId: string, paymentId: string, outcome: 'approve' | 'decline') {
-    if (!(this.provider instanceof SimulatedCardProvider)) throw new NotFoundException();
     const payment = await this.findPayment(saleId, paymentId);
+    const provider = await this.cards.forPayment(payment);
+    if (!(provider instanceof SimulatedCardProvider)) throw new NotFoundException();
     if (!payment.providerRef) throw new BadRequestException('Not a card payment');
-    this.provider.present(payment.providerRef, outcome);
+    provider.present(payment.providerRef, outcome);
     return this.syncPayment(saleId, paymentId);
   }
 
@@ -537,7 +543,7 @@ export class SalesService {
     const [payment] = await this.db.tx
       .select()
       .from(schema.payments)
-      .where(and(eq(schema.payments.provider, this.provider.name), eq(schema.payments.providerRef, ref)));
+      .where(and(eq(schema.payments.provider, 'stripe'), eq(schema.payments.providerRef, ref)));
     if (!payment) return null;
     return this.syncPayment(payment.saleId, payment.id);
   }
@@ -548,7 +554,7 @@ export class SalesService {
     if (sale.status !== 'open') throw new ConflictException('Completed sales are refunded, not voided');
     const payments = await this.db.tx.select().from(schema.payments).where(eq(schema.payments.saleId, id));
     for (const p of payments.filter((p) => p.status === 'pending' && p.providerRef)) {
-      const state = await this.callProvider(() => this.provider.cancel(p.providerRef!));
+      const state = await this.callProvider(async () => (await this.cards.forPayment(p)).cancel(p.providerRef!));
       await this.applyProviderState(sale, p, state);
     }
     // Gift card money goes straight back on the card.
@@ -652,7 +658,7 @@ export class SalesService {
       }
       const payment = current.payments.find((p) => p.id === a.paymentId)!;
       const result = await this.callProvider(() =>
-        this.provider.refund({ ref: payment.providerRef!, amountMinor: a.amountMinor, idempotencyKey: `${input.id}:${a.paymentId}` }),
+        this.cards.forPayment(payment).then((p) => p.refund({ ref: payment.providerRef!, amountMinor: a.amountMinor, idempotencyKey: `${input.id}:${a.paymentId}` })),
       );
       if (result.status === 'failed') {
         // Nothing has been recorded yet (the transaction rolls back), so the refund can be retried or done another way.

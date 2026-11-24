@@ -112,8 +112,12 @@ export class PlatformAdminController {
       const [users] = await tx.execute<{ active: string; total: string }>(sql`
         select count(*) filter (where last_seen_at >= now() - interval '7 days') as active, count(*) as total from users`);
       const issues = await this.findIssues(tx);
+      const merchants = await tx.execute<{ mode: string; count: string }>(sql`
+        select case when mode = 'platform' and not charges_enabled then 'pending' else mode end as mode, count(*) as count
+        from merchant_accounts group by 1`);
       return {
         days: q.days,
+        merchants: Object.fromEntries(merchants.map((m) => [m.mode, n(m.count)])),
         companies: {
           total: tenants.length,
           new: tenants.filter((t) => new Date(t.created_at).getTime() >= Date.now() - q.days * 86_400_000).length,
@@ -137,13 +141,14 @@ export class PlatformAdminController {
     return this.platform.run(async (tx) => {
       const like = q.search ? `%${q.search.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
       const rows = await tx.execute<
-        { id: string; name: string; slug: string; created_at: Date; suspended_at: Date | null; suspended_reason: string | null; owner_email: string | null; tools: string; locations: string; members: string; sales30: string; gross30: string; last_activity: Date | null } & BillingRow
+        { id: string; name: string; slug: string; created_at: Date; suspended_at: Date | null; suspended_reason: string | null; owner_email: string | null; tools: string; merchant: string | null; locations: string; members: string; sales30: string; gross30: string; last_activity: Date | null } & BillingRow
       >(sql`
         select t.id, t.name, t.slug, t.created_at, t.suspended_at, t.suspended_reason,
                b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items,
                (select u.email from memberships m join roles r on r.id = m.role_id join users u on u.id = m.user_id
                  where m.tenant_id = t.id and r.key = 'owner' order by m.created_at limit 1) as owner_email,
                (select count(*) from tenant_modules tm where tm.tenant_id = t.id and tm.enabled) as tools,
+               (select ma.mode || case when ma.mode = 'platform' and not ma.charges_enabled then ':pending' else '' end from merchant_accounts ma where ma.tenant_id = t.id) as merchant,
                (select count(*) from locations l where l.tenant_id = t.id and l.archived_at is null) as locations,
                (select count(*) from memberships m where m.tenant_id = t.id and m.status = 'active') as members,
                (select count(*) from sales s where s.tenant_id = t.id and s.status = 'completed' and s.completed_at >= now() - interval '30 days') as sales30,
@@ -166,6 +171,8 @@ export class PlatformAdminController {
           trialEndsAt: r.trial_ends_at,
           mrrMinor: r.trial_ends_at ? mrrOf(r) : 0,
           toolsOn: n(r.tools),
+          // off, platform, platform:pending (onboarding not finished) or own
+          merchant: r.merchant ?? 'off',
           locations: n(r.locations),
           members: n(r.members),
           sales30: n(r.sales30),
@@ -241,6 +248,25 @@ export class PlatformAdminController {
       await tx.update(schema.tenants).set({ suspendedAt: null, suspendedReason: null }).where(eq(schema.tenants.id, id));
       await this.tenantEvent(tx, id, admin, 'business.restored', { type: 'tenant', id }, {});
       await this.log(tx, admin, 'company.restored', id, {});
+      return this.companyDetail(tx, id);
+    });
+  }
+
+  /** Stops a business taking card payments (e.g. while a risk problem is looked at). It can set them up again. */
+  @Post('companies/:id/card-payments/off')
+  @HttpCode(200)
+  async cardPaymentsOff(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(suspendBody)) body: z.infer<typeof suspendBody>) {
+    const admin = await this.access.require();
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const updated = await tx
+        .update(schema.merchantAccounts)
+        .set({ mode: 'off', updatedAt: new Date() })
+        .where(eq(schema.merchantAccounts.tenantId, id))
+        .returning({ tenantId: schema.merchantAccounts.tenantId });
+      if (!updated.length) throw new ConflictException('This business hasn’t set up card payments');
+      await this.tenantEvent(tx, id, admin, 'payments.merchant_off', { type: 'merchant', id }, { reason: body.reason });
+      await this.log(tx, admin, 'company.card_payments_off', id, { reason: body.reason });
       return this.companyDetail(tx, id);
     });
   }
@@ -419,6 +445,25 @@ export class PlatformAdminController {
     const [tenant] = await tx.select().from(schema.tenants).where(eq(schema.tenants.id, id));
     if (!tenant) throw new NotFoundException('Business not found');
     const [billing] = await tx.select().from(schema.tenantBilling).where(eq(schema.tenantBilling.tenantId, id));
+    // Only these columns are readable here; the business's keys never are.
+    const ma = schema.merchantAccounts;
+    const [merchant] = await tx
+      .select({
+        mode: ma.mode,
+        connectAccountId: ma.connectAccountId,
+        ownAccountId: ma.ownAccountId,
+        chargesEnabled: ma.chargesEnabled,
+        payoutsEnabled: ma.payoutsEnabled,
+        detailsSubmitted: ma.detailsSubmitted,
+        requirementsDue: ma.requirementsDue,
+        disabledReason: ma.disabledReason,
+        businessName: ma.businessName,
+        livemode: ma.livemode,
+        statusSyncedAt: ma.statusSyncedAt,
+        updatedAt: ma.updatedAt,
+      })
+      .from(ma)
+      .where(eq(ma.tenantId, id));
     const own = new Map((await tx.select().from(schema.tenantModules).where(eq(schema.tenantModules.tenantId, id))).map((r) => [r.moduleId, r]));
     const catalog = new Map((await this.toolCatalog(tx)).map((t) => [t.id, t]));
     const members = await tx.execute<{ id: string; name: string | null; email: string | null; role: string; status: string; last_seen_at: Date; joined_at: Date }>(sql`
@@ -462,6 +507,7 @@ export class PlatformAdminController {
             mrrMinor: mrrOf(billingRow),
           }
         : null,
+      merchant: merchant ?? null,
       tools: MODULES.map((m) => {
         const row = own.get(m.id);
         const platform = catalog.get(m.id)!;
@@ -534,6 +580,13 @@ export class PlatformAdminController {
         select 'sync-issues:' || s.tenant_id, s.tenant_id, t.name, 'medium', count(*) || case when count(*) = 1 then ' store sync problem' else ' store sync problems' end || ' to resolve', min(s.message), min(s.created_at)
           from sync_issues s join tenants t on t.id = s.tenant_id where s.resolved_at is null
          group by s.tenant_id, t.name
+        union all
+        select 'merchant:' || m.tenant_id, m.tenant_id, t.name, case when m.disabled_reason is not null then 'high' else 'medium' end,
+               'Card payments not ready: Stripe needs information',
+               coalesce('Stripe: ' || m.disabled_reason || '. ', '') || 'Due: ' || (select string_agg(x, ', ') from jsonb_array_elements_text(m.requirements_due) x),
+               coalesce(m.status_synced_at, m.updated_at)
+          from merchant_accounts m join tenants t on t.id = m.tenant_id
+         where m.mode = 'platform' and (not m.charges_enabled or jsonb_array_length(m.requirements_due) > 0)
         union all
         select 'register-open:' || r.id, r.tenant_id, t.name, 'low', 'Register open for over a day', l.name, r.opened_at
           from register_sessions r join tenants t on t.id = r.tenant_id join locations l on l.id = r.location_id

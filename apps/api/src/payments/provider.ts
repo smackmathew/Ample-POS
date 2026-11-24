@@ -32,6 +32,8 @@ export interface TerminalReaders {
 
 export interface CardPaymentProvider {
   readonly name: string;
+  /** The processor account payments go to (a Stripe account id), when not the platform's own. */
+  readonly account?: string | null;
   /** Present when card readers connect from the register app. Absent for the simulated processor. */
   readonly terminal?: TerminalReaders;
   createCardPayment(input: {

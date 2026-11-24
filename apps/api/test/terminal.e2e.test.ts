@@ -41,7 +41,7 @@ describe('card readers with Stripe Terminal', () => {
 
   beforeAll(async () => {
     app = await createTestApp({
-      env: { PAYMENTS_PROVIDER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: 'whsec_x' },
+      env: { PAYMENTS_PROVIDER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: 'whsec_x', STRIPE_ACCOUNT: 'acct_platform' },
       providers: [[CARD_PROVIDER, new StripeCardProvider('sk_test_fake', { fetch: stripe.impl })]],
     });
   });

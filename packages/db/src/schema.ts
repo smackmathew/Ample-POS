@@ -358,6 +358,8 @@ export const payments = pgTable('payments', {
   amountMinor: money('amount_minor').notNull(),
   tenderedMinor: money('tendered_minor'),
   giftCardId: uuid('gift_card_id'),
+  /** The Stripe account that took a card payment (null: the platform's own account, or simulated). */
+  providerAccount: text('provider_account'),
   changeMinor: money('change_minor'),
   provider: text('provider'),
   providerRef: text('provider_ref'),
@@ -718,4 +720,28 @@ export const platformAudit = pgTable('platform_audit', {
   tenantId: uuid('tenant_id'),
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: createdAt(),
+});
+
+export const MERCHANT_MODES = ['off', 'platform', 'own'] as const;
+export type MerchantMode = (typeof MERCHANT_MODES)[number];
+
+export const merchantAccounts = pgTable('merchant_accounts', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  mode: text('mode', { enum: MERCHANT_MODES }).notNull().default('off'),
+  connectAccountId: text('connect_account_id'),
+  ownAccountId: text('own_account_id'),
+  /** Sealed with SECRETS_KEY. */
+  ownSecretKey: text('own_secret_key'),
+  ownWebhookSecret: text('own_webhook_secret'),
+  chargesEnabled: boolean('charges_enabled').notNull().default(false),
+  payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
+  detailsSubmitted: boolean('details_submitted').notNull().default(false),
+  requirementsDue: jsonb('requirements_due').$type<string[]>().notNull().default([]),
+  disabledReason: text('disabled_reason'),
+  businessName: text('business_name'),
+  livemode: boolean('livemode'),
+  statusSyncedAt: timestamp('status_synced_at', { withTimezone: true }),
+  updatedBy: uuid('updated_by'),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

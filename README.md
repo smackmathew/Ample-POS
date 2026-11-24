@@ -431,6 +431,45 @@ field) to an address the phone can reach, such as your machine's LAN IP.
   hours, but only for members who belong to no other business, so one business
   can never take over an account used elsewhere. Resetting signs out every device.
 
+## Card payments (merchant setup)
+
+Each business chooses how it takes cards on **Point of sale → Card payments**
+(owners only, `pos.payments.manage`). Cash and gift cards work without either.
+
+- **Ample POS payments (built-in):**
+  - A Stripe **Express** account under the platform's Stripe account (Stripe
+    Connect). *Set up with Stripe* creates the account and sends the owner to
+    Stripe's hosted form (business details, bank account, ID check).
+  - When they come back, or when Stripe sends `account.updated` to the Connect
+    webhook, the status is re-read from Stripe. Card payments start once
+    Stripe enables charges.
+  - Payments are direct charges on the business's account (`Stripe-Account`
+    header), so money goes straight to them and they pay Stripe's fees.
+    **Ample POS takes no fee.**
+  - *Payouts and balance* opens their Express dashboard.
+- **Their own Stripe account:**
+  - The owner pastes a secret or restricted key. It's checked with Stripe,
+    stored encrypted with `SECRETS_KEY`, and never shown again.
+  - Optionally they add a webhook in their own Stripe at
+    `/api/webhooks/stripe/merchant/<business id>` with its signing secret.
+- **Who gets the money:** a business that hasn't set up takes no cards with
+  `PAYMENTS_PROVIDER=stripe`, so nothing lands in the platform account. The
+  older `STRIPE_ACCOUNT` setting still sends everyone to one account. In
+  development (`simulated`), businesses without a setup keep the simulator.
+- **Refunds:** every card payment records the Stripe account that took it, so
+  refunds and checks go back through that account even after the business
+  switches setups. Each account also gets its own Stripe Terminal record of
+  each store, for card readers.
+- **Super admin:** the dashboard shows each company's setup (mode, account,
+  whether Stripe lets it charge and pay out, what Stripe still needs, but never
+  keys). It flags onboarding that's stuck or accounts Stripe disabled, and can
+  switch a company's card payments off with a reason.
+
+Platform settings: `STRIPE_SECRET_KEY` (with Connect enabled on that
+account), `STRIPE_WEBHOOK_SECRET`, and `STRIPE_CONNECT_WEBHOOK_SECRET` for a
+Connect webhook at `/api/webhooks/stripe-connect` listening to
+`account.updated` and `payment_intent.*`.
+
 ## Super admin dashboard
 
 `/platform` is for Ample POS staff: everyone whose email is in
@@ -439,7 +478,7 @@ account's email must be confirmed and two-step sign-in turned on, because
 the dashboard can switch off any business. Admins get a *Super admin* button
 on the *Your businesses* page.
 
-- **Overview:** monthly recurring revenue, companies by billing standing,
+- **Overview:** card setups (built-in, onboarding, own Stripe), monthly recurring revenue, companies by billing standing,
   sales processed across all companies per day (with signups), how customers
   paid, the busiest companies and open issues, over 7, 30 or 90 days.
 - **Companies:** search by name, link or member email, and filter by trial,

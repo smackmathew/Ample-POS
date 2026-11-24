@@ -76,7 +76,7 @@ export class RegistersController {
   @RequirePermission('pos.sell')
   @Get('sessions/current')
   async current() {
-    return { session: await this.sales.currentRegister(), paymentsProvider: this.sales.providerName };
+    return { session: await this.sales.currentRegister(), paymentsProvider: await this.sales.providerName() };
   }
 
   /** Managers see every register; cashiers see the ones they opened. */

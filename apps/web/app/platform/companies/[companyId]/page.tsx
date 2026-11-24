@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { METHOD, SEVERITY, STANDING, usd, utc, type ActivityEntry, type Company, type Transaction } from '@/lib/platform';
-import { restoreCompany, suspendCompany } from '../../actions';
+import { cardPaymentsOff, restoreCompany, suspendCompany } from '../../actions';
 import { ToolRow } from './tool-row';
 
 export default async function CompanyPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ before?: string }> }) {
@@ -76,6 +76,37 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="card space-y-2">
+        <h2 className="font-medium">Card payments (merchant setup)</h2>
+        {!c.merchant || c.merchant.mode === 'off' ? (
+          <p className="text-sm text-stone-600">
+            Not taking cards.
+            {c.merchant?.connectAccountId && ` Built-in account ${c.merchant.connectAccountId} is kept for when they turn cards back on.`}
+          </p>
+        ) : (
+          <div className="grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
+            <p>
+              Setup: <strong>{c.merchant.mode === 'platform' ? 'Built-in (Stripe Express)' : 'Their own Stripe account'}</strong>
+            </p>
+            <p>
+              Account: <code className="text-xs">{c.merchant.mode === 'platform' ? c.merchant.connectAccountId : c.merchant.ownAccountId}</code>
+              {c.merchant.livemode === false && <span className="ml-1 text-xs text-amber-700">test mode</span>}
+            </p>
+            <p>Taking cards: {c.merchant.chargesEnabled ? 'yes' : <strong className="text-red-700">no</strong>}</p>
+            <p>Payouts: {c.merchant.payoutsEnabled ? 'yes' : 'not yet'}</p>
+            {c.merchant.businessName && <p>Name at Stripe: {c.merchant.businessName}</p>}
+            {c.merchant.requirementsDue.length > 0 && <p className="sm:col-span-2">Stripe needs: {c.merchant.requirementsDue.join(', ')}</p>}
+            <p className="text-xs text-stone-500 sm:col-span-2">Status from Stripe {c.merchant.statusSyncedAt ? utc(c.merchant.statusSyncedAt) : 'not checked yet'}</p>
+          </div>
+        )}
+        {c.merchant && c.merchant.mode !== 'off' && (
+          <ActionForm action={cardPaymentsOff.bind(null, c.id)} className="flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+            <input name="reason" placeholder="Reason (shown in their activity log)" required className="input max-w-sm" />
+            <button className="btn-secondary text-red-700">Turn off their card payments</button>
+          </ActionForm>
+        )}
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">

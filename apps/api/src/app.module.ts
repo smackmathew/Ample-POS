@@ -29,6 +29,10 @@ import { ShopifyController, ShopifyWebhookController } from './integrations/shop
 import { ShopifyJobs } from './integrations/shopify/shopify.jobs';
 import { ShopifySyncService } from './integrations/shopify/shopify-sync.service';
 import { CARD_PROVIDER } from './payments/provider';
+import { CardProviders } from './payments/card-providers';
+import { MERCHANT_CONNECT, SimulatedConnect, STRIPE_FETCH, StripeConnect, type MerchantConnect } from './payments/connect';
+import { MerchantController } from './payments/merchant.controller';
+import { MerchantService } from './payments/merchant.service';
 import { ReceiptsController } from './sales/receipts.controller';
 import { TerminalController } from './terminal/terminal.controller';
 import { BillingController, BillingWebhookController } from './billing/billing.controller';
@@ -72,6 +76,7 @@ export class AppModule {
         TwoFactorController,
         TenantController,
         CustomersController,
+        MerchantController,
         PlatformAdminController,
         LoyaltyController,
         GiftCardsController,
@@ -127,13 +132,23 @@ export class AppModule {
         BillingJobs,
         { provide: SECRET_BOX, useFactory: () => (config.SECRETS_KEY ? new SecretBox(config.SECRETS_KEY) : null) },
         { provide: SHOPIFY_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
+        { provide: STRIPE_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         {
           provide: CARD_PROVIDER,
-          useFactory: () =>
+          inject: [STRIPE_FETCH],
+          useFactory: (stripeFetch: typeof fetch) =>
             config.PAYMENTS_PROVIDER === 'stripe'
-              ? new StripeCardProvider(config.STRIPE_SECRET_KEY!, { account: config.STRIPE_ACCOUNT })
+              ? new StripeCardProvider(config.STRIPE_SECRET_KEY!, { account: config.STRIPE_ACCOUNT, fetch: stripeFetch })
               : new SimulatedCardProvider(),
         },
+        {
+          provide: MERCHANT_CONNECT,
+          inject: [STRIPE_FETCH],
+          useFactory: (stripeFetch: typeof fetch): MerchantConnect =>
+            config.PAYMENTS_PROVIDER === 'stripe' ? new StripeConnect(config.STRIPE_SECRET_KEY!, stripeFetch) : new SimulatedConnect(new StripeConnect('', stripeFetch)),
+        },
+        CardProviders,
+        MerchantService,
         {
           provide: BILLING_PROVIDER,
           useFactory: () =>

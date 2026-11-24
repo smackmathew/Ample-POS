@@ -276,7 +276,7 @@ describe('Stripe webhooks', () => {
   it('completes the sale when Stripe reports the payment succeeded', async () => {
     const stripe = fakeStripe();
     const stripeApp = await createTestApp({
-      env: { PAYMENTS_PROVIDER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: secret },
+      env: { PAYMENTS_PROVIDER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: secret, STRIPE_ACCOUNT: 'acct_platform' },
       providers: [[CARD_PROVIDER, new StripeCardProvider('sk_test_fake', { fetch: stripe.impl })]],
     });
     try {

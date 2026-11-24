@@ -28,6 +28,8 @@ export interface Overview {
   topCompanies: { id: string; name: string; grossMinor: number; sales: number }[];
   users: { activeLast7Days: number; total: number };
   issues: { total: number; high: number };
+  /** Companies by card setup: platform, pending (onboarding), own, off. */
+  merchants: Record<string, number>;
 }
 
 export interface CompanyRow {
@@ -42,6 +44,7 @@ export interface CompanyRow {
   trialEndsAt: string | null;
   mrrMinor: number;
   toolsOn: number;
+  merchant: 'off' | 'platform' | 'platform:pending' | 'own';
   locations: number;
   members: number;
   sales30: number;
@@ -80,6 +83,20 @@ export interface Company {
     mrrMinor: number;
   } | null;
   tools: CompanyTool[];
+  merchant: {
+    mode: 'off' | 'platform' | 'own';
+    connectAccountId: string | null;
+    ownAccountId: string | null;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+    requirementsDue: string[];
+    disabledReason: string | null;
+    businessName: string | null;
+    livemode: boolean | null;
+    statusSyncedAt: string | null;
+    updatedAt: string;
+  } | null;
   members: { id: string; name: string | null; email: string | null; role: string; status: string; lastSeenAt: string; joinedAt: string }[];
   locations: { id: string; name: string; timezone: string; archivedAt: string | null }[];
   stats: { sales30: number; gross30Minor: number; refunds30Minor: number; devices: number; customers: number; products: number; tenders30: Record<string, number> };
@@ -147,6 +164,13 @@ export const SEVERITY: Record<Severity, string> = {
   high: 'bg-red-50 text-red-800',
   medium: 'bg-amber-50 text-amber-800',
   low: 'bg-stone-100 text-stone-700',
+};
+
+export const MERCHANT: Record<string, [string, string]> = {
+  off: ['No cards', 'text-stone-400'],
+  platform: ['Built-in', 'text-teal-700'],
+  'platform:pending': ['Built-in, onboarding', 'text-amber-700'],
+  own: ['Own Stripe', 'text-sky-700'],
 };
 
 export const METHOD: Record<string, string> = { cash: 'Cash', card: 'Card', gift_card: 'Gift card' };
