@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { schema, type BilledItem } from '@pos/db';
-import { billableModules, MODULES } from '@pos/modules';
+import { MODULES } from '@pos/modules';
 import { count, eq, isNull } from 'drizzle-orm';
 import { APP_CONFIG, type AppConfig } from '../core/config';
 import { Db } from '../core/database';
@@ -10,6 +10,7 @@ import { currentContext, currentTenant } from '../core/request-context';
 import { ProviderUnavailableError } from '../payments/provider';
 import { StripeApiError } from '../payments/stripe.provider';
 import { enabledModuleIds } from '../platform/modules.controller';
+import { compedTools, toolSettings } from '../core/tool-settings';
 import { BILLING_PROVIDER, OPEN_STATUSES, sameItems, type BillingProvider, type ProviderSubscription } from './provider';
 import { standing } from './standing';
 
@@ -35,13 +36,21 @@ export class BillingService {
     return row;
   }
 
-  /** Each enabled paid tool, billed once per active location (at least one). */
+  /**
+   * Each enabled paid tool, billed once per active location (at least one), at
+   * its current price. Tools a platform admin made free aren't billed.
+   */
   async desiredItems(): Promise<BilledItem[]> {
     const [{ locations }] = (await this.db.tx.select({ locations: count() }).from(schema.locations).where(isNull(schema.locations.archivedAt))) as [
       { locations: number },
     ];
     const quantity = Math.max(1, Number(locations));
-    return billableModules(await enabledModuleIds(this.db)).map((m) => ({ moduleId: m.id, quantity }));
+    const [enabled, comped, settings] = await Promise.all([enabledModuleIds(this.db), compedTools(this.db.tx), toolSettings(this.db.tx)]);
+    return MODULES.filter((m) => enabled.has(m.id) && !comped.has(m.id) && settings.get(m.id)!.priceMinor > 0).map((m) => ({
+      moduleId: m.id,
+      quantity,
+      unitMinor: settings.get(m.id)!.priceMinor,
+    }));
   }
 
   async summary() {
@@ -60,10 +69,11 @@ export class BillingService {
       // What the next bill is based on, from the tools that are on right now.
       lines: items.map((i) => {
         const mod = MODULES.find((m) => m.id === i.moduleId)!;
-        return { moduleId: i.moduleId, name: mod.name, unitMinor: mod.monthlyPriceMinor, quantity: i.quantity, totalMinor: mod.monthlyPriceMinor * i.quantity };
+        return { moduleId: i.moduleId, name: mod.name, unitMinor: i.unitMinor!, quantity: i.quantity, totalMinor: i.unitMinor! * i.quantity };
       }),
-      included: MODULES.filter((m) => enabled.has(m.id) && m.monthlyPriceMinor === 0).map((m) => m.name),
-      monthlyTotalMinor: items.reduce((t, i) => t + MODULES.find((m) => m.id === i.moduleId)!.monthlyPriceMinor * i.quantity, 0),
+      // Free tools, and paid ones that are free for this business.
+      included: MODULES.filter((m) => enabled.has(m.id) && !items.some((i) => i.moduleId === m.id)).map((m) => m.name),
+      monthlyTotalMinor: items.reduce((t, i) => t + i.unitMinor! * i.quantity, 0),
       currency: 'usd',
     };
   }

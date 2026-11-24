@@ -6,6 +6,7 @@ import { OPEN_STATUSES } from './provider';
 
 interface StripePrice {
   id: string;
+  unit_amount?: number | null;
   lookup_key: string | null;
   metadata: Record<string, string>;
 }
@@ -34,11 +35,11 @@ export function lookupKey(moduleId: string, amountMinor: number): string {
   return `ample_${moduleId}_${amountMinor}_${BILLING_CURRENCY}_monthly`;
 }
 
-function planFor(moduleId: string): { name: string; amountMinor: number } {
+function planFor(moduleId: string, unitMinor?: number): { name: string; amountMinor: number } {
   if (moduleId === BASE) return { name: 'Ample POS', amountMinor: 0 };
   if (!isModuleId(moduleId)) throw new Error(`Unknown module: ${moduleId}`);
   const mod = getModule(moduleId);
-  return { name: `Ample POS – ${mod.name}`, amountMinor: mod.monthlyPriceMinor };
+  return { name: `Ample POS – ${mod.name}`, amountMinor: unitMinor ?? mod.monthlyPriceMinor };
 }
 
 /**
@@ -86,16 +87,22 @@ export class StripeBillingProvider implements BillingProvider {
     // Work from Stripe's current items rather than our copy, which may be stale.
     const current = await this.call<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscription.id)}`);
     const byModule = new Map(current.items.data.map((i) => [this.moduleOf(i.price), i]));
-    const wanted = new Map([[BASE, 1], ...items.map((i) => [i.moduleId, i.quantity] as const)]);
+    const wanted = new Map<string, BilledItem>([[BASE, { moduleId: BASE, quantity: 1, unitMinor: 0 }], ...items.map((i) => [i.moduleId, i] as const)]);
 
     const changes: Record<string, unknown>[] = [];
+    const replaced = new Set<string>();
     for (const [moduleId, item] of byModule) {
       // Leave alone anything added outside Ample POS (e.g. in the Stripe dashboard).
       if (moduleId === 'unknown') continue;
-      if (!wanted.has(moduleId)) changes.push({ id: item.id, deleted: true });
-      else if ((item.quantity ?? 1) !== wanted.get(moduleId)) changes.push({ id: item.id, quantity: wanted.get(moduleId) });
+      const want = wanted.get(moduleId);
+      if (!want) changes.push({ id: item.id, deleted: true });
+      else if (want.unitMinor !== undefined && item.price.unit_amount != null && item.price.unit_amount !== want.unitMinor) {
+        // The price changed: swap the item for one at the new price.
+        changes.push({ id: item.id, deleted: true });
+        replaced.add(moduleId);
+      } else if ((item.quantity ?? 1) !== want.quantity) changes.push({ id: item.id, quantity: want.quantity });
     }
-    const added = [...wanted].filter(([moduleId]) => !byModule.has(moduleId)).map(([moduleId, quantity]) => ({ moduleId, quantity }));
+    const added = [...wanted.values()].filter((w) => !byModule.has(w.moduleId) || replaced.has(w.moduleId));
     for (const line of await this.lines(added, false)) changes.push(line);
     if (!changes.length) return this.toSubscription(current);
 
@@ -138,7 +145,7 @@ export class StripeBillingProvider implements BillingProvider {
       currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       cancelAtPeriodEnd: s.cancel_at_period_end,
       items: s.items.data
-        .map((i) => ({ moduleId: this.moduleOf(i.price), quantity: i.quantity ?? 1 }))
+        .map((i) => ({ moduleId: this.moduleOf(i.price), quantity: i.quantity ?? 1, ...(i.price.unit_amount != null ? { unitMinor: i.price.unit_amount } : {}) }))
         .filter((i) => i.moduleId !== BASE && i.moduleId !== 'unknown'),
     };
   }
@@ -151,7 +158,7 @@ export class StripeBillingProvider implements BillingProvider {
   private async lines(items: BilledItem[], withBase = true): Promise<{ price: string; quantity: number }[]> {
     const all = withBase ? [{ moduleId: BASE, quantity: 1 }, ...items] : items;
     const keys = all.map((i) => {
-      const plan = planFor(i.moduleId);
+      const plan = planFor(i.moduleId, i.unitMinor);
       return { ...i, ...plan, key: lookupKey(i.moduleId, plan.amountMinor) };
     });
     const missing = keys.filter((k) => !this.prices.has(k.key));

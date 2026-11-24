@@ -21,19 +21,32 @@ export default async function ToolsPage({ params }: { params: Promise<{ tenantId
             <div className="flex items-start justify-between gap-2">
               <h2 className="font-medium">{m.name}</h2>
               {m.enabled && <span className="rounded bg-teal-50 px-2 py-0.5 text-xs text-brand">On</span>}
+              {!m.available && <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-600">Temporarily unavailable</span>}
             </div>
             <p className="mt-1 flex-1 text-sm text-stone-600">{m.description}</p>
             {m.dependsOn.length > 0 && (
               <p className="mt-2 text-xs text-stone-500">Requires {m.dependsOn.map((d) => names.get(d)).join(', ')}</p>
             )}
             <p className="mt-2 text-sm font-medium">
-              {m.monthlyPriceMinor ? `${formatMoney(m.monthlyPriceMinor, 'USD')} per location / month` : 'Included'}
+              {m.comped && m.monthlyPriceMinor ? (
+                <>
+                  <s className="text-stone-400">{formatMoney(m.monthlyPriceMinor, 'USD')}</s> Free for your business
+                </>
+              ) : m.monthlyPriceMinor ? (
+                `${formatMoney(m.monthlyPriceMinor, 'USD')} per location / month`
+              ) : (
+                'Included'
+              )}
             </p>
-            <ActionForm action={toggleModule.bind(null, tenantId, m.id, !m.enabled)} className="mt-3">
-              <button className={m.enabled ? 'btn-secondary' : 'btn'} disabled={!m.enabled && m.missingDependencies.length > 0}>
-                {m.enabled ? 'Turn off' : 'Turn on'}
-              </button>
-            </ActionForm>
+            {m.blocked ? (
+              <p className="mt-3 text-sm text-stone-600">Turned off by Ample POS support. Contact support to turn it back on.</p>
+            ) : (
+              <ActionForm action={toggleModule.bind(null, tenantId, m.id, !m.enabled)} className="mt-3">
+                <button className={m.enabled ? 'btn-secondary' : 'btn'} disabled={!m.enabled && (m.missingDependencies.length > 0 || !m.available)}>
+                  {m.enabled ? 'Turn off' : 'Turn on'}
+                </button>
+              </ActionForm>
+            )}
           </li>
         ))}
       </ul>

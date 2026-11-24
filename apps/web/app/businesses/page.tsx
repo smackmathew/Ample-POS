@@ -6,12 +6,17 @@ import type { Me } from '@/lib/types';
 import { acceptInvitation, createBusiness, signOut } from '../session-actions';
 
 export default async function BusinessesPage() {
-  const [me, config] = await Promise.all([api<Me>('/me'), authConfig()]);
+  const [me, config, platform] = await Promise.all([api<Me>('/me'), authConfig(), api<{ admin: boolean }>('/platform/access')]);
   return (
     <main className="mx-auto mt-16 max-w-2xl space-y-8 px-4">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Your businesses</h1>
         <div className="flex items-center gap-2">
+          {platform.admin && (
+            <Link href="/platform" className="btn-secondary">
+              Super admin
+            </Link>
+          )}
           <Link href="/account" className="text-sm text-stone-600 hover:underline">
             {me.user.email}
           </Link>

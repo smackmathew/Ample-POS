@@ -15,15 +15,13 @@ import { RequirePermission } from '../core/decorators';
 import { Events } from '../core/events';
 import { currentTenant, currentUserId } from '../core/request-context';
 import { ZodPipe } from '../core/zod';
+import { enabledTools, toolSettings } from '../core/tool-settings';
 
 const toggleBody = z.object({ enabled: z.boolean() });
 
+/** Tools that are on for the current business (and not switched off platform-wide). */
 export async function enabledModuleIds(db: Db): Promise<Set<ModuleId>> {
-  const rows = await db.tx
-    .select({ moduleId: schema.tenantModules.moduleId })
-    .from(schema.tenantModules)
-    .where(eq(schema.tenantModules.enabled, true));
-  return new Set(rows.map((r) => r.moduleId).filter(isModuleId));
+  return enabledTools(db.tx);
 }
 
 @Controller('modules')
@@ -36,17 +34,24 @@ export class ModulesController {
   @Get()
   async list() {
     const enabled = await enabledModuleIds(this.db);
+    const settings = await toolSettings(this.db.tx);
+    const rows = await this.db.tx.select().from(schema.tenantModules);
+    const own = new Map(rows.map((r) => [r.moduleId, r]));
     return MODULES.map((m) => ({
       id: m.id,
       name: m.name,
       description: m.description,
       version: m.version,
       phase: m.phase,
-      monthlyPriceMinor: m.monthlyPriceMinor,
+      monthlyPriceMinor: settings.get(m.id)!.priceMinor,
       dependsOn: m.dependsOn,
       permissions: m.permissions,
       enabled: enabled.has(m.id),
       missingDependencies: missingDependencies(m.id, enabled),
+      // Set by Ample POS: switched off for everyone, off for this business, or free here.
+      available: settings.get(m.id)!.available,
+      blocked: own.get(m.id)?.blocked ?? false,
+      comped: own.get(m.id)?.comped ?? false,
     }));
   }
 
@@ -63,6 +68,11 @@ export class ModulesController {
     if (enabled.has(id) === body.enabled) return { id, enabled: body.enabled };
 
     if (body.enabled) {
+      if (!(await toolSettings(tx)).get(id)!.available) {
+        throw new ConflictException({ code: 'unavailable', message: `${getModule(id).name} is temporarily unavailable` });
+      }
+      const [own] = await tx.select({ blocked: schema.tenantModules.blocked }).from(schema.tenantModules).where(eq(schema.tenantModules.moduleId, id));
+      if (own?.blocked) throw new ConflictException({ code: 'blocked', message: `${getModule(id).name} was turned off for this business by Ample POS support. Contact support to turn it back on.` });
       const missing = missingDependencies(id, enabled);
       if (missing.length) {
         throw new ConflictException({

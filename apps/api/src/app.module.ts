@@ -48,6 +48,9 @@ import { TasksController } from './workforce/tasks.controller';
 import { TimeClockController } from './workforce/timeclock.controller';
 import { OutboxWorker } from './worker/outbox.worker';
 import { AuditController } from './platform/audit.controller';
+import { PlatformAdminController } from './platform/platform-admin.controller';
+import { PlatformAccess } from './platform/platform-access';
+import { PlatformDb } from './core/platform-db';
 import { DeviceSessionController } from './platform/device-session.controller';
 import { DevicesController } from './platform/devices.controller';
 import { IdentityController } from './platform/identity.controller';
@@ -69,6 +72,7 @@ export class AppModule {
         TwoFactorController,
         TenantController,
         CustomersController,
+        PlatformAdminController,
         LoyaltyController,
         GiftCardsController,
         SuppliersController,
@@ -114,6 +118,8 @@ export class AppModule {
         LoyaltyService,
         GiftCardService,
         PurchasingService,
+        PlatformAccess,
+        PlatformDb,
         OutboxWorker,
         ShopifySyncService,
         ShopifyJobs,

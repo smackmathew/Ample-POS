@@ -24,6 +24,9 @@ export const tenants = pgTable('tenants', {
   currency: text('currency').notNull().default('USD'),
   /** Printed on every receipt; empty fields are left off. */
   receiptSettings: jsonb('receipt_settings').$type<ReceiptSettings>().notNull().default({}),
+  /** Set by a platform admin: nobody can use the business until it is restored. */
+  suspendedAt: timestamp('suspended_at', { withTimezone: true }),
+  suspendedReason: text('suspended_reason'),
   createdAt: createdAt(),
 });
 
@@ -103,6 +106,10 @@ export const tenantModules = pgTable(
     tenantId: uuid('tenant_id').notNull(),
     moduleId: text('module_id').notNull(),
     enabled: boolean('enabled').notNull(),
+    /** On, but not billed (set by a platform admin). */
+    comped: boolean('comped').notNull().default(false),
+    /** The business can't turn it on (set by a platform admin). */
+    blocked: boolean('blocked').notNull().default(false),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     updatedBy: uuid('updated_by'),
   },
@@ -562,6 +569,8 @@ export const checklistCompletions = pgTable('checklist_completions', {
 export interface BilledItem {
   moduleId: string;
   quantity: number;
+  /** Monthly price per unit when billed; absent on items saved before prices could change. */
+  unitMinor?: number;
 }
 
 export const tenantBilling = pgTable('tenant_billing', {
@@ -692,4 +701,21 @@ export const purchaseOrderReceiptLines = pgTable('purchase_order_receipt_lines',
   receiptId: uuid('receipt_id').notNull(),
   lineId: uuid('line_id').notNull(),
   quantity: integer('quantity').notNull(),
+});
+
+export const platformModules = pgTable('platform_modules', {
+  moduleId: text('module_id').primaryKey(),
+  available: boolean('available').notNull().default(true),
+  monthlyPriceMinor: money('monthly_price_minor'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by'),
+});
+
+export const platformAudit = pgTable('platform_audit', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  actorUserId: uuid('actor_user_id'),
+  action: text('action').notNull(),
+  tenantId: uuid('tenant_id'),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: createdAt(),
 });

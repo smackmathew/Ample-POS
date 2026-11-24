@@ -50,7 +50,7 @@ export const OPEN_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid'
 export function sameItems(a: readonly BilledItem[], b: readonly BilledItem[]): boolean {
   const key = (items: readonly BilledItem[]) =>
     items
-      .map((i) => `${i.moduleId}:${i.quantity}`)
+      .map((i) => `${i.moduleId}:${i.quantity}:${i.unitMinor ?? ''}`)
       .sort()
       .join(',');
   return key(a) === key(b);

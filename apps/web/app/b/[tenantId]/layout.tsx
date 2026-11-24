@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { can, type CurrentTenant, type NavSection, type TenantBilling } from '@/lib/types';
 
 export default async function TenantLayout({
@@ -11,10 +11,25 @@ export default async function TenantLayout({
   params: Promise<{ tenantId: string }>;
 }) {
   const { tenantId } = await params;
-  const [current, nav] = await Promise.all([
-    api<CurrentTenant>('/tenant', { tenantId }),
-    api<{ sections: NavSection[] }>('/navigation', { tenantId }),
-  ]);
+  let current: CurrentTenant;
+  let nav: { sections: NavSection[] };
+  try {
+    [current, nav] = await Promise.all([api<CurrentTenant>('/tenant', { tenantId }), api<{ sections: NavSection[] }>('/navigation', { tenantId })]);
+  } catch (err) {
+    // Suspended by Ample POS: say so instead of an error page.
+    if (err instanceof ApiError && (err.body as { code?: string } | null)?.code === 'business_suspended') {
+      return (
+        <main className="mx-auto mt-24 max-w-lg space-y-4 px-4 text-center">
+          <h1 className="text-2xl font-semibold">This business is suspended</h1>
+          <p className="text-stone-600">{err.message}</p>
+          <Link href="/businesses" className="btn-secondary">
+            Your businesses
+          </Link>
+        </main>
+      );
+    }
+    throw err;
+  }
   const base = `/b/${tenantId}`;
 
   return (

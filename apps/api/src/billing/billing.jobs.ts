@@ -3,7 +3,7 @@ import { OutboxWorker } from '../worker/outbox.worker';
 import { BillingService } from './billing.service';
 
 /** Changes that alter what a business should be billed for. */
-export const BILLING_TOPICS = ['module.enabled', 'module.disabled', 'location.created', 'location.updated', 'billing.status_changed'];
+export const BILLING_TOPICS = ['module.enabled', 'module.disabled', 'location.created', 'location.updated', 'billing.status_changed', 'billing.items_changed'];
 
 /** Keeps each subscription's items in step with the tools and locations in use. */
 @Injectable()

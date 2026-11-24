@@ -30,6 +30,7 @@ services:
       - key: BILLING_PROVIDER
         value: simulated
       # Optional, set in the dashboard when ready:
+      # PLATFORM_ADMIN_EMAILS (comma-separated emails of Ample POS staff who may use the super admin dashboard at /platform)
       # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET (with PAYMENTS_PROVIDER=stripe)
       # BILLING_STRIPE_SECRET_KEY / BILLING_STRIPE_WEBHOOK_SECRET (with BILLING_PROVIDER=stripe)
       # SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET
