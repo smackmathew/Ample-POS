@@ -12,7 +12,7 @@ function fakeStripe(responses: { status?: number; body: unknown }[]) {
   return { calls, impl };
 }
 
-const price = (id: string, moduleId: string, amount: number) => ({ id, lookup_key: lookupKey(moduleId, amount), metadata: { module_id: moduleId } });
+const price = (id: string, moduleId: string, amount: number) => ({ id, unit_amount: amount, lookup_key: lookupKey(moduleId, amount), metadata: { module_id: moduleId } });
 
 describe('StripeBillingProvider', () => {
   it('creates missing prices once, then starts Checkout with the base item and a carried-over trial', async () => {
@@ -109,10 +109,36 @@ describe('StripeBillingProvider', () => {
       currentPeriodEnd: new Date(1782864000 * 1000),
       cancelAtPeriodEnd: false,
       items: [
-        { moduleId: 'pos', quantity: 3 },
-        { moduleId: 'tasks', quantity: 3 },
+        { moduleId: 'pos', quantity: 3, unitMinor: 4900 },
+        { moduleId: 'tasks', quantity: 3, unitMinor: 900 },
       ],
     });
+  });
+
+  it('swaps an item onto a new price when the platform changes a tool’s price', async () => {
+    const sub = (items: unknown[]) => ({ body: { id: 'sub_1', status: 'active', created: 1, cancel_at_period_end: false, items: { data: items } } });
+    const stripe = fakeStripe([
+      sub([
+        { id: 'si_base', quantity: 1, price: price('price_base', 'base', 0) },
+        { id: 'si_pos', quantity: 2, price: price('price_pos', 'pos', 4900) },
+      ]),
+      { body: { data: [] } },
+      { body: { id: 'prod_pos' } },
+      { body: { id: 'price_pos_new' } },
+      sub([
+        { id: 'si_base', quantity: 1, price: price('price_base', 'base', 0) },
+        { id: 'si_pos2', quantity: 2, price: price('price_pos_new', 'pos', 3900) },
+      ]),
+    ]);
+    const provider = new StripeBillingProvider('sk_test', { fetch: stripe.impl });
+    const result = await provider.updateItems(
+      { id: 'sub_1', status: 'active', currentPeriodEnd: null, cancelAtPeriodEnd: false, items: [] },
+      [{ moduleId: 'pos', quantity: 2, unitMinor: 3900 }],
+      'k',
+    );
+    expect(stripe.calls[1]!.url).toBe('/prices?active=true&limit=100&lookup_keys[]=ample_pos_3900_usd_monthly');
+    expect(stripe.calls[4]!.body).toBe('items[0][id]=si_pos&items[0][deleted]=true&items[1][price]=price_pos_new&items[1][quantity]=2&proration_behavior=create_prorations');
+    expect(result.items).toEqual([{ moduleId: 'pos', quantity: 2, unitMinor: 3900 }]);
   });
 
   it('makes no update call when nothing changed', async () => {

@@ -1,0 +1,220 @@
+import Link from 'next/link';
+import { ActionForm } from '@/components/action-form';
+import { api } from '@/lib/api';
+import { METHOD, SEVERITY, STANDING, usd, utc, type ActivityEntry, type Company, type Transaction } from '@/lib/platform';
+import { restoreCompany, suspendCompany } from '../../actions';
+import { ToolRow } from './tool-row';
+
+export default async function CompanyPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ before?: string }> }) {
+  const { companyId } = await params;
+  const { before } = await searchParams;
+  const [c, { transactions, nextBefore }, { entries }] = await Promise.all([
+    api<Company>(`/platform/companies/${companyId}`),
+    api<{ transactions: Transaction[]; nextBefore: string | null }>(`/platform/companies/${companyId}/transactions?limit=25${before ? `&before=${encodeURIComponent(before)}` : ''}`),
+    api<{ entries: ActivityEntry[] }>(`/platform/activity?tenantId=${companyId}&limit=15`),
+  ]);
+  const money = (minor: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: c.currency }).format(minor / 100);
+
+  return (
+    <div className="max-w-6xl space-y-6">
+      <Link href="/platform/companies" className="text-sm text-stone-500 hover:underline">
+        ← Companies
+      </Link>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">{c.name}</h1>
+          <p className="text-sm text-stone-500">
+            {c.slug} · joined {utc(c.createdAt, false)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {c.suspendedAt && <span className="rounded bg-stone-900 px-2 py-1 text-sm text-white">Suspended</span>}
+          {c.billing?.standing && <span className={`rounded px-2 py-1 text-sm ${STANDING[c.billing.standing][1]}`}>{STANDING[c.billing.standing][0]}</span>}
+        </div>
+      </div>
+
+      {c.issues.length > 0 && (
+        <section className="card space-y-2 border-red-200">
+          <h2 className="font-medium">Issues</h2>
+          {c.issues.map((i) => (
+            <div key={i.key} className="flex flex-wrap items-baseline gap-2 text-sm">
+              <span className={`rounded px-2 py-0.5 text-xs ${SEVERITY[i.severity]}`}>{i.severity}</span>
+              <span className="font-medium">{i.title}</span>
+              {i.detail && <span className="text-stone-500">{i.detail}</span>}
+              <span className="text-xs text-stone-400">since {utc(i.since)}</span>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Sales, 30 days" value={money(c.stats.gross30Minor)} note={`${c.stats.sales30} sales · ${money(c.stats.refunds30Minor)} refunded`} />
+        <Stat label="Monthly bill" value={c.billing ? usd(c.billing.mrrMinor) : '—'} note={billingNote(c)} />
+        <Stat label="Stores · devices" value={`${c.locations.filter((l) => !l.archivedAt).length} · ${c.stats.devices}`} note={`${c.members.length} people`} />
+        <Stat label="Products · customers" value={`${c.stats.products} · ${c.stats.customers}`} note={Object.entries(c.stats.tenders30).map(([m, a]) => `${METHOD[m] ?? m} ${money(a)}`).join(' · ') || 'No payments in 30 days'} />
+      </section>
+
+      <section className="card">
+        <h2 className="font-medium">Tools</h2>
+        <p className="text-sm text-stone-500">
+          Changes take effect at once and show in the business’s audit log as made by Ample POS support. <em>Free</em> tools stay on without being billed; <em>blocked</em> tools are off and the business
+          can’t turn them back on.
+        </p>
+        <table className="mt-3 w-full text-sm">
+          <thead className="text-left text-stone-500">
+            <tr>
+              <th className="pb-1">Tool</th>
+              <th className="pb-1">Price / store</th>
+              <th className="pb-1">On</th>
+              <th className="pb-1">Free here</th>
+              <th className="pb-1">Blocked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.tools.map((t) => (
+              <ToolRow key={t.id} companyId={c.id} tool={t} price={t.monthlyPriceMinor ? `${usd(t.monthlyPriceMinor)}/mo` : 'Included'} />
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="card space-y-2">
+          <h2 className="font-medium">People</h2>
+          {c.members.map((m) => (
+            <div key={m.id} className="flex justify-between gap-2 text-sm">
+              <span>
+                {m.name ?? m.email} <span className="text-stone-500">· {m.role}</span>
+                {m.status !== 'active' && <span className="text-stone-400"> · {m.status}</span>}
+                <div className="text-xs text-stone-500">{m.email}</div>
+              </span>
+              <span className="text-xs text-stone-500">seen {utc(m.lastSeenAt, false)}</span>
+            </div>
+          ))}
+        </section>
+        <section className="card space-y-2">
+          <h2 className="font-medium">Suspend</h2>
+          {c.suspendedAt ? (
+            <>
+              <p className="text-sm">
+                Suspended {utc(c.suspendedAt)}: {c.suspendedReason}
+              </p>
+              <ActionForm action={restoreCompany.bind(null, c.id)}>
+                <button className="btn">Restore the business</button>
+              </ActionForm>
+            </>
+          ) : (
+            <ActionForm action={suspendCompany.bind(null, c.id)} className="space-y-2">
+              <p className="text-sm text-stone-600">Locks everyone out (web, registers and handhelds) with your reason shown, until you restore it. Nothing is deleted.</p>
+              <input name="reason" placeholder="Reason the business will see" required className="input" />
+              <button className="btn-secondary text-red-700">Suspend</button>
+            </ActionForm>
+          )}
+        </section>
+      </div>
+
+      <section className="space-y-2">
+        <h2 className="font-medium">Transactions</h2>
+        <div className="card overflow-x-auto p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-50 text-left text-stone-500">
+              <tr>
+                <th className="px-4 py-2">When</th>
+                <th className="px-4 py-2">Receipt</th>
+                <th className="px-4 py-2">Store · cashier</th>
+                <th className="px-4 py-2">Paid with</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t) => (
+                <tr key={t.id} className="border-t border-stone-100">
+                  <td className="px-4 py-2 text-stone-500">{utc(t.createdAt)}</td>
+                  <td className="px-4 py-2">{t.receiptNumber ? `#${t.receiptNumber}` : '—'}</td>
+                  <td className="px-4 py-2">
+                    {t.location}
+                    {t.cashier && <span className="text-stone-500"> · {t.cashier}</span>}
+                  </td>
+                  <td className="px-4 py-2">
+                    {t.payments
+                      .filter((p) => p.status !== 'canceled')
+                      .map((p, i) => (
+                        <span key={i} className={`mr-2 ${p.status === 'succeeded' ? '' : 'text-red-700'}`}>
+                          {METHOD[p.method] ?? p.method} {money(p.amountMinor)}
+                          {p.status !== 'succeeded' && ` (${p.status})`}
+                        </span>
+                      ))}
+                  </td>
+                  <td className="px-4 py-2 capitalize">
+                    {t.status}
+                    {t.refundedMinor > 0 && <span className="ml-1 text-xs text-red-700">refunded {money(t.refundedMinor)}</span>}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">{money(t.totalMinor)}</td>
+                </tr>
+              ))}
+              {transactions.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-stone-500">
+                    No sales yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex gap-4 text-sm">
+          {before && (
+            <Link href={`/platform/companies/${c.id}`} className="hover:underline">
+              Newest
+            </Link>
+          )}
+          {nextBefore && (
+            <Link href={`/platform/companies/${c.id}?before=${encodeURIComponent(nextBefore)}`} className="hover:underline">
+              Older →
+            </Link>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-medium">Recent activity</h2>
+          <Link href={`/platform/activity?tenantId=${c.id}`} className="text-sm text-stone-500 hover:underline">
+            All activity
+          </Link>
+        </div>
+        <div className="card space-y-1 text-sm">
+          {entries.map((e) => (
+            <div key={e.id} className="flex justify-between gap-3">
+              <span>
+                <code className="text-xs">{e.action}</code>
+                {e.targetId && <span className="text-stone-500"> · {e.targetId}</span>}
+                <span className="text-stone-500"> · {e.actor ?? e.actorEmail ?? 'system'}</span>
+              </span>
+              <span className="text-xs text-stone-500">{utc(e.createdAt)}</span>
+            </div>
+          ))}
+          {entries.length === 0 && <p className="text-stone-500">Nothing yet.</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function billingNote(c: Company): string {
+  if (!c.billing) return 'No billing record';
+  if (c.billing.standing === 'trial') return `Trial ends ${utc(c.billing.trialEndsAt, false)}`;
+  if (c.billing.currentPeriodEnd) return `${c.billing.cancelAtPeriodEnd ? 'Ends' : 'Renews'} ${utc(c.billing.currentPeriodEnd, false)} · ${c.billing.provider ?? ''}`;
+  return c.billing.status ?? '';
+}
+
+function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="card">
+      <p className="text-sm text-stone-500">{label}</p>
+      <p className="text-xl font-semibold tabular-nums">{value}</p>
+      {note && <p className="text-xs text-stone-500">{note}</p>}
+    </div>
+  );
+}

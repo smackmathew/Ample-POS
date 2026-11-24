@@ -19,6 +19,7 @@ import type { AuthedRequest } from './auth.guard';
 import { Db } from './database';
 import { MODULE_KEY, NO_TENANT_KEY, PERMISSION_KEY, PUBLIC_KEY } from './decorators';
 import { runWithContext, type RequestContext } from './request-context';
+import { toolSetting } from './tool-settings';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -72,6 +73,19 @@ export class TenantContextInterceptor implements NestInterceptor {
           if (!membership) throw new ForbiddenException('You are not a member of this business');
           ctx.tenant = { tenantId: tenantId!, ...membership };
 
+          // A business suspended by Ample POS can't be used until it's restored.
+          const [tenant] = await tx.select({ suspendedAt: schema.tenants.suspendedAt, reason: schema.tenants.suspendedReason }).from(schema.tenants);
+          if (tenant?.suspendedAt) {
+            throw new HttpException(
+              {
+                statusCode: 403,
+                code: 'business_suspended',
+                message: `This business is suspended${tenant.reason ? `: ${tenant.reason}` : ''}. Contact Ample POS support.`,
+              },
+              403,
+            );
+          }
+
           const credential = req.headers['x-device-credential'];
           if (typeof credential === 'string') {
             ctx.device = await verifyDeviceCredential(tx, credential);
@@ -83,14 +97,16 @@ export class TenantContextInterceptor implements NestInterceptor {
           }
           if (moduleId) {
             const [entitlement] = await tx
-              .select({ enabled: schema.tenantModules.enabled })
+              .select({ enabled: schema.tenantModules.enabled, comped: schema.tenantModules.comped })
               .from(schema.tenantModules)
               .where(eq(schema.tenantModules.moduleId, moduleId));
             if (!entitlement?.enabled) {
               throw new ForbiddenException(`${getModule(moduleId).name} is not enabled for this business`);
             }
+            const tool = await toolSetting(tx, moduleId);
+            if (!tool.available) throw new ForbiddenException(`${getModule(moduleId).name} is temporarily unavailable`);
             // Paid tools turn read-only once the trial is over without a working subscription.
-            if (getModule(moduleId).monthlyPriceMinor > 0 && !READ_METHODS.has(req.method)) {
+            if (tool.priceMinor > 0 && !entitlement.comped && !READ_METHODS.has(req.method)) {
               const [billing] = await tx.select().from(schema.tenantBilling);
               if (billing && standing(billing) === 'lapsed') {
                 throw new HttpException(

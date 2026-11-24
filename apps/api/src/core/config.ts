@@ -3,6 +3,13 @@ import { z } from 'zod';
 const schema = z
   .object({
     DATABASE_URL: z.string().url(),
+    /** The super admin dashboard's connection (role pos_platform). Defaults to DATABASE_URL as that role. */
+    PLATFORM_DATABASE_URL: z.string().url().optional(),
+    /** Comma-separated emails of Ample POS staff who may use the super admin dashboard. */
+    PLATFORM_ADMIN_EMAILS: z
+      .string()
+      .default('')
+      .transform((v) => v.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)),
     PORT: z.coerce.number().int().default(4000),
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     /** Which proxies' X-Forwarded-For to believe for client IPs (Express "trust proxy"). */

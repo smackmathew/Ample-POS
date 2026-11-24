@@ -4,6 +4,8 @@ import postgres from 'postgres';
 
 export const MIGRATIONS_DIR = join(__dirname, '..', 'migrations');
 export const APP_ROLE = 'pos_app';
+/** The super admin dashboard's role: reads every business, changes only platform controls. */
+export const PLATFORM_ROLE = 'pos_platform';
 
 /**
  * Creates the restricted application role if needed and applies pending
@@ -14,6 +16,7 @@ export async function setupDatabase(adminUrl: string, appPassword: string): Prom
   const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });
   try {
     await ensureAppRole(sql, appPassword);
+    await ensureRole(sql, PLATFORM_ROLE, appPassword);
     return await runMigrations(sql);
   } finally {
     await sql.end({ timeout: 5 });
@@ -21,20 +24,25 @@ export async function setupDatabase(adminUrl: string, appPassword: string): Prom
 }
 
 async function ensureAppRole(sql: postgres.Sql, password: string): Promise<void> {
+  await ensureRole(sql, APP_ROLE, password);
+}
+
+/** A login role that never bypasses row-level security; what it may see is set by policies and grants. */
+async function ensureRole(sql: postgres.Sql, role: string, password: string): Promise<void> {
   const [existing] = await sql<{ rolsuper: boolean; rolbypassrls: boolean }[]>`
-    select rolsuper, rolbypassrls from pg_roles where rolname = ${APP_ROLE}`;
+    select rolsuper, rolbypassrls from pg_roles where rolname = ${role}`;
   // Role names and passwords cannot be bound parameters in DDL.
   const literal = `'${password.replace(/'/g, "''")}'`;
   if (!existing) {
-    await sql.unsafe(`create role ${APP_ROLE} login nosuperuser nobypassrls password ${literal}`);
+    await sql.unsafe(`create role ${role} login nosuperuser nobypassrls password ${literal}`);
     return;
   }
   // Tenant isolation depends on RLS applying to this role. (Managed hosts' admin
   // users may not re-state these attributes, so check instead of altering them.)
   if (existing.rolsuper || existing.rolbypassrls) {
-    throw new Error(`The ${APP_ROLE} role must not be a superuser or bypass row-level security`);
+    throw new Error(`The ${role} role must not be a superuser or bypass row-level security`);
   }
-  await sql.unsafe(`alter role ${APP_ROLE} login password ${literal}`);
+  await sql.unsafe(`alter role ${role} login password ${literal}`);
 }
 
 async function runMigrations(sql: postgres.Sql): Promise<string[]> {

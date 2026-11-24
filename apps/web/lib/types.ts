@@ -49,6 +49,12 @@ export interface ModuleSummary {
   permissions: { key: string; description: string }[];
   enabled: boolean;
   missingDependencies: string[];
+  /** False while Ample POS has the tool switched off for everyone. */
+  available: boolean;
+  /** Ample POS switched it off for this business. */
+  blocked: boolean;
+  /** Ample POS made it free for this business. */
+  comped: boolean;
 }
 
 export interface Location {

@@ -102,20 +102,20 @@ describe('billing (simulated)', () => {
     await owner.put('/modules/pos', { enabled: true }).expect(200);
     await owner.post('/billing/checkout').expect(201);
     const items = async () => (await db`select items from tenant_billing where tenant_id = ${owner.tenantId!}`)[0]!.items;
-    expect(await items()).toEqual([{ moduleId: 'pos', quantity: 1 }]);
+    expect(await items()).toEqual([{ moduleId: 'pos', quantity: 1, unitMinor: 4900 }]);
 
     await owner.put('/modules/scheduling', { enabled: true }).expect(200);
     const second = (await owner.post('/locations', { name: 'Second', timezone: 'UTC' }).expect(201)).body;
     await worker.runOnce();
     expect(await items()).toEqual([
-      { moduleId: 'pos', quantity: 2 },
-      { moduleId: 'scheduling', quantity: 2 },
+      { moduleId: 'pos', quantity: 2, unitMinor: 4900 },
+      { moduleId: 'scheduling', quantity: 2, unitMinor: 1900 },
     ]);
 
     await owner.patch(`/locations/${second.id}`, { archived: true }).expect(200);
     await owner.put('/modules/pos', { enabled: false }).expect(200);
     await worker.runOnce();
-    expect(await items()).toEqual([{ moduleId: 'scheduling', quantity: 1 }]);
+    expect(await items()).toEqual([{ moduleId: 'scheduling', quantity: 1, unitMinor: 1900 }]);
   });
 
   it('cancels at the end of the period and can be resumed', async () => {
@@ -197,7 +197,7 @@ describe('billing (stripe)', () => {
     const input = fake.checkouts.at(-1)!;
     expect(input).toMatchObject({
       tenantId: owner.tenantId,
-      items: [{ moduleId: 'time-clock', quantity: 1 }],
+      items: [{ moduleId: 'time-clock', quantity: 1, unitMinor: 1900 }],
       successUrl: `https://hub.example/b/${owner.tenantId}/billing?checkout=success`,
     });
     const trialEndsAt = (await owner.get('/tenant').expect(200)).body.billing.trialEndsAt;
@@ -216,7 +216,7 @@ describe('billing (stripe)', () => {
     // A tool turned on after checkout is added to the subscription by the worker.
     await owner.put('/modules/tasks', { enabled: true }).expect(200);
     await stripeApp.get(OutboxWorker).runOnce();
-    expect(fake.updates.at(-1)).toEqual({ id: 'sub_1', items: [{ moduleId: 'time-clock', quantity: 1 }, { moduleId: 'tasks', quantity: 1 }] });
+    expect(fake.updates.at(-1)).toEqual({ id: 'sub_1', items: [{ moduleId: 'time-clock', quantity: 1, unitMinor: 1900 }, { moduleId: 'tasks', quantity: 1, unitMinor: 900 }] });
 
     const portal = await owner.post('/billing/portal').expect(200);
     expect(portal.body.url).toBe(`https://billing.stripe.test/${input.customerId}?return=${encodeURIComponent(`https://hub.example/b/${owner.tenantId}/billing`)}`);
