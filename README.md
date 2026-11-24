@@ -175,7 +175,7 @@ who buy from the business.
 
 ## Loyalty rewards
 
-The **Loyalty rewards** tool ($9/month, needs Customers) gives customers points
+The **Loyalty rewards** tool (included in every plan, needs Customers) gives customers points
 for what they spend and lets them use the points for money off.
 
 - **Earning:** when a sale with a customer is paid, they earn points on whole
@@ -197,7 +197,7 @@ for what they spend and lets them use the points for money off.
 
 ## Gift cards
 
-The **Gift cards** tool ($9/month, needs Point of sale) sells gift cards at the
+The **Gift cards** tool ($4.99/month per location, needs Point of sale) sells gift cards at the
 register and takes them as payment.
 
 - **Selling** (web register, *Sell a gift card*): add an amount to the sale,
@@ -321,7 +321,8 @@ super admin made, so the website always matches what companies are billed.
 
   Every plan includes the point of sale, product catalog, reports, customers,
   loyalty and purchase orders. Inventory, time clock, scheduling, tasks and
-  gift cards are paid add-ons, charged per active location. Opening a register
+  gift cards are paid add-ons at $4.99/mo each, charged per active location
+  (the super admin can change any of these prices). Opening a register
   past the plan's limit returns `409 register_limit`.
 - **Online store add-on.** A one-time setup fee ($399 online store, $599 custom
   online store) plus the plan's monthly sync fee. It unlocks Shopify sync;

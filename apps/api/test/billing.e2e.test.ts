@@ -59,10 +59,10 @@ describe('billing (simulated)', () => {
     expect(summary.lines).toEqual([
       { moduleId: 'plan:starter', name: 'Starter plan, first location', unitMinor: 3900, quantity: 1, totalMinor: 3900 },
       { moduleId: 'plan:starter:location', name: 'Extra locations (Starter)', unitMinor: 1900, quantity: 1, totalMinor: 1900 },
-      { moduleId: 'time-clock', name: 'Time clock', unitMinor: 1900, quantity: 2, totalMinor: 3800 },
+      { moduleId: 'time-clock', name: 'Time clock', unitMinor: 499, quantity: 2, totalMinor: 998 },
     ]);
     expect(summary.included).toEqual(['Product catalog', 'Point of sale', 'Reporting', 'Customers', 'Loyalty rewards']);
-    expect(summary.monthlyTotalMinor).toBe(9600);
+    expect(summary.monthlyTotalMinor).toBe(6798);
 
     // Growth: $59 + $29 per extra location.
     summary = (await owner.put('/billing/plan', { plan: 'growth' }).expect(200)).body;
@@ -127,7 +127,7 @@ describe('billing (simulated)', () => {
     expect(await items()).toEqual([
       { moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 },
       { moduleId: 'plan:starter:location', quantity: 1, unitMinor: 1900 },
-      { moduleId: 'scheduling', quantity: 2, unitMinor: 1900 },
+      { moduleId: 'scheduling', quantity: 2, unitMinor: 499 },
     ]);
 
     // A plan change follows too.
@@ -229,7 +229,7 @@ describe('billing (stripe)', () => {
       tenantId: owner.tenantId,
       items: [
         { moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 },
-        { moduleId: 'time-clock', quantity: 1, unitMinor: 1900 },
+        { moduleId: 'time-clock', quantity: 1, unitMinor: 499 },
       ],
       successUrl: `https://hub.example/b/${owner.tenantId}/billing?checkout=success`,
     });
@@ -253,8 +253,8 @@ describe('billing (stripe)', () => {
       id: 'sub_1',
       items: [
         { moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 },
-        { moduleId: 'time-clock', quantity: 1, unitMinor: 1900 },
-        { moduleId: 'tasks', quantity: 1, unitMinor: 900 },
+        { moduleId: 'time-clock', quantity: 1, unitMinor: 499 },
+        { moduleId: 'tasks', quantity: 1, unitMinor: 499 },
       ],
     });
 
