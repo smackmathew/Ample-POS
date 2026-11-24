@@ -14,7 +14,7 @@ export default async function PlatformOverview({ searchParams }: { searchParams:
         <h1 className="text-2xl font-semibold">Overview</h1>
         <nav className="flex gap-1 text-sm">
           {['7', '30', '90'].map((d) => (
-            <Link key={d} href={`/platform?days=${d}`} className={`rounded px-3 py-1 ${range === d ? 'bg-stone-900 text-white' : 'bg-white hover:bg-stone-100'}`}>
+            <Link key={d} href={`/platform?days=${d}`} className={`rounded-lg px-3 py-1 ${range === d ? 'bg-brand text-white' : 'bg-white hover:bg-stone-100'}`}>
               {d} days
             </Link>
           ))}
@@ -40,7 +40,7 @@ export default async function PlatformOverview({ searchParams }: { searchParams:
         <div className="mt-4 flex h-40 items-end gap-0.5" role="img" aria-label="Sales per day">
           {o.daily.map((d) => (
             <div key={d.date} className="group relative flex h-full flex-1 flex-col justify-end" title={`${d.date}: ${usd(d.grossMinor)}, ${d.sales} sales, ${d.signups} signups`}>
-              {d.signups > 0 && <span className="mx-auto mb-1 h-1.5 w-1.5 rounded-full bg-sky-600" />}
+              {d.signups > 0 && <span className="mx-auto mb-1 h-1.5 w-1.5 rounded-full bg-amber-500" />}
               <div className="rounded-t bg-brand/80 group-hover:bg-brand" style={{ height: `${Math.max(d.grossMinor ? 2 : 0, (d.grossMinor / max) * 100)}%` }} />
             </div>
           ))}

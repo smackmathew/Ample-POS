@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
+import { PlainHeader } from '@/components/app-shell';
 import { VerifyEmailBanner } from '@/components/verify-email-banner';
 import { api, authConfig } from '@/lib/api';
 import type { Me } from '@/lib/types';
@@ -17,66 +18,77 @@ import {
 export default async function AccountPage() {
   const [me, config, platform] = await Promise.all([api<Me>('/me'), authConfig(), api<{ admin: boolean }>('/platform/access')]);
   return (
-    <main className="mx-auto mt-16 max-w-xl space-y-6 px-4">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Your account</h1>
-        <Link href="/businesses" className="text-sm text-stone-600 hover:underline">
-          Your businesses
-        </Link>
-      </header>
-      <VerifyEmailBanner me={me} config={config} />
-      {platform.admin && (
-        <section className="card flex flex-wrap items-center justify-between gap-3 border-stone-800 bg-stone-900 text-white">
-          <div>
-            <p className="font-medium">Super admin</p>
-            <p className="text-sm text-stone-300">Every company, plans and prices, issues and activity.</p>
-          </div>
-          <Link href="/platform" className="btn">
-            Open the super admin dashboard
-          </Link>
-        </section>
-      )}
-      <section className="card">
-        <p className="font-medium">{me.user.displayName ?? me.user.email}</p>
-        <p className="text-sm text-stone-600">
-          {me.user.email}
-          {config.emailVerification && me.account.emailVerified && me.account.hasPassword && <span className="ml-2 text-teal-700">Confirmed</span>}
-        </p>
-      </section>
-
-      {config.mode === 'password' && me.account.hasPassword && (
-        <ActionForm action={changeEmail} className="card grid gap-3">
-          <h2 className="font-medium">Change email</h2>
-          {config.passwordResetByEmail && <p className="text-sm text-stone-600">We’ll send a link to the new address; the change happens when you open it.</p>}
-          <input name="newEmail" type="email" autoComplete="email" placeholder="New email" required className="input" />
-          <input name="password" type="password" autoComplete="current-password" placeholder="Current password" required className="input" />
-          <button className="btn justify-self-start">Change email</button>
-        </ActionForm>
-      )}
-
-      {config.mode === 'password' && (
-        <ActionForm action={changePassword} className="card grid gap-3">
-          <h2 className="font-medium">Change password</h2>
-          <input name="currentPassword" type="password" autoComplete="current-password" placeholder="Current password" required className="input" />
-          <input name="newPassword" type="password" autoComplete="new-password" minLength={10} placeholder="New password (at least 10 characters)" required className="input" />
-          <input name="confirm" type="password" autoComplete="new-password" placeholder="Repeat new password" required className="input" />
-          <button className="btn justify-self-start">Change password</button>
-        </ActionForm>
-      )}
-
-      {config.mode === 'password' && me.account.hasPassword && <TwoStep tf={me.account.twoFactor} />}
-
-      <section className="card flex flex-wrap gap-2">
-        <form action={signOut}>
-          <button className="btn-secondary">Sign out</button>
-        </form>
-        {config.mode === 'password' && (
-          <form action={signOutEverywhere}>
-            <button className="btn-secondary">Sign out on every device</button>
-          </form>
+    <>
+      <PlainHeader email={me.user.email} admin={platform.admin} />
+      <main className="mx-auto max-w-xl space-y-6 px-4 py-12">
+        <header>
+          <h1 className="text-3xl font-semibold tracking-tight">Your account</h1>
+          <p className="mt-1 text-stone-600">Sign-in, email and security.</p>
+        </header>
+        <VerifyEmailBanner me={me} config={config} />
+        {platform.admin && (
+          <section className="card flex flex-wrap items-center justify-between gap-3 border-teal-100 bg-gradient-to-br from-teal-50 to-white">
+            <div>
+              <p className="font-semibold">Super admin</p>
+              <p className="text-sm text-stone-600">Every company, plans and prices, issues and activity.</p>
+            </div>
+            <Link href="/platform" className="btn">
+              Open the super admin dashboard
+            </Link>
+          </section>
         )}
-      </section>
-    </main>
+        <section className="card">
+          <p className="font-medium">{me.user.displayName ?? me.user.email}</p>
+          <p className="text-sm text-stone-600">
+            {me.user.email}
+            {config.emailVerification && me.account.emailVerified && me.account.hasPassword && <span className="ml-2 text-teal-700">Confirmed</span>}
+          </p>
+        </section>
+
+        {config.mode === 'password' && me.account.hasPassword && (
+          <ActionForm action={changeEmail} className="card grid gap-3">
+            <h2 className="font-medium">Change email</h2>
+            {config.passwordResetByEmail && (
+              <p className="text-sm text-stone-600">We’ll send a link to the new address; the change happens when you open it.</p>
+            )}
+            <input name="newEmail" type="email" autoComplete="email" placeholder="New email" required className="input" />
+            <input name="password" type="password" autoComplete="current-password" placeholder="Current password" required className="input" />
+            <button className="btn justify-self-start">Change email</button>
+          </ActionForm>
+        )}
+
+        {config.mode === 'password' && (
+          <ActionForm action={changePassword} className="card grid gap-3">
+            <h2 className="font-medium">Change password</h2>
+            <input name="currentPassword" type="password" autoComplete="current-password" placeholder="Current password" required className="input" />
+            <input
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength={10}
+              placeholder="New password (at least 10 characters)"
+              required
+              className="input"
+            />
+            <input name="confirm" type="password" autoComplete="new-password" placeholder="Repeat new password" required className="input" />
+            <button className="btn justify-self-start">Change password</button>
+          </ActionForm>
+        )}
+
+        {config.mode === 'password' && me.account.hasPassword && <TwoStep tf={me.account.twoFactor} />}
+
+        <section className="card flex flex-wrap gap-2">
+          <form action={signOut}>
+            <button className="btn-secondary">Sign out</button>
+          </form>
+          {config.mode === 'password' && (
+            <form action={signOutEverywhere}>
+              <button className="btn-secondary">Sign out on every device</button>
+            </form>
+          )}
+        </section>
+      </main>
+    </>
   );
 }
 
@@ -90,7 +102,8 @@ function TwoStep({ tf }: { tf: Me['account']['twoFactor'] }) {
         <div>
           <h2 className="font-medium">Two-step sign-in</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Off. Turn it on to ask for a code from an authenticator app (Google Authenticator, 1Password, Authy and others) after your password. Recommended for owners.
+            Off. Turn it on to ask for a code from an authenticator app (Google Authenticator, 1Password, Authy and others) after your password. Recommended for
+            owners.
           </p>
         </div>
         <ActionForm
@@ -126,7 +139,8 @@ function TwoStep({ tf }: { tf: Me['account']['twoFactor'] }) {
           Two-step sign-in <span className="ml-2 text-sm text-teal-700">On</span>
         </h2>
         <p className="mt-1 text-sm text-stone-600">
-          {tf.recoveryCodesLeft} recovery code{tf.recoveryCodesLeft === 1 ? '' : 's'} left.
+          {tf.recoveryCodesLeft} recovery code
+          {tf.recoveryCodesLeft === 1 ? '' : 's'} left.
           {tf.recoveryCodesLeft <= 3 && ' Make new ones before you run out.'}
         </p>
       </div>
