@@ -121,6 +121,7 @@ export const auditLog = pgTable('audit_log', {
   tenantId: uuid('tenant_id').notNull(),
   actorUserId: uuid('actor_user_id'),
   actorDeviceId: uuid('actor_device_id'),
+  actorApiKeyId: uuid('actor_api_key_id'),
   action: text('action').notNull(),
   targetType: text('target_type'),
   targetId: text('target_id'),
@@ -766,4 +767,56 @@ export const platformWebsiteAddons = pgTable('platform_website_addons', {
   setupMinor: money('setup_minor'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid('updated_by'),
+});
+
+// Public API (migration 0022): keys for other apps, the change feed and webhooks.
+export const apiKeys = pgTable('api_keys', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  hint: text('hint').notNull(),
+  secretHash: text('secret_hash').notNull(),
+  permissions: text('permissions').array().notNull(),
+  readOnly: boolean('read_only').notNull().default(false),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: createdAt(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});
+
+export const apiEvents = pgTable('api_events', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: uuid('tenant_id').notNull(),
+  type: text('type').notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+  createdAt: createdAt(),
+});
+
+export const webhookEndpoints = pgTable('webhook_endpoints', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  url: text('url').notNull(),
+  description: text('description'),
+  events: text('events').array().notNull(),
+  secret: text('secret').notNull(),
+  active: boolean('active').notNull().default(true),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: uuid('tenant_id').notNull(),
+  endpointId: uuid('endpoint_id').notNull(),
+  eventId: bigint('event_id', { mode: 'number' }),
+  type: text('type').notNull(),
+  body: jsonb('body').$type<Record<string, unknown>>().notNull(),
+  status: text('status', { enum: ['pending', 'delivered', 'failed'] }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+  responseStatus: integer('response_status'),
+  lastError: text('last_error'),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  createdAt: createdAt(),
 });

@@ -14,6 +14,8 @@ const PLATFORM_GROUP = {
     { key: 'devices.manage', description: 'Register and revoke devices' },
     { key: 'modules.manage', description: 'Turn tools on and off' },
     { key: 'audit.read', description: 'View the audit log' },
+    { key: 'billing.manage', description: 'Manage the subscription and payment method' },
+    { key: 'api.manage', description: 'Create API keys and webhooks for other apps' },
   ],
 };
 

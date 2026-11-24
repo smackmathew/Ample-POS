@@ -37,6 +37,8 @@ const updateBody = customerBody.partial().refine((b) => Object.keys(b).length > 
 const listQuery = z.object({
   search: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  /** For paging through every customer (e.g. an integration exporting them). */
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 /** Visits, spending (after refunds) and last visit from completed sales. */
@@ -80,8 +82,9 @@ export class CustomersController {
       .select({ id: c.id, name: c.name, email: c.email, phone: c.phone, createdAt: c.createdAt, ...stats })
       .from(c)
       .where(where)
-      .orderBy(desc(c.updatedAt))
-      .limit(q.limit);
+      .orderBy(desc(c.updatedAt), desc(c.id))
+      .limit(q.limit)
+      .offset(q.offset);
   }
 
   @RequirePermission('customers.use')
@@ -97,7 +100,7 @@ export class CustomersController {
       .catch(async (err) => {
         throw await this.duplicate(err, body);
       });
-    await this.events.audit('customer.created', { type: 'customer', id: customer!.id });
+    await this.events.record('customer.created', { type: 'customer', id: customer!.id });
     return customer;
   }
 
@@ -148,7 +151,7 @@ export class CustomersController {
         throw await this.duplicate(err, body);
       });
     if (!customer) throw new NotFoundException('Customer not found');
-    await this.events.audit('customer.updated', { type: 'customer', id }, { fields: Object.keys(body) });
+    await this.events.record('customer.updated', { type: 'customer', id }, { fields: Object.keys(body) });
     return customer;
   }
 
@@ -159,7 +162,7 @@ export class CustomersController {
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     const [gone] = await this.db.tx.delete(schema.customers).where(eq(schema.customers.id, id)).returning({ id: schema.customers.id });
     if (!gone) throw new NotFoundException('Customer not found');
-    await this.events.audit('customer.deleted', { type: 'customer', id });
+    await this.events.record('customer.deleted', { type: 'customer', id });
     return { deleted: true };
   }
 

@@ -23,6 +23,16 @@ export interface DeviceIdentity {
   kind: 'register' | 'handheld' | 'kiosk';
 }
 
+/** Set when the request was made with an API key (see api-keys). */
+export interface ApiKeyIdentity {
+  id: string;
+  tenantId: string;
+  name: string;
+  /** What the key was given; the request gets these narrowed to the creator's own permissions. */
+  permissions: string[];
+  readOnly: boolean;
+}
+
 export interface RequestContext {
   /** Null only for system work such as payment webhooks. */
   user: AuthUser | null;
@@ -31,6 +41,8 @@ export interface RequestContext {
   tenant: TenantMembership | null;
   /** Set when the request came from a paired register or handheld. */
   device: DeviceIdentity | null;
+  /** Set when the request came from another app using an API key. */
+  apiKey?: ApiKeyIdentity | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

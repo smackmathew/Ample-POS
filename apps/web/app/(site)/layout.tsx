@@ -50,6 +50,9 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
           <Link href="/start" className="hover:text-stone-800">
             Start free trial
           </Link>
+          <Link href="/developers" className="hover:text-stone-800">
+            API guide
+          </Link>
           <Link href="/login" className="hover:text-stone-800">
             Sign in
           </Link>

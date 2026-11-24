@@ -17,6 +17,7 @@ export const PLATFORM_PERMISSIONS: readonly PermissionDefinition[] = [
   { key: 'modules.manage', description: 'Turn tools on and off for the business' },
   { key: 'audit.read', description: 'View the audit log' },
   { key: 'billing.manage', description: 'Manage the subscription and payment method' },
+  { key: 'api.manage', description: 'Create API keys and webhooks for other apps' },
 ];
 
 export function hasPermission(granted: readonly string[], required: string): boolean {

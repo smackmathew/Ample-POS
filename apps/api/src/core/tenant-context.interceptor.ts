@@ -13,11 +13,12 @@ import { schema } from '@pos/db';
 import { getModule, hasPermission, type ModuleId } from '@pos/modules';
 import { and, eq, sql } from 'drizzle-orm';
 import { READ_METHODS, standing } from '../billing/standing';
+import { effectivePermissions } from './api-keys';
 import { verifyDeviceCredential } from './device-auth';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import type { AuthedRequest } from './auth.guard';
 import { Db } from './database';
-import { MODULE_KEY, NO_TENANT_KEY, PERMISSION_KEY, PUBLIC_KEY } from './decorators';
+import { MODULE_KEY, NO_API_KEY, NO_TENANT_KEY, PERMISSION_KEY, PUBLIC_KEY } from './decorators';
 import { runWithContext, type RequestContext } from './request-context';
 import { toolSetting } from './tool-settings';
 
@@ -46,8 +47,16 @@ export class TenantContextInterceptor implements NestInterceptor {
     const permission = meta<string>(PERMISSION_KEY);
     const moduleId = meta<ModuleId>(MODULE_KEY);
 
+    const apiKey = req.apiKey ?? null;
     const tenantHeader = req.headers['x-tenant-id'];
-    const tenantId = typeof tenantHeader === 'string' ? tenantHeader : undefined;
+    let tenantId = typeof tenantHeader === 'string' ? tenantHeader : undefined;
+    if (apiKey) {
+      // A key belongs to one business; the header is optional but must match.
+      if (noTenant || meta<boolean>(NO_API_KEY)) throw new ForbiddenException('API keys can’t be used for this; sign in instead');
+      if (tenantId && tenantId !== apiKey.tenantId) throw new ForbiddenException('This API key belongs to a different business');
+      tenantId = apiKey.tenantId;
+      if (apiKey.readOnly && !READ_METHODS.has(req.method)) throw new ForbiddenException('This API key is read-only');
+    }
     if (!noTenant && (!tenantId || !UUID.test(tenantId))) {
       throw new BadRequestException('X-Tenant-Id header with a business id is required');
     }
@@ -55,7 +64,7 @@ export class TenantContextInterceptor implements NestInterceptor {
     return from(
       this.db.pool.transaction(async (tx) => {
         await tx.execute(sql`select set_config('app.user_id', ${user.userId}, true)`);
-        const ctx: RequestContext = { user, tx, tenant: null, device: null };
+        const ctx: RequestContext = { user, tx, tenant: null, device: null, apiKey };
 
         if (!noTenant) {
           await tx.execute(sql`select set_config('app.tenant_id', ${tenantId!}, true)`);
@@ -70,8 +79,12 @@ export class TenantContextInterceptor implements NestInterceptor {
             .innerJoin(schema.roles, eq(schema.roles.id, schema.memberships.roleId))
             .where(and(eq(schema.memberships.userId, user.userId), eq(schema.memberships.status, 'active')));
           // RLS already limits rows to the selected business, so no row means no access.
-          if (!membership) throw new ForbiddenException('You are not a member of this business');
-          ctx.tenant = { tenantId: tenantId!, ...membership };
+          if (!membership) {
+            throw new ForbiddenException(apiKey ? 'The person who created this API key is no longer part of the business' : 'You are not a member of this business');
+          }
+          // An API key gets what it was given, never more than its creator has now.
+          const permissions = apiKey ? effectivePermissions(apiKey.permissions, membership.permissions) : membership.permissions;
+          ctx.tenant = { tenantId: tenantId!, ...membership, permissions };
 
           // A business suspended by Ample POS can't be used until it's restored.
           const [tenant] = await tx.select({ suspendedAt: schema.tenants.suspendedAt, reason: schema.tenants.suspendedReason }).from(schema.tenants);
@@ -92,7 +105,7 @@ export class TenantContextInterceptor implements NestInterceptor {
             if (!ctx.device) throw new UnauthorizedException('This device is not recognized or has been revoked');
           }
 
-          if (permission && !hasPermission(membership.permissions, permission)) {
+          if (permission && !hasPermission(permissions, permission)) {
             throw new ForbiddenException(`Missing permission: ${permission}`);
           }
           if (moduleId) {

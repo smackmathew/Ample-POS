@@ -555,6 +555,33 @@ applies to it too. Policies let it read every business. It can change only
 tool settings, suspensions, the tool catalog and its own log, and can't read
 passwords, sessions or two-step secrets.
 
+## API for other apps
+
+A business can connect its own systems (a hub, an ERP, a supplier feed) under
+**API & webhooks** in the dashboard. The public guide is at `/developers`.
+
+- **API keys** (`ak_<id>_<secret>`) belong to one business and are sent as
+  `Authorization: Bearer`. No `X-Tenant-Id` is needed. A key acts for the
+  person who created it with the permissions chosen for it, and never more
+  than that person has now; read-only keys can't change anything. Only a hash
+  is stored. Keys can't manage keys or reach routes outside the business, and
+  stop working if the creator leaves. Requests are audited with the key.
+- **Every existing endpoint works with a key.** For pushing data in, there are
+  two bulk endpoints: `POST /integrations/products/upsert` (by SKU, up to
+  500 rows) and `POST /integrations/inventory/levels` (set on-hand counts,
+  recorded as one adjustment). Each row succeeds or fails on its own.
+- **Change feed.** `GET /events?after=<id>` lists public events (products,
+  variants, `inventory.changed` with the new on-hand count, sales, customers,
+  purchase orders, locations) oldest first. Keys only see the types their
+  permissions allow.
+- **Webhooks.** The same events are POSTed to each registered URL with an
+  `Ample-Signature: t=…,v1=<HMAC-SHA256 of "t.body">` header, from the
+  worker. Failures retry with backoff for about a day, then show as failed with
+  a retry button. Events and deliveries are written in the same transaction as
+  the change. Webhook URLs on private networks are refused (set
+  `WEBHOOK_ALLOW_PRIVATE=true` only for local development). Signing secrets are
+  sealed with `SECRETS_KEY` when it's set.
+
 ## Deploying to Render
 
 `render.yaml` is a Render Blueprint: one Docker web service and one Postgres
