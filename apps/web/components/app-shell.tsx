@@ -36,11 +36,12 @@ export function AppShell({
   children: ReactNode;
 }) {
   const nav = (
-    <nav className="space-y-6">
+    <nav className="space-y-3">
       {sections.map((section, i) => (
-        <div key={section.title ?? i}>
-          {section.title && <p className="px-3 text-[11px] font-semibold tracking-wider text-stone-400 uppercase">{section.title}</p>}
-          <ul className="mt-1.5 space-y-0.5">
+        // Each titled group (Business, Product catalog, ...) sits in its own thin-bordered box.
+        <div key={section.title ?? i} className={section.title ? 'rounded-xl border border-stone-200 p-1.5' : ''}>
+          {section.title && <p className="px-3 pt-1.5 text-[11px] font-semibold tracking-wider text-stone-400 uppercase">{section.title}</p>}
+          <ul className={`space-y-0.5 ${section.title ? 'mt-1' : ''}`}>
             {section.items.map((item) => (
               <li key={item.href}>
                 <NavLink href={item.href} exact={item.exact}>
