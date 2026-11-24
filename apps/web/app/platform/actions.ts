@@ -28,6 +28,14 @@ export async function restoreCompany(companyId: string, _: ActionState): Promise
   });
 }
 
+export async function cardPaymentsOff(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/platform/companies/${companyId}/card-payments/off`, { method: 'POST', body: { reason: String(form.get('reason') ?? '') } });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: 'Card payments are off for this business' };
+  });
+}
+
 export async function setPlatformTool(moduleId: string, change: { available?: boolean }): Promise<ActionState> {
   return attempt(async () => {
     await api(`/platform/tools/${moduleId}`, { method: 'PUT', body: change });

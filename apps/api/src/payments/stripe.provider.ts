@@ -66,8 +66,22 @@ export class StripeCardProvider implements CardPaymentProvider {
 
   constructor(
     private readonly secretKey: string,
-    private readonly options: { account?: string; fetch?: typeof fetch } = {},
+    /**
+     * account: a connected account to act on (sent as Stripe-Account).
+     * ownAccount: the key's own account, recorded on payments but not sent.
+     */
+    private readonly options: { account?: string; ownAccount?: string; fetch?: typeof fetch } = {},
   ) {}
+
+  /** Which Stripe account payments go to, recorded on each payment (null: the platform's own). */
+  get account(): string | null {
+    return this.options.account ?? this.options.ownAccount ?? null;
+  }
+
+  /** The same platform key, acting on a connected account (Stripe Connect direct charges). */
+  withAccount(account: string): StripeCardProvider {
+    return new StripeCardProvider(this.secretKey, { ...this.options, account });
+  }
 
   async createCardPayment(input: { amountMinor: number; currency: string; idempotencyKey: string; metadata: Record<string, string> }): Promise<ProviderPayment> {
     const pi = await this.call<StripePaymentIntent>('POST', '/payment_intents', input.idempotencyKey, {

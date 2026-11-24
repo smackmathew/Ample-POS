@@ -75,6 +75,9 @@ export default async function PlatformOverview({ searchParams }: { searchParams:
             </div>
           ))}
           <p className="pt-2 text-xs text-stone-500">
+            Card setups: {o.merchants.platform ?? 0} built-in · {o.merchants.pending ?? 0} onboarding · {o.merchants.own ?? 0} own Stripe
+          </p>
+          <p className="text-xs text-stone-500">
             {o.users.activeLast7Days} of {o.users.total} people signed in during the last 7 days
           </p>
         </section>

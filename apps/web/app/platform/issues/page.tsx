@@ -11,6 +11,7 @@ const HINT: Record<string, string> = {
   outbox: 'A background job keeps failing (billing sync, store sync…). The error shows what went wrong.',
   integration: 'Their Shopify connection stopped working. They may need to reconnect it.',
   'sync-issues': 'Products or orders couldn’t sync with their online store.',
+  merchant: 'Their built-in card account can’t take cards (or soon won’t) until they give Stripe what it asks for. They continue on their Card payments page.',
   'register-open': 'A register has been open for over a day; the drawer count may be off.',
 };
 

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { STANDING, usd, utc, type CompanyRow } from '@/lib/platform';
+import { MERCHANT, STANDING, usd, utc, type CompanyRow } from '@/lib/platform';
 
 const FILTERS = [
   ['all', 'All'],
@@ -43,6 +43,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
             <tr>
               <th className="px-4 py-2">Company</th>
               <th className="px-4 py-2">Billing</th>
+              <th className="px-4 py-2">Cards</th>
               <th className="px-4 py-2 text-right">MRR</th>
               <th className="px-4 py-2 text-right">Sales, 30 days</th>
               <th className="px-4 py-2 text-right">Tools</th>
@@ -69,6 +70,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                     '—'
                   )}
                 </td>
+                <td className={`px-4 py-2 text-xs ${MERCHANT[c.merchant]?.[1] ?? ''}`}>{MERCHANT[c.merchant]?.[0] ?? c.merchant}</td>
                 <td className="px-4 py-2 text-right tabular-nums">{c.mrrMinor ? usd(c.mrrMinor) : '—'}</td>
                 <td className="px-4 py-2 text-right tabular-nums">
                   {usd(c.gross30Minor)}
@@ -84,7 +86,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
             ))}
             {companies.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-stone-500">
+                <td colSpan={9} className="px-4 py-6 text-stone-500">
                   No companies match.
                 </td>
               </tr>
