@@ -108,3 +108,17 @@ export async function setCompanyPlan(companyId: string, _: ActionState, form: Fo
     return { ok: 'Saved. Their subscription updates shortly.' };
   });
 }
+
+export async function sendTestEmail(_: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api('/platform/email/test', { method: 'POST', body: { email: String(form.get('email') ?? '').trim() } });
+    return { ok: 'Sent. If it doesn’t arrive within a minute, check spam, then your Resend dashboard (Emails → Logs).' };
+  });
+}
+
+export async function confirmEmailByHand(_: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    const res = await api<{ alreadyConfirmed: boolean }>('/platform/email/confirm', { method: 'POST', body: { email: String(form.get('email') ?? '').trim() } });
+    return { ok: res.alreadyConfirmed ? 'That email was already confirmed.' : 'Confirmed. They can create their business now (refresh their page).' };
+  });
+}
