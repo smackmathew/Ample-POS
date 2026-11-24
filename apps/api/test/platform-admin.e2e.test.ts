@@ -157,7 +157,7 @@ describe('super admin dashboard', () => {
       expect((await owner.get('/modules').expect(200)).body.find((m: { id: string }) => m.id === 'tasks')).toMatchObject({ available: true, enabled: true, monthlyPriceMinor: 1500 });
       expect((await owner.get('/billing').expect(200)).body.lines).toEqual(expect.arrayContaining([expect.objectContaining({ moduleId: 'tasks', unitMinor: 1500, totalMinor: 1500 })]));
       tools = (await admin.put('/platform/tools/tasks', { monthlyPriceMinor: null }).expect(200)).body;
-      expect(tools.find((t: { id: string }) => t.id === 'tasks')).toMatchObject({ monthlyPriceMinor: 900, priceOverridden: false });
+      expect(tools.find((t: { id: string }) => t.id === 'tasks')).toMatchObject({ monthlyPriceMinor: 499, priceOverridden: false });
       await app.get(OutboxWorker).runOnce();
     } finally {
       await admin.put('/platform/tools/tasks', { available: true, monthlyPriceMinor: null }).expect(200);
@@ -201,7 +201,7 @@ describe('super admin dashboard', () => {
       expect(pricing.plans.map((p: { id: string; baseMinor: number }) => [p.id, p.baseMinor])).toEqual([['starter', 2900], ['growth', 5900], ['pro', 7900]]);
       expect(pricing.websiteAddons[0]).toMatchObject({ id: 'simple', setupMinor: 29900 });
       expect(pricing.tools.find((t: { id: string }) => t.id === 'loyalty')).toMatchObject({ included: true });
-      expect(pricing.tools.find((t: { id: string }) => t.id === 'inventory')).toMatchObject({ included: false, monthlyPriceMinor: 2900 });
+      expect(pricing.tools.find((t: { id: string }) => t.id === 'inventory')).toMatchObject({ included: false, monthlyPriceMinor: 499 });
       expect(pricing.plans[0]).not.toHaveProperty('companies');
 
       const detail = (await admin.put(`/platform/companies/${owner.tenantId}/plan`, { plan: 'pro', websiteAddon: 'simple' }).expect(200)).body;

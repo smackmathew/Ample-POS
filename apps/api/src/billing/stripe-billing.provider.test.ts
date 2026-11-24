@@ -69,7 +69,7 @@ describe('StripeBillingProvider', () => {
           },
         },
       },
-      { body: { data: [price('price_tasks', 'tasks', 900)] } },
+      { body: { data: [price('price_tasks', 'tasks', 499)] } },
       {
         body: {
           id: 'sub_1',
@@ -80,7 +80,7 @@ describe('StripeBillingProvider', () => {
             data: [
               { id: 'si_base', quantity: 1, current_period_end: 1782864000, price: price('price_base', 'base', 0) },
               { id: 'si_pos', quantity: 3, current_period_end: 1782864000, price: price('price_pos', 'pos', 4900) },
-              { id: 'si_tasks', quantity: 3, current_period_end: 1782864000, price: price('price_tasks', 'tasks', 900) },
+              { id: 'si_tasks', quantity: 3, current_period_end: 1782864000, price: price('price_tasks', 'tasks', 499) },
             ],
           },
         },
@@ -110,7 +110,7 @@ describe('StripeBillingProvider', () => {
       cancelAtPeriodEnd: false,
       items: [
         { moduleId: 'pos', quantity: 3, unitMinor: 4900 },
-        { moduleId: 'tasks', quantity: 3, unitMinor: 900 },
+        { moduleId: 'tasks', quantity: 3, unitMinor: 499 },
       ],
     });
   });

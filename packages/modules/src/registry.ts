@@ -72,7 +72,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Counts', path: '/inventory/counts', permission: 'inventory.count' },
     ],
     phase: 2,
-    monthlyPriceMinor: 2900,
+    monthlyPriceMinor: 499,
   },
   {
     id: 'pos',
@@ -112,7 +112,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Timecards', path: '/timecards', permission: 'timeclock.manage' },
     ],
     phase: 6,
-    monthlyPriceMinor: 1900,
+    monthlyPriceMinor: 499,
   },
   {
     id: 'scheduling',
@@ -126,7 +126,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     ],
     nav: [{ label: 'Schedule', path: '/schedule', permission: 'scheduling.read' }],
     phase: 6,
-    monthlyPriceMinor: 1900,
+    monthlyPriceMinor: 499,
   },
   {
     id: 'tasks',
@@ -143,7 +143,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Checklists', path: '/tasks/manage', permission: 'tasks.manage' },
     ],
     phase: 6,
-    monthlyPriceMinor: 900,
+    monthlyPriceMinor: 499,
   },
   {
     id: 'ecommerce-sync',
@@ -201,7 +201,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'giftcards.manage', description: 'See full gift card codes, adjust balances and void cards' }],
     nav: [{ label: 'Gift cards', path: '/gift-cards', permission: 'giftcards.manage' }],
     phase: 10,
-    monthlyPriceMinor: 900,
+    monthlyPriceMinor: 499,
   },
   {
     id: 'purchasing',
