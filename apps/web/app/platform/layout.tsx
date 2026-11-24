@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AccountLinks, AppShell } from '@/components/app-shell';
 import { api } from '@/lib/api';
 import type { PlatformAccess } from '@/lib/platform';
 
@@ -33,24 +34,31 @@ export default async function PlatformLayout({ children }: { children: ReactNode
     );
   }
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r border-stone-800 bg-stone-900 p-4 text-stone-100">
-        <Link href="/platform" className="block text-lg font-semibold">
-          Ample POS
-        </Link>
-        <p className="text-xs text-stone-400">Super admin · {access.email}</p>
-        <nav className="mt-6 space-y-0.5">
-          {NAV.map(([href, label]) => (
-            <Link key={href} href={href} className="block rounded px-2 py-1.5 text-sm hover:bg-stone-800">
-              {label}
+    <AppShell
+      title="Ample POS"
+      subtitle="Every company, plans and prices"
+      badge="Super admin"
+      sections={[
+        {
+          items: NAV.map(([href, label]) => ({
+            href,
+            label,
+            exact: href === '/platform',
+          })),
+        },
+      ]}
+      footer={
+        <AccountLinks
+          email={access.email ?? ''}
+          extra={
+            <Link href="/businesses" className="hover:text-stone-900">
+              Your businesses
             </Link>
-          ))}
-        </nav>
-        <Link href="/businesses" className="mt-8 block text-xs text-stone-400 hover:underline">
-          ← Your businesses
-        </Link>
-      </aside>
-      <main className="min-w-0 flex-1 p-8">{children}</main>
-    </div>
+          }
+        />
+      }
+    >
+      {children}
+    </AppShell>
   );
 }

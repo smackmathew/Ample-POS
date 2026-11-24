@@ -28,7 +28,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {c.suspendedAt && <span className="rounded bg-stone-900 px-2 py-1 text-sm text-white">Suspended</span>}
+          {c.suspendedAt && <span className="rounded-full bg-red-50 px-2.5 py-1 text-sm font-medium text-red-700">Suspended</span>}
           {c.billing?.standing && <span className={`rounded px-2 py-1 text-sm ${STANDING[c.billing.standing][1]}`}>{STANDING[c.billing.standing][0]}</span>}
         </div>
       </div>

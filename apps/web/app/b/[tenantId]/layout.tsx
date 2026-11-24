@@ -1,26 +1,26 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AccountLinks, AppShell } from '@/components/app-shell';
 import { api, ApiError } from '@/lib/api';
-import { can, type CurrentTenant, type NavSection, type TenantBilling } from '@/lib/types';
+import { can, type CurrentTenant, type Me, type NavSection, type TenantBilling } from '@/lib/types';
 
-export default async function TenantLayout({
-  children,
-  params,
-}: {
-  children: ReactNode;
-  params: Promise<{ tenantId: string }>;
-}) {
+export default async function TenantLayout({ children, params }: { children: ReactNode; params: Promise<{ tenantId: string }> }) {
   const { tenantId } = await params;
   let current: CurrentTenant;
   let nav: { sections: NavSection[] };
+  let me: Me;
   try {
-    [current, nav] = await Promise.all([api<CurrentTenant>('/tenant', { tenantId }), api<{ sections: NavSection[] }>('/navigation', { tenantId })]);
+    [current, nav, me] = await Promise.all([
+      api<CurrentTenant>('/tenant', { tenantId }),
+      api<{ sections: NavSection[] }>('/navigation', { tenantId }),
+      api<Me>('/me'),
+    ]);
   } catch (err) {
     // Suspended by Ample POS: say so instead of an error page.
     if (err instanceof ApiError && (err.body as { code?: string } | null)?.code === 'business_suspended') {
       return (
         <main className="mx-auto mt-24 max-w-lg space-y-4 px-4 text-center">
-          <h1 className="text-2xl font-semibold">This business is suspended</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">This business is suspended</h1>
           <p className="text-stone-600">{err.message}</p>
           <Link href="/businesses" className="btn-secondary">
             Your businesses
@@ -32,42 +32,37 @@ export default async function TenantLayout({
   }
   const base = `/b/${tenantId}`;
 
+  const sections = [
+    { items: [{ href: base, label: 'Home', exact: true }] },
+    ...nav.sections.map((section) => ({
+      title: section.title,
+      items: section.items.map((item) => ({
+        href: `${base}${item.path}`,
+        label: item.label,
+      })),
+    })),
+  ];
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-60 shrink-0 border-r border-stone-200 bg-white p-4">
-        <Link href={base} className="block text-lg font-semibold">
-          {current.tenant.name}
-        </Link>
-        <div className="flex gap-3 text-xs text-stone-500">
-          <Link href="/businesses" className="hover:underline">
-            Switch business
-          </Link>
-          <Link href="/account" className="hover:underline">
-            Your account
-          </Link>
-        </div>
-        <nav className="mt-6 space-y-5">
-          {nav.sections.map((section) => (
-            <div key={section.title}>
-              <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">{section.title}</p>
-              <ul className="mt-1 space-y-0.5">
-                {section.items.map((item) => (
-                  <li key={item.path}>
-                    <Link href={`${base}${item.path}`} className="block rounded px-2 py-1 text-sm hover:bg-stone-100">
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </nav>
-      </aside>
-      <main className="flex-1 p-8">
-        <BillingBanner billing={current.billing} href={can(current.membership.permissions, 'billing.manage') ? `${base}/billing` : null} />
-        {children}
-      </main>
-    </div>
+    <AppShell
+      title={current.tenant.name}
+      subtitle={current.membership.role.key === 'owner' ? 'Owner' : 'Team member'}
+      badge={current.billing?.standing === 'trial' ? 'Free trial' : undefined}
+      sections={sections}
+      footer={
+        <AccountLinks
+          email={me.user.email}
+          extra={
+            <Link href="/businesses" className="hover:text-stone-900">
+              Switch business
+            </Link>
+          }
+        />
+      }
+    >
+      <BillingBanner billing={current.billing} href={can(current.membership.permissions, 'billing.manage') ? `${base}/billing` : null} />
+      {children}
+    </AppShell>
   );
 }
 
@@ -90,7 +85,7 @@ function BillingBanner({ billing, href }: { billing: TenantBilling | null; href:
   }
   if (!message) return null;
   return (
-    <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${tone}`}>
+    <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${tone}`}>
       <span>{message}</span>
       {href && (
         <Link href={href} className="btn px-3 py-1.5 text-sm">

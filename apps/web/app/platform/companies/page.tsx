@@ -25,7 +25,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
             <Link
               key={key}
               href={`/platform/companies?status=${key}${search ? `&search=${encodeURIComponent(search)}` : ''}`}
-              className={`rounded px-3 py-1 ${filter === key ? 'bg-stone-900 text-white' : 'bg-white hover:bg-stone-100'}`}
+              className={`rounded-lg px-3 py-1 ${filter === key ? 'bg-brand text-white' : 'bg-white hover:bg-stone-100'}`}
             >
               {label}
             </Link>
@@ -64,7 +64,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                 </td>
                 <td className="px-4 py-2">
                   {c.suspendedAt ? (
-                    <span className="rounded bg-stone-900 px-2 py-0.5 text-xs text-white">Suspended</span>
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Suspended</span>
                   ) : c.standing ? (
                     <span className={`rounded px-2 py-0.5 text-xs ${STANDING[c.standing][1]}`}>{STANDING[c.standing][0]}</span>
                   ) : (

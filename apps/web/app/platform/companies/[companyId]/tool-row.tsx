@@ -21,7 +21,7 @@ export function ToolRow({ companyId, tool, price }: { companyId: string; tool: C
     <tr className="border-t border-stone-100">
       <td className="py-2">
         {tool.name}
-        {!tool.available && <span className="ml-2 rounded bg-stone-900 px-1.5 py-0.5 text-xs text-white">off for everyone</span>}
+        {!tool.available && <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600">off for everyone</span>}
         {error && <div className="text-xs text-red-700">{error}</div>}
       </td>
       <td className="text-stone-500">{price}</td>

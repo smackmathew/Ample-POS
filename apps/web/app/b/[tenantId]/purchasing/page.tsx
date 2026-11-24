@@ -73,7 +73,7 @@ export default async function PurchasingPage({ params, searchParams }: { params:
             <Link
               key={key || 'all'}
               href={`/b/${tenantId}/purchasing?status=${key}`}
-              className={`rounded px-3 py-1 ${filter === key ? 'bg-stone-900 text-white' : 'bg-white text-stone-700 hover:bg-stone-100'}`}
+              className={`rounded-lg px-3 py-1 ${filter === key ? 'bg-brand text-white' : 'bg-white text-stone-700 hover:bg-stone-100'}`}
             >
               {label}
             </Link>
