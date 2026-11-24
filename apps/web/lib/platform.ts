@@ -30,7 +30,16 @@ export interface Overview {
   issues: { total: number; high: number };
   /** Companies by card setup: platform, pending (onboarding), own, off. */
   merchants: Record<string, number>;
+  plans: Record<string, number>;
+  websites: number;
 }
+
+export interface PlanCatalog {
+  plans: { id: 'starter' | 'growth' | 'pro'; name: string; tagline: string; baseMinor: number; extraLocationMinor: number; registersPerLocation: number; websiteMaintenanceMinor: number; companies: number }[];
+  websiteAddons: { id: 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
+}
+
+export const PLAN_NAME: Record<string, string> = { starter: 'Starter', growth: 'Growth', pro: 'Pro' };
 
 export interface CompanyRow {
   id: string;
@@ -44,6 +53,8 @@ export interface CompanyRow {
   trialEndsAt: string | null;
   mrrMinor: number;
   toolsOn: number;
+  plan: 'starter' | 'growth' | 'pro' | null;
+  websiteAddon: 'simple' | 'complex' | null;
   merchant: 'off' | 'platform' | 'platform:pending' | 'own';
   locations: number;
   members: number;
@@ -81,6 +92,9 @@ export interface Company {
     cancelAtPeriodEnd: boolean;
     items: { moduleId: string; quantity: number; unitMinor?: number }[];
     mrrMinor: number;
+    plan: 'starter' | 'growth' | 'pro';
+    websiteAddon: 'simple' | 'complex' | null;
+    websiteSetupChargedAt: string | null;
   } | null;
   tools: CompanyTool[];
   merchant: {

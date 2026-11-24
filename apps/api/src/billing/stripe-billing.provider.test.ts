@@ -27,7 +27,7 @@ describe('StripeBillingProvider', () => {
     const input = {
       tenantId: 't1',
       customerId: 'cus_1',
-      items: [{ moduleId: 'pos', quantity: 2 }],
+      items: [{ moduleId: 'pos', quantity: 2, unitMinor: 4900 }],
       trialEnd: new Date('2026-07-01T00:00:00Z'),
       successUrl: 'https://hub/ok',
       cancelUrl: 'https://hub/no',

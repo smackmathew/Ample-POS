@@ -1,4 +1,7 @@
-import { BadRequestException, Controller, Get, HttpCode, Inject, Logger, NotFoundException, Post, Req, type RawBodyRequest } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Inject, Logger, NotFoundException, Post, Put, Req, type RawBodyRequest } from '@nestjs/common';
+import { PLAN_IDS, WEBSITE_ADDON_IDS } from '@pos/modules';
+import { z } from 'zod';
+import { ZodPipe } from '../core/zod';
 import { sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import { APP_CONFIG, type AppConfig } from '../core/config';
@@ -8,6 +11,9 @@ import { runAsSystem } from '../core/system-context';
 import { verifyStripeWebhook } from '../payments/stripe.provider';
 import { BillingService } from './billing.service';
 
+const planBody = z.object({ plan: z.enum(PLAN_IDS) });
+const websiteBody = z.object({ addon: z.enum(WEBSITE_ADDON_IDS).nullable() });
+
 @Controller('billing')
 @RequirePermission('billing.manage')
 export class BillingController {
@@ -15,6 +21,20 @@ export class BillingController {
 
   @Get()
   summary() {
+    return this.billing.summary();
+  }
+
+  /** Change plan (Starter, Growth, Pro). The subscription follows, prorated. */
+  @Put('plan')
+  async plan(@Body(new ZodPipe(planBody)) body: z.infer<typeof planBody>) {
+    await this.billing.setPlan(body.plan);
+    return this.billing.summary();
+  }
+
+  /** Add the online store (simple or complex), or remove it with null. */
+  @Put('website')
+  async website(@Body(new ZodPipe(websiteBody)) body: z.infer<typeof websiteBody>) {
+    await this.billing.setWebsiteAddon(body.addon);
     return this.billing.summary();
   }
 

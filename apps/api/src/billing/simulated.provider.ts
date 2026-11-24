@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BilledItem } from '@pos/db';
-import type { BillingProvider, CheckoutInput, ProviderSubscription } from './provider';
+import type { BillingProvider, CheckoutInput, OneTimeCharge, ProviderSubscription } from './provider';
 
 const MONTH_MS = 30 * 86_400_000;
 
@@ -34,5 +34,12 @@ export class SimulatedBillingProvider implements BillingProvider {
 
   async setCancelAtPeriodEnd(subscription: ProviderSubscription, cancel: boolean) {
     return { ...subscription, cancelAtPeriodEnd: cancel };
+  }
+
+  /** Charges made, for tests and demos. */
+  readonly charges: { customerId: string; charge: OneTimeCharge }[] = [];
+
+  async chargeOnce(customerId: string, charge: OneTimeCharge) {
+    this.charges.push({ customerId, charge });
   }
 }

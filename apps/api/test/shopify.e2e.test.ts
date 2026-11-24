@@ -39,6 +39,7 @@ afterAll(async () => {
 async function connected() {
   const owner = await Client.signIn(app);
   await owner.createBusiness();
+  await owner.put('/billing/website', { addon: 'simple' }).expect(200);
   for (const m of ['catalog', 'inventory', 'ecommerce-sync']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
   const store = (await owner.post('/locations', { name: 'Store', timezone: 'UTC' }).expect(201)).body;
   await owner.post('/integrations/shopify/connect', { shopDomain: shopify.domain, accessToken: shopify.token, webhookSecret: shopify.webhookSecret }).expect(201);
@@ -73,6 +74,7 @@ describe('connecting a store', () => {
     const owner = await Client.signIn(app);
     await owner.createBusiness();
     await owner.get('/integrations/shopify').expect(403); // module off
+    await owner.put('/billing/website', { addon: 'simple' }).expect(200);
     for (const m of ['catalog', 'ecommerce-sync']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
 
     const body = { shopDomain: shopify.domain, accessToken: shopify.token, webhookSecret: shopify.webhookSecret };
@@ -113,7 +115,8 @@ describe('Connect with Shopify (OAuth)', () => {
   async function ownerWithSync() {
     const owner = await Client.signIn(app);
     await owner.createBusiness();
-    for (const m of ['catalog', 'inventory', 'ecommerce-sync']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
+    await owner.put('/billing/website', { addon: 'simple' }).expect(200);
+  for (const m of ['catalog', 'inventory', 'ecommerce-sync']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
     return owner;
   }
 

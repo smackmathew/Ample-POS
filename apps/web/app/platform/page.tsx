@@ -75,6 +75,9 @@ export default async function PlatformOverview({ searchParams }: { searchParams:
             </div>
           ))}
           <p className="pt-2 text-xs text-stone-500">
+            Plans: {o.plans.starter ?? 0} Starter · {o.plans.growth ?? 0} Growth · {o.plans.pro ?? 0} Pro · {o.websites} online stores
+          </p>
+          <p className="text-xs text-stone-500">
             Card setups: {o.merchants.platform ?? 0} built-in · {o.merchants.pending ?? 0} onboarding · {o.merchants.own ?? 0} own Stripe
           </p>
           <p className="text-xs text-stone-500">

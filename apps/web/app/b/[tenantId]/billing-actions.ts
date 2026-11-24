@@ -34,3 +34,19 @@ export async function setCancel(tenantId: string, cancel: boolean): Promise<Acti
     return { ok: cancel ? 'Your subscription will end at the close of this billing period.' : 'Your subscription will continue.' };
   });
 }
+
+export async function choosePlan(tenantId: string, plan: string, _: ActionState): Promise<ActionState> {
+  return attempt(async () => {
+    await api('/billing/plan', { tenantId, method: 'PUT', body: { plan } });
+    revalidatePath(`/b/${tenantId}`, 'layout');
+    return { ok: 'Plan changed' };
+  });
+}
+
+export async function chooseWebsite(tenantId: string, addon: string | null, _: ActionState): Promise<ActionState> {
+  return attempt(async () => {
+    await api('/billing/website', { tenantId, method: 'PUT', body: { addon } });
+    revalidatePath(`/b/${tenantId}`, 'layout');
+    return { ok: addon ? 'Online store added. Turn on Website sync in Tools to connect it.' : 'Online store removed' };
+  });
+}

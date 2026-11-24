@@ -39,18 +39,35 @@ describe('billing (simulated)', () => {
     const trialDays = (Date.parse(tenant.billing.trialEndsAt) - Date.parse(tenant.tenant.createdAt)) / DAY;
     expect(trialDays).toBeCloseTo(14, 5);
 
+    // Every business starts on Starter: $39 a month for its first location.
     let summary = (await owner.get('/billing').expect(200)).body;
-    expect(summary).toMatchObject({ standing: 'trial', provider: 'simulated', subscription: null, lines: [], monthlyTotalMinor: 0 });
+    expect(summary).toMatchObject({
+      standing: 'trial',
+      provider: 'simulated',
+      subscription: null,
+      plan: { id: 'starter', name: 'Starter', registersPerLocation: 1 },
+      lines: [{ moduleId: 'plan:starter', name: 'Starter plan, first location', unitMinor: 3900, quantity: 1, totalMinor: 3900 }],
+      monthlyTotalMinor: 3900,
+      website: null,
+    });
+    expect(summary.plans.map((p: { id: string }) => p.id)).toEqual(['starter', 'growth', 'pro']);
 
-    for (const m of ['catalog', 'pos', 'time-clock', 'reporting']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
+    // Included tools cost nothing; paid add-ons are per location; extra locations are the plan's extra price.
+    for (const m of ['catalog', 'pos', 'time-clock', 'reporting', 'customers', 'loyalty']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
     await owner.post('/locations', { name: 'Second', timezone: 'UTC' }).expect(201);
     summary = (await owner.get('/billing').expect(200)).body;
     expect(summary.lines).toEqual([
-      { moduleId: 'pos', name: 'Point of sale', unitMinor: 4900, quantity: 2, totalMinor: 9800 },
+      { moduleId: 'plan:starter', name: 'Starter plan, first location', unitMinor: 3900, quantity: 1, totalMinor: 3900 },
+      { moduleId: 'plan:starter:location', name: 'Extra locations (Starter)', unitMinor: 1900, quantity: 1, totalMinor: 1900 },
       { moduleId: 'time-clock', name: 'Time clock', unitMinor: 1900, quantity: 2, totalMinor: 3800 },
     ]);
-    expect(summary.included).toEqual(['Product catalog', 'Reporting']);
-    expect(summary.monthlyTotalMinor).toBe(13600);
+    expect(summary.included).toEqual(['Product catalog', 'Point of sale', 'Reporting', 'Customers', 'Loyalty rewards']);
+    expect(summary.monthlyTotalMinor).toBe(9600);
+
+    // Growth: $59 + $29 per extra location.
+    summary = (await owner.put('/billing/plan', { plan: 'growth' }).expect(200)).body;
+    expect(summary.lines.slice(0, 2).map((l: { unitMinor: number }) => l.unitMinor)).toEqual([5900, 2900]);
+    await owner.put('/billing/plan', { plan: 'gold' }).expect(400);
 
     // The trial cannot be extended by the application.
     await expect(db.begin(async (tx) => {
@@ -102,20 +119,29 @@ describe('billing (simulated)', () => {
     await owner.put('/modules/pos', { enabled: true }).expect(200);
     await owner.post('/billing/checkout').expect(201);
     const items = async () => (await db`select items from tenant_billing where tenant_id = ${owner.tenantId!}`)[0]!.items;
-    expect(await items()).toEqual([{ moduleId: 'pos', quantity: 1, unitMinor: 4900 }]);
+    expect(await items()).toEqual([{ moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 }]);
 
     await owner.put('/modules/scheduling', { enabled: true }).expect(200);
     const second = (await owner.post('/locations', { name: 'Second', timezone: 'UTC' }).expect(201)).body;
     await worker.runOnce();
     expect(await items()).toEqual([
-      { moduleId: 'pos', quantity: 2, unitMinor: 4900 },
+      { moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 },
+      { moduleId: 'plan:starter:location', quantity: 1, unitMinor: 1900 },
       { moduleId: 'scheduling', quantity: 2, unitMinor: 1900 },
     ]);
 
-    await owner.patch(`/locations/${second.id}`, { archived: true }).expect(200);
-    await owner.put('/modules/pos', { enabled: false }).expect(200);
+    // A plan change follows too.
+    await owner.put('/billing/plan', { plan: 'pro' }).expect(200);
     await worker.runOnce();
-    expect(await items()).toEqual([{ moduleId: 'scheduling', quantity: 1, unitMinor: 1900 }]);
+    expect((await items()).slice(0, 2)).toEqual([
+      { moduleId: 'plan:pro', quantity: 1, unitMinor: 7900 },
+      { moduleId: 'plan:pro:location', quantity: 1, unitMinor: 3900 },
+    ]);
+
+    await owner.patch(`/locations/${second.id}`, { archived: true }).expect(200);
+    await owner.put('/modules/scheduling', { enabled: false }).expect(200);
+    await worker.runOnce();
+    expect(await items()).toEqual([{ moduleId: 'plan:pro', quantity: 1, unitMinor: 7900 }]);
   });
 
   it('cancels at the end of the period and can be resumed', async () => {
@@ -154,6 +180,10 @@ class FakeStripeBilling implements BillingProvider {
   }
   async setCancelAtPeriodEnd(sub: ProviderSubscription, cancel: boolean) {
     return { ...sub, cancelAtPeriodEnd: cancel };
+  }
+  charges: { customerId: string; charge: { key: string; name: string; amountMinor: number } }[] = [];
+  async chargeOnce(customerId: string, charge: { key: string; name: string; amountMinor: number }) {
+    this.charges.push({ customerId, charge });
   }
   async currentSubscription(customerId: string) {
     return this.subscriptions.get(customerId) ?? null;
@@ -197,7 +227,10 @@ describe('billing (stripe)', () => {
     const input = fake.checkouts.at(-1)!;
     expect(input).toMatchObject({
       tenantId: owner.tenantId,
-      items: [{ moduleId: 'time-clock', quantity: 1, unitMinor: 1900 }],
+      items: [
+        { moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 },
+        { moduleId: 'time-clock', quantity: 1, unitMinor: 1900 },
+      ],
       successUrl: `https://hub.example/b/${owner.tenantId}/billing?checkout=success`,
     });
     const trialEndsAt = (await owner.get('/tenant').expect(200)).body.billing.trialEndsAt;
@@ -216,7 +249,23 @@ describe('billing (stripe)', () => {
     // A tool turned on after checkout is added to the subscription by the worker.
     await owner.put('/modules/tasks', { enabled: true }).expect(200);
     await stripeApp.get(OutboxWorker).runOnce();
-    expect(fake.updates.at(-1)).toEqual({ id: 'sub_1', items: [{ moduleId: 'time-clock', quantity: 1, unitMinor: 1900 }, { moduleId: 'tasks', quantity: 1, unitMinor: 900 }] });
+    expect(fake.updates.at(-1)).toEqual({
+      id: 'sub_1',
+      items: [
+        { moduleId: 'plan:starter', quantity: 1, unitMinor: 3900 },
+        { moduleId: 'time-clock', quantity: 1, unitMinor: 1900 },
+        { moduleId: 'tasks', quantity: 1, unitMinor: 900 },
+      ],
+    });
+
+    // Adding the online store while subscribed charges its setup on the next invoice, and adds the plan's sync fee.
+    await owner.put('/billing/website', { addon: 'simple' }).expect(200);
+    expect(fake.charges.at(-1)).toMatchObject({ customerId: input.customerId, charge: { key: 'website:setup:simple', amountMinor: 39900 } });
+    await stripeApp.get(OutboxWorker).runOnce();
+    expect(fake.updates.at(-1)!.items.at(-1)).toEqual({ moduleId: 'website:maintenance', quantity: 1, unitMinor: 999 });
+    // Upgrading to the custom store charges the difference only.
+    await owner.put('/billing/website', { addon: 'complex' }).expect(200);
+    expect(fake.charges.at(-1)!.charge).toMatchObject({ key: 'website:setup:complex', amountMinor: 20000 });
 
     const portal = await owner.post('/billing/portal').expect(200);
     expect(portal.body.url).toBe(`https://billing.stripe.test/${input.customerId}?return=${encodeURIComponent(`https://hub.example/b/${owner.tenantId}/billing`)}`);
@@ -253,5 +302,44 @@ describe('billing (stripe)', () => {
     await webhook({ type: 'customer.updated', data: { object: { id: 'cus_nobody', object: 'customer' } } }).expect(200);
     // Not offered when billing runs on the simulated provider.
     await request(app.getHttpServer()).post('/webhooks/stripe-billing').send('{}').expect(404);
+  });
+});
+
+describe('plans', () => {
+  it('limits open registers per location by plan', async () => {
+    const { owner, store } = await business();
+    await owner.put('/modules/catalog', { enabled: true }).expect(200);
+    await owner.put('/modules/pos', { enabled: true }).expect(200);
+    await owner.post('/registers/sessions', { locationId: store.id, openingFloatMinor: 0 }).expect(201);
+    const staff = await owner.invite(await Client.signIn(app), 'staff');
+    const refused = await staff.post('/registers/sessions', { locationId: store.id, openingFloatMinor: 0 }).expect(409);
+    expect(refused.body).toMatchObject({ code: 'register_limit' });
+    expect(refused.body.message).toContain('Starter plan allows 1 open register per location');
+    // Another location has its own register.
+    const second = (await owner.post('/locations', { name: 'Second', timezone: 'UTC' }).expect(201)).body;
+    await staff.post('/registers/sessions', { locationId: second.id, openingFloatMinor: 0 }).expect(201);
+    await owner.put('/billing/plan', { plan: 'growth' }).expect(200);
+    const manager = await owner.invite(await Client.signIn(app), 'manager');
+    await manager.post('/registers/sessions', { locationId: store.id, openingFloatMinor: 0 }).expect(201);
+  });
+
+  it('adds the online store: setup at checkout, the plan’s sync fee monthly, and website sync with it', async () => {
+    const { owner } = await business();
+    await owner.put('/modules/catalog', { enabled: true }).expect(200);
+    expect((await owner.put('/modules/ecommerce-sync', { enabled: true }).expect(409)).body.code).toBe('website_addon_required');
+    const summary = (await owner.put('/billing/website', { addon: 'complex' }).expect(200)).body;
+    expect(summary.website).toEqual({ id: 'complex', name: 'Custom online store', setupMinor: 59900, setupCharged: false });
+    expect(summary.lines.at(-1)).toEqual({ moduleId: 'website:maintenance', name: 'Online store sync', unitMinor: 999, quantity: 1, totalMinor: 999 });
+    await owner.put('/modules/ecommerce-sync', { enabled: true }).expect(200);
+
+    // Checkout charges the setup once (the simulated provider subscribes at once).
+    await owner.post('/billing/checkout').expect(201);
+    expect((await owner.get('/billing').expect(200)).body.website.setupCharged).toBe(true);
+
+    // Removing the store turns website sync off and stops the monthly fee.
+    const removed = (await owner.put('/billing/website', { addon: null }).expect(200)).body;
+    expect(removed.website).toBeNull();
+    expect(removed.lines.map((l: { moduleId: string }) => l.moduleId)).toEqual(['plan:starter']);
+    expect((await owner.get('/modules').expect(200)).body.find((m: { id: string }) => m.id === 'ecommerce-sync').enabled).toBe(false);
   });
 });

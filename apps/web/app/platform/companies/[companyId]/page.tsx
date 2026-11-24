@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { METHOD, SEVERITY, STANDING, usd, utc, type ActivityEntry, type Company, type Transaction } from '@/lib/platform';
-import { cardPaymentsOff, restoreCompany, suspendCompany } from '../../actions';
+import { cardPaymentsOff, restoreCompany, setCompanyPlan, suspendCompany } from '../../actions';
 import { ToolRow } from './tool-row';
 
 export default async function CompanyPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ before?: string }> }) {
@@ -53,6 +53,33 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
         <Stat label="Stores · devices" value={`${c.locations.filter((l) => !l.archivedAt).length} · ${c.stats.devices}`} note={`${c.members.length} people`} />
         <Stat label="Products · customers" value={`${c.stats.products} · ${c.stats.customers}`} note={Object.entries(c.stats.tenders30).map(([m, a]) => `${METHOD[m] ?? m} ${money(a)}`).join(' · ') || 'No payments in 30 days'} />
       </section>
+
+      {c.billing && (
+        <ActionForm action={setCompanyPlan.bind(null, c.id)} className="card flex flex-wrap items-end gap-3">
+          <h2 className="w-full font-medium">Plan</h2>
+          <label className="text-sm">
+            Plan
+            <select name="plan" defaultValue={c.billing.plan} className="input mt-1 w-40">
+              <option value="starter">Starter</option>
+              <option value="growth">Growth</option>
+              <option value="pro">Pro</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            Online store
+            <select name="website" defaultValue={c.billing.websiteAddon ?? 'none'} className="input mt-1 w-48">
+              <option value="none">None</option>
+              <option value="simple">Online store</option>
+              <option value="complex">Custom online store</option>
+            </select>
+          </label>
+          <button className="btn-secondary">Save</button>
+          <p className="w-full text-xs text-stone-500">
+            {c.billing.websiteAddon ? (c.billing.websiteSetupChargedAt ? 'Store setup paid (or given by support).' : 'Store setup fee still to be charged at checkout.') : ''} An online store added
+            here carries no setup fee.
+          </p>
+        </ActionForm>
+      )}
 
       <section className="card">
         <h2 className="font-medium">Tools</h2>

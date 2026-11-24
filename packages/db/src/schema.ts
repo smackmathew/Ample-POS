@@ -585,6 +585,11 @@ export const tenantBilling = pgTable('tenant_billing', {
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   items: jsonb('items').$type<BilledItem[]>().notNull().default([]),
+  /** starter, growth or pro (see PLANS in @pos/modules). */
+  plan: text('plan', { enum: ['starter', 'growth', 'pro'] }).notNull().default('starter'),
+  /** An online store add-on: simple or complex. */
+  websiteAddon: text('website_addon', { enum: ['simple', 'complex'] }),
+  websiteSetupChargedAt: timestamp('website_setup_charged_at', { withTimezone: true }),
   syncedAt: timestamp('synced_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -744,4 +749,21 @@ export const merchantAccounts = pgTable('merchant_accounts', {
   updatedBy: uuid('updated_by'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const platformPlans = pgTable('platform_plans', {
+  planId: text('plan_id').primaryKey(),
+  baseMinor: money('base_minor'),
+  extraLocationMinor: money('extra_location_minor'),
+  registersPerLocation: integer('registers_per_location'),
+  websiteMaintenanceMinor: money('website_maintenance_minor'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by'),
+});
+
+export const platformWebsiteAddons = pgTable('platform_website_addons', {
+  addonId: text('addon_id').primaryKey(),
+  setupMinor: money('setup_minor'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by'),
 });

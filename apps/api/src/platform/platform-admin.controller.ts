@@ -1,6 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { schema, type Transaction } from '@pos/db';
-import { enabledDependents, getModule, isModuleId, missingDependencies, MODULES, type ModuleId } from '@pos/modules';
+import { enabledDependents, getModule, isModuleId, missingDependencies, MODULES, PLAN_IDS, WEBSITE_ADDON_IDS, WEBSITE_TOOL, type ModuleId } from '@pos/modules';
+import { planSettings, websiteAddonSettings } from '../core/plan-settings';
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { LIVE_STATUSES } from '../billing/provider';
@@ -23,6 +24,14 @@ const toolBody = z
 const suspendBody = z.object({ reason: z.string().trim().min(1, 'Say why, so the business and other admins know').max(300) });
 const pageQuery = z.object({ before: z.coerce.number().int().optional(), limit: z.coerce.number().int().min(1).max(200).default(50), tenantId: z.string().uuid().optional() });
 const transactionsQuery = z.object({ before: z.string().datetime().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) });
+const price = z.number().int().min(0).max(10_000_000).nullable().optional();
+const planPriceBody = z
+  .object({ baseMinor: price, extraLocationMinor: price, websiteMaintenanceMinor: price, registersPerLocation: z.number().int().min(1).max(1000).nullable().optional() })
+  .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
+const addonPriceBody = z.object({ setupMinor: z.number().int().min(0).max(100_000_000).nullable() });
+const companyPlanBody = z
+  .object({ plan: z.enum(PLAN_IDS).optional(), websiteAddon: z.enum(WEBSITE_ADDON_IDS).nullable().optional() })
+  .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
 const platformToolBody = z
   .object({ available: z.boolean().optional(), monthlyPriceMinor: z.number().int().min(0).max(10_000_000).nullable().optional() })
   .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
@@ -118,6 +127,10 @@ export class PlatformAdminController {
       return {
         days: q.days,
         merchants: Object.fromEntries(merchants.map((m) => [m.mode, n(m.count)])),
+        plans: Object.fromEntries(
+          (await tx.execute<{ plan: string; count: string }>(sql`select plan, count(*) as count from tenant_billing group by plan`)).map((p) => [p.plan, n(p.count)]),
+        ),
+        websites: n((await tx.execute<{ count: string }>(sql`select count(*) as count from tenant_billing where website_addon is not null`))[0]?.count),
         companies: {
           total: tenants.length,
           new: tenants.filter((t) => new Date(t.created_at).getTime() >= Date.now() - q.days * 86_400_000).length,
@@ -141,10 +154,10 @@ export class PlatformAdminController {
     return this.platform.run(async (tx) => {
       const like = q.search ? `%${q.search.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
       const rows = await tx.execute<
-        { id: string; name: string; slug: string; created_at: Date; suspended_at: Date | null; suspended_reason: string | null; owner_email: string | null; tools: string; merchant: string | null; locations: string; members: string; sales30: string; gross30: string; last_activity: Date | null } & BillingRow
+        { id: string; name: string; slug: string; created_at: Date; suspended_at: Date | null; suspended_reason: string | null; owner_email: string | null; tools: string; merchant: string | null; plan: string | null; website_addon: string | null; locations: string; members: string; sales30: string; gross30: string; last_activity: Date | null } & BillingRow
       >(sql`
         select t.id, t.name, t.slug, t.created_at, t.suspended_at, t.suspended_reason,
-               b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items,
+               b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items, b.plan, b.website_addon,
                (select u.email from memberships m join roles r on r.id = m.role_id join users u on u.id = m.user_id
                  where m.tenant_id = t.id and r.key = 'owner' order by m.created_at limit 1) as owner_email,
                (select count(*) from tenant_modules tm where tm.tenant_id = t.id and tm.enabled) as tools,
@@ -170,6 +183,8 @@ export class PlatformAdminController {
           standing: r.trial_ends_at ? standingOf(r) : null,
           trialEndsAt: r.trial_ends_at,
           mrrMinor: r.trial_ends_at ? mrrOf(r) : 0,
+          plan: r.plan,
+          websiteAddon: r.website_addon,
           toolsOn: n(r.tools),
           // off, platform, platform:pending (onboarding not finished) or own
           merchant: r.merchant ?? 'off',
@@ -249,6 +264,67 @@ export class PlatformAdminController {
       await this.tenantEvent(tx, id, admin, 'business.restored', { type: 'tenant', id }, {});
       await this.log(tx, admin, 'company.restored', id, {});
       return this.companyDetail(tx, id);
+    });
+  }
+
+  /** Move a business to another plan, or give it (or take away) the online store. Stores added here carry no setup fee. */
+  @Put('companies/:id/plan')
+  async setCompanyPlan(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(companyPlanBody)) body: z.infer<typeof companyPlanBody>) {
+    const admin = await this.access.require();
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const [before] = await tx.select({ plan: schema.tenantBilling.plan, websiteAddon: schema.tenantBilling.websiteAddon }).from(schema.tenantBilling).where(eq(schema.tenantBilling.tenantId, id));
+      if (!before) throw new NotFoundException('This business has no billing record');
+      await tx
+        .update(schema.tenantBilling)
+        .set({
+          ...(body.plan ? { plan: body.plan } : {}),
+          ...(body.websiteAddon !== undefined ? { websiteAddon: body.websiteAddon, ...(body.websiteAddon ? { websiteSetupChargedAt: new Date() } : {}) } : {}),
+        })
+        .where(eq(schema.tenantBilling.tenantId, id));
+      if (body.websiteAddon === null) {
+        await tx
+          .update(schema.tenantModules)
+          .set({ enabled: false, updatedAt: new Date(), updatedBy: admin.userId })
+          .where(and(eq(schema.tenantModules.tenantId, id), eq(schema.tenantModules.moduleId, WEBSITE_TOOL)));
+      }
+      await this.tenantEvent(tx, id, admin, 'billing.items_changed', { type: 'plan', id: body.plan ?? before.plan }, { from: before, to: body });
+      await this.log(tx, admin, 'company.plan_changed', id, { from: before, to: body });
+      return this.companyDetail(tx, id);
+    });
+  }
+
+  /** Plans and online store prices, as the pricing page and bills use them. */
+  @Get('plans')
+  async plans() {
+    await this.access.require();
+    return this.platform.run((tx) => this.planCatalog(tx));
+  }
+
+  @Put('plans/:planId')
+  async setPlanPrices(@Param('planId') planId: string, @Body(new ZodPipe(planPriceBody)) body: z.infer<typeof planPriceBody>) {
+    const admin = await this.access.require();
+    if (!(PLAN_IDS as readonly string[]).includes(planId)) throw new NotFoundException('Unknown plan');
+    return this.platform.run(async (tx) => {
+      const set = { ...body, updatedAt: new Date(), updatedBy: admin.userId };
+      await tx.insert(schema.platformPlans).values({ planId, ...set }).onConflictDoUpdate({ target: schema.platformPlans.planId, set });
+      // Every business on the plan re-syncs its subscription at the new prices.
+      const on = await tx.select({ tenantId: schema.tenantBilling.tenantId }).from(schema.tenantBilling).where(eq(schema.tenantBilling.plan, planId as (typeof PLAN_IDS)[number]));
+      for (const t of on) await tx.insert(schema.outbox).values({ tenantId: t.tenantId, topic: 'billing.items_changed', payload: { planId } });
+      await this.log(tx, admin, 'plan.prices_changed', null, { planId, ...body });
+      return this.planCatalog(tx);
+    });
+  }
+
+  @Put('website-addons/:addonId')
+  async setAddonPrice(@Param('addonId') addonId: string, @Body(new ZodPipe(addonPriceBody)) body: z.infer<typeof addonPriceBody>) {
+    const admin = await this.access.require();
+    if (!(WEBSITE_ADDON_IDS as readonly string[]).includes(addonId)) throw new NotFoundException('Unknown add-on');
+    return this.platform.run(async (tx) => {
+      const set = { setupMinor: body.setupMinor, updatedAt: new Date(), updatedBy: admin.userId };
+      await tx.insert(schema.platformWebsiteAddons).values({ addonId, ...set }).onConflictDoUpdate({ target: schema.platformWebsiteAddons.addonId, set });
+      await this.log(tx, admin, 'website_addon.price_changed', null, { addonId, ...body });
+      return this.planCatalog(tx);
     });
   }
 
@@ -420,6 +496,17 @@ export class PlatformAdminController {
     await tx.insert(schema.platformAudit).values({ actorUserId: admin.userId, action, tenantId, data });
   }
 
+  private async planCatalog(tx: Transaction) {
+    const [plans, addons] = await Promise.all([planSettings(tx), websiteAddonSettings(tx)]);
+    const counts = new Map(
+      (await tx.execute<{ plan: string; count: string }>(sql`select plan, count(*) as count from tenant_billing group by plan`)).map((r) => [r.plan, n(r.count)]),
+    );
+    return {
+      plans: [...plans.values()].map((p) => ({ ...p, companies: counts.get(p.id) ?? 0 })),
+      websiteAddons: [...addons.values()],
+    };
+  }
+
   private async toolCatalog(tx: Transaction) {
     const settings = new Map((await tx.select().from(schema.platformModules)).map((r) => [r.moduleId, r]));
     const usage = await tx.execute<{ module_id: string; enabled: string; comped: string; blocked: string }>(sql`
@@ -505,6 +592,9 @@ export class PlatformAdminController {
             cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
             items: billing.items,
             mrrMinor: mrrOf(billingRow),
+            plan: billing.plan,
+            websiteAddon: billing.websiteAddon,
+            websiteSetupChargedAt: billing.websiteSetupChargedAt,
           }
         : null,
       merchant: merchant ?? null,

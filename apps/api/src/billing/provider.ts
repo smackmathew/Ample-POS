@@ -10,10 +10,19 @@ export interface ProviderSubscription {
   items: BilledItem[];
 }
 
+/** A one-time charge (e.g. an online store's setup fee). */
+export interface OneTimeCharge {
+  key: string;
+  name: string;
+  amountMinor: number;
+}
+
 export interface CheckoutInput {
   tenantId: string;
   customerId: string;
   items: BilledItem[];
+  /** Charged once, with the first invoice. */
+  oneTime?: OneTimeCharge[];
   /** Keep the free trial running inside the subscription until this time. */
   trialEnd: Date | null;
   successUrl: string;
@@ -32,6 +41,8 @@ export interface BillingProvider {
   /** Replaces the billed items (with proration) and returns the updated subscription. */
   updateItems(subscription: ProviderSubscription, items: BilledItem[], idempotencyKey: string): Promise<ProviderSubscription>;
   setCancelAtPeriodEnd(subscription: ProviderSubscription, cancel: boolean): Promise<ProviderSubscription>;
+  /** Adds a one-time charge to the customer's next invoice. */
+  chargeOnce(customerId: string, charge: OneTimeCharge, idempotencyKey: string): Promise<void>;
   /** The customer's current subscription as the provider sees it. Absent when our copy is the only record. */
   currentSubscription?(customerId: string): Promise<ProviderSubscription | null>;
   /** A self-service page for invoices and payment methods, when the provider has one. */

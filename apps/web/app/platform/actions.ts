@@ -54,3 +54,57 @@ export async function setPlatformPrice(moduleId: string, _: ActionState, form: F
     return { ok: monthlyPriceMinor === null ? 'Back to the built-in price' : 'Price saved. Subscriptions update shortly.' };
   });
 }
+
+const moneyField = (form: FormData, key: string) => {
+  const raw = String(form.get(key) ?? '').trim();
+  if (raw === '') return null;
+  const v = parseMoney(raw);
+  if (v === null) throw new Error(`Enter an amount like 39.00 for ${key}`);
+  return v;
+};
+
+export async function setPlanPrices(planId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  let body;
+  try {
+    const registers = String(form.get('registers') ?? '').trim();
+    body = {
+      baseMinor: moneyField(form, 'base'),
+      extraLocationMinor: moneyField(form, 'extra'),
+      websiteMaintenanceMinor: moneyField(form, 'maintenance'),
+      registersPerLocation: registers ? Number(registers) : null,
+    };
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+  return attempt(async () => {
+    await api(`/platform/plans/${planId}`, { method: 'PUT', body });
+    revalidatePath('/platform/tools');
+    return { ok: 'Saved. Subscriptions on this plan update shortly.' };
+  });
+}
+
+export async function setAddonPrice(addonId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  let setupMinor;
+  try {
+    setupMinor = moneyField(form, 'setup');
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+  return attempt(async () => {
+    await api(`/platform/website-addons/${addonId}`, { method: 'PUT', body: { setupMinor } });
+    revalidatePath('/platform/tools');
+    return { ok: 'Saved' };
+  });
+}
+
+export async function setCompanyPlan(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  const website = String(form.get('website') ?? '');
+  return attempt(async () => {
+    await api(`/platform/companies/${companyId}/plan`, {
+      method: 'PUT',
+      body: { plan: String(form.get('plan')), websiteAddon: website === 'none' ? null : website },
+    });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: 'Saved. Their subscription updates shortly.' };
+  });
+}
