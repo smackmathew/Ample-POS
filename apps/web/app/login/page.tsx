@@ -47,7 +47,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </ActionForm>
       <div className="mt-4 space-y-2 text-sm">
         <p>
-          New to Ample POS?{' '}
+          Opening a store?{' '}
+          <Link href="/start" className="text-brand hover:underline">
+            Start a free trial
+          </Link>
+        </p>
+        <p>
+          Joining a team?{' '}
           <Link href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="text-brand hover:underline">
             Create an account
           </Link>

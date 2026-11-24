@@ -15,7 +15,7 @@ import {
 } from '../session-actions';
 
 export default async function AccountPage() {
-  const [me, config] = await Promise.all([api<Me>('/me'), authConfig()]);
+  const [me, config, platform] = await Promise.all([api<Me>('/me'), authConfig(), api<{ admin: boolean }>('/platform/access')]);
   return (
     <main className="mx-auto mt-16 max-w-xl space-y-6 px-4">
       <header className="flex items-center justify-between">
@@ -25,6 +25,17 @@ export default async function AccountPage() {
         </Link>
       </header>
       <VerifyEmailBanner me={me} config={config} />
+      {platform.admin && (
+        <section className="card flex flex-wrap items-center justify-between gap-3 border-stone-800 bg-stone-900 text-white">
+          <div>
+            <p className="font-medium">Super admin</p>
+            <p className="text-sm text-stone-300">Every company, plans and prices, issues and activity.</p>
+          </div>
+          <Link href="/platform" className="btn">
+            Open the super admin dashboard
+          </Link>
+        </section>
+      )}
       <section className="card">
         <p className="font-medium">{me.user.displayName ?? me.user.email}</p>
         <p className="text-sm text-stone-600">

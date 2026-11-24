@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'POS Hub',
-  description: 'Build the point-of-sale system your business needs.',
+  title: 'Ample POS',
+  description: 'Point of sale, inventory, loyalty and online store sync for independent shops.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
