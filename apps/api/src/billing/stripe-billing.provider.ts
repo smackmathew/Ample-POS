@@ -32,11 +32,26 @@ const BASE = 'base';
 
 /** Prices are found by lookup key; a new amount gets a new key, so price changes never edit a live price. */
 export function lookupKey(moduleId: string, amountMinor: number): string {
-  return `ample_${moduleId}_${amountMinor}_${BILLING_CURRENCY}_monthly`;
+  return `ample_${moduleId.replace(/[^a-z0-9-]/gi, '_')}_${amountMinor}_${BILLING_CURRENCY}_monthly`;
 }
+
+/** Bill lines besides tools: plans, extra locations and online store sync. */
+const OTHER_LINES: Record<string, string> = {
+  'plan:starter': 'Starter plan',
+  'plan:starter:location': 'Starter plan, extra location',
+  'plan:growth': 'Growth plan',
+  'plan:growth:location': 'Growth plan, extra location',
+  'plan:pro': 'Pro plan',
+  'plan:pro:location': 'Pro plan, extra location',
+  'website:maintenance': 'Online store sync',
+};
 
 function planFor(moduleId: string, unitMinor?: number): { name: string; amountMinor: number } {
   if (moduleId === BASE) return { name: 'Ample POS', amountMinor: 0 };
+  if (OTHER_LINES[moduleId]) {
+    if (unitMinor === undefined) throw new Error(`No price for ${moduleId}`);
+    return { name: `Ample POS – ${OTHER_LINES[moduleId]}`, amountMinor: unitMinor };
+  }
   if (!isModuleId(moduleId)) throw new Error(`Unknown module: ${moduleId}`);
   const mod = getModule(moduleId);
   return { name: `Ample POS – ${mod.name}`, amountMinor: unitMinor ?? mod.monthlyPriceMinor };
@@ -72,7 +87,13 @@ export class StripeBillingProvider implements BillingProvider {
       mode: 'subscription',
       customer: input.customerId,
       client_reference_id: input.tenantId,
-      line_items: Object.fromEntries(lines.map((l, i) => [i, l])),
+      // One-time charges (an online store's setup) are billed with the first invoice.
+      line_items: Object.fromEntries(
+        [
+          ...lines,
+          ...(input.oneTime ?? []).map((c) => ({ price_data: { currency: BILLING_CURRENCY, unit_amount: c.amountMinor, product_data: { name: `Ample POS – ${c.name}` } }, quantity: 1 })),
+        ].map((l, i) => [i, l]),
+      ),
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       subscription_data: {
@@ -111,6 +132,16 @@ export class StripeBillingProvider implements BillingProvider {
       proration_behavior: 'create_prorations',
     });
     return this.toSubscription(updated);
+  }
+
+  async chargeOnce(customerId: string, charge: { key: string; name: string; amountMinor: number }, idempotencyKey: string) {
+    await this.call('POST', '/invoiceitems', idempotencyKey, {
+      customer: customerId,
+      amount: charge.amountMinor,
+      currency: BILLING_CURRENCY,
+      description: `Ample POS – ${charge.name}`,
+      metadata: { charge: charge.key },
+    });
   }
 
   async setCancelAtPeriodEnd(subscription: ProviderSubscription, cancel: boolean) {

@@ -3,7 +3,7 @@ import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
 import type { BillingSummary } from '@/lib/types';
-import { openPortal, setCancel, startCheckout } from '../billing-actions';
+import { chooseWebsite, choosePlan, openPortal, setCancel, startCheckout } from '../billing-actions';
 
 const day = (iso: string) => new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(iso));
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000));
@@ -89,9 +89,74 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
         )}
       </section>
 
+      <section className="space-y-2">
+        <h2 className="font-medium">Plan</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {b.plans.map((p) => {
+            const current = p.id === b.plan.id;
+            return (
+              <div key={p.id} className={`card flex flex-col gap-1 ${current ? 'border-brand' : ''}`}>
+                <div className="flex items-baseline justify-between">
+                  <h3 className="font-semibold">{p.name}</h3>
+                  {current && <span className="rounded bg-teal-50 px-2 py-0.5 text-xs text-brand">Your plan</span>}
+                </div>
+                <p className="text-2xl font-semibold">
+                  {money(p.baseMinor)}
+                  <span className="text-sm font-normal text-stone-500">/mo</span>
+                </p>
+                <p className="text-sm text-stone-600">
+                  {p.registersPerLocation} register{p.registersPerLocation === 1 ? '' : 's'} per location · +{money(p.extraLocationMinor)}/mo per extra location
+                </p>
+                {!current && (
+                  <ActionForm action={choosePlan.bind(null, tenantId, p.id)} className="mt-auto pt-2">
+                    <button className="btn-secondary w-full">Switch to {p.name}</button>
+                  </ActionForm>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-stone-500">Every plan includes the point of sale, product catalog, reports, customers and loyalty rewards.</p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="font-medium">Online store</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {b.websiteAddons.map((a) => {
+            const current = b.website?.id === a.id;
+            return (
+              <div key={a.id} className={`card flex flex-col gap-1 ${current ? 'border-brand' : ''}`}>
+                <div className="flex items-baseline justify-between">
+                  <h3 className="font-semibold">{a.name}</h3>
+                  {current && <span className="rounded bg-teal-50 px-2 py-0.5 text-xs text-brand">Added</span>}
+                </div>
+                <p className="text-sm text-stone-600">{a.description}</p>
+                <p className="text-sm">
+                  <strong>{money(a.setupMinor)}</strong> one-time setup + {money(b.plans.find((p) => p.id === b.plan.id)!.websiteMaintenanceMinor)}/mo sync on {b.plan.name}
+                </p>
+                {current ? (
+                  <p className="text-xs text-stone-500">
+                    {b.website!.setupCharged ? 'Setup paid.' : sub ? 'Setup is on your next invoice.' : 'Setup is charged when you subscribe.'}
+                  </p>
+                ) : (
+                  <ActionForm action={chooseWebsite.bind(null, tenantId, a.id)} className="mt-auto pt-2">
+                    <button className="btn-secondary w-full">{b.website ? `Switch to ${a.name}` : `Add ${a.name}`}</button>
+                  </ActionForm>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {b.website && (
+          <ActionForm action={chooseWebsite.bind(null, tenantId, null)}>
+            <button className="text-sm text-stone-600 hover:underline">Remove the online store</button>
+          </ActionForm>
+        )}
+      </section>
+
       <section>
         <div className="flex items-baseline justify-between">
-          <h2 className="font-medium">{sub ? 'Your plan' : 'What you’ll pay'}</h2>
+          <h2 className="font-medium">{sub ? 'Your monthly bill' : 'What you’ll pay'}</h2>
           <Link href={`/b/${tenantId}/tools`} className="text-sm text-stone-600 hover:underline">
             Change tools
           </Link>
@@ -99,9 +164,9 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
         <table className="card mt-2 w-full text-sm">
           <thead className="text-left text-stone-500">
             <tr>
-              <th className="pb-2 font-medium">Tool</th>
+              <th className="pb-2 font-medium">Item</th>
               <th className="pb-2 text-right font-medium">Price</th>
-              <th className="pb-2 text-right font-medium">Locations</th>
+              <th className="pb-2 text-right font-medium">Qty</th>
               <th className="pb-2 text-right font-medium">Monthly</th>
             </tr>
           </thead>
@@ -140,7 +205,7 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
           </tfoot>
         </table>
         <p className="mt-2 text-xs text-stone-500">
-          Each paid tool is charged per active location. Turning tools on or off, or adding and archiving locations, updates your plan
+          Your plan covers your first location; each extra active location and each paid add-on tool (per location) is added. Changing plans or tools, or adding and archiving locations, updates your bill
           {sub ? ' automatically, with the difference prorated on your next invoice.' : '.'} Prices in US dollars, before any sales tax.
         </p>
       </section>

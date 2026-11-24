@@ -17,6 +17,7 @@ import { LedgerService } from '../inventory/ledger.service';
 import { formatCode, GIFT_CARD_MAX_MINOR, GiftCardService, last4 } from '../gift-cards/gift-cards.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CardProviders } from '../payments/card-providers';
+import { planSettings } from '../core/plan-settings';
 import { ProviderUnavailableError, type ProviderPayment } from '../payments/provider';
 import { SimulatedCardProvider } from '../payments/simulated.provider';
 import { allocateProportionally, allocateRefund, priceLine, refundAmountForLine, sumPrices } from './pricing';
@@ -93,6 +94,23 @@ export class SalesService {
         ),
       );
     if (existing) throw new ConflictException({ message: 'A register is already open here. Close it first.', sessionId: existing.id });
+
+    // The plan sets how many registers can be open at once at each location.
+    await this.db.tx.select({ id: schema.locations.id }).from(schema.locations).where(eq(schema.locations.id, input.locationId)).for('update');
+    const [billing] = await this.db.tx.select({ plan: schema.tenantBilling.plan }).from(schema.tenantBilling);
+    if (billing) {
+      const plan = (await planSettings(this.db.tx)).get(billing.plan)!;
+      const [{ open }] = (await this.db.tx
+        .select({ open: sql<number>`count(*)`.mapWith(Number) })
+        .from(schema.registerSessions)
+        .where(and(eq(schema.registerSessions.locationId, input.locationId), eq(schema.registerSessions.status, 'open')))) as [{ open: number }];
+      if (open >= plan.registersPerLocation) {
+        throw new ConflictException({
+          code: 'register_limit',
+          message: `The ${plan.name} plan allows ${plan.registersPerLocation} open register${plan.registersPerLocation === 1 ? '' : 's'} per location. Close one, or move to a bigger plan in Billing.`,
+        });
+      }
+    }
 
     const [session] = await this.db.tx
       .insert(schema.registerSessions)

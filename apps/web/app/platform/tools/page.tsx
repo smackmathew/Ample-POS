@@ -1,14 +1,58 @@
 import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
-import { usd, type PlatformTool } from '@/lib/platform';
-import { setPlatformPrice } from '../actions';
+import { usd, type PlanCatalog, type PlatformTool } from '@/lib/platform';
+import { setAddonPrice, setPlanPrices, setPlatformPrice } from '../actions';
 import { Availability } from './availability';
 
+function PriceField({ label, name, value }: { label: string; name: string; value: number }) {
+  return (
+    <label className="block text-sm">
+      {label}
+      <input name={name} inputMode="decimal" defaultValue={(value / 100).toFixed(2)} className="input mt-1" />
+    </label>
+  );
+}
+
 export default async function ToolsPage() {
-  const tools = await api<PlatformTool[]>('/platform/tools');
+  const [tools, catalog] = await Promise.all([api<PlatformTool[]>('/platform/tools'), api<PlanCatalog>('/platform/plans')]);
   return (
     <div className="max-w-6xl space-y-4">
-      <h1 className="text-2xl font-semibold">Tools & prices</h1>
+      <h1 className="text-2xl font-semibold">Plans, tools & prices</h1>
+
+      <h2 className="pt-2 font-medium">Plans</h2>
+      <p className="text-sm text-stone-600">Shown on the public pricing page and used for every company on the plan. Leave a field empty for its default.</p>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {catalog.plans.map((p) => (
+          <ActionForm key={p.id} action={setPlanPrices.bind(null, p.id)} className="card space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h3 className="font-semibold">{p.name}</h3>
+              <span className="text-xs text-stone-500">{p.companies} compan{p.companies === 1 ? 'y' : 'ies'}</span>
+            </div>
+            <PriceField label="First location /mo" name="base" value={p.baseMinor} />
+            <PriceField label="Each extra location /mo" name="extra" value={p.extraLocationMinor} />
+            <PriceField label="Online store sync /mo" name="maintenance" value={p.websiteMaintenanceMinor} />
+            <label className="block text-sm">
+              Registers per location
+              <input name="registers" inputMode="numeric" defaultValue={p.registersPerLocation} className="input mt-1" />
+            </label>
+            <button className="btn-secondary">Save {p.name}</button>
+          </ActionForm>
+        ))}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {catalog.websiteAddons.map((a) => (
+          <ActionForm key={a.id} action={setAddonPrice.bind(null, a.id)} className="card flex flex-wrap items-end gap-2">
+            <div className="w-full">
+              <h3 className="font-semibold">{a.name}</h3>
+              <p className="text-xs text-stone-500">One-time setup fee</p>
+            </div>
+            <input name="setup" inputMode="decimal" defaultValue={(a.setupMinor / 100).toFixed(2)} className="input w-32" aria-label={`Setup fee for ${a.name}`} />
+            <button className="btn-secondary">Save</button>
+          </ActionForm>
+        ))}
+      </div>
+
+      <h2 className="pt-4 font-medium">Add-on tools</h2>
       <p className="text-stone-600">
         Prices are per store per month. A new price applies to each company’s subscription at its next update (prorated by Stripe). Switching a tool off for everyone hides it from every company and stops
         billing for it.

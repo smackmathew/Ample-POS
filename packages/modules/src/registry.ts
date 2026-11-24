@@ -95,7 +95,7 @@ export const MODULES: readonly ModuleDefinition[] = [
       { label: 'Card payments', path: '/payments', permission: 'pos.payments.manage' },
     ],
     phase: 4,
-    monthlyPriceMinor: 4900,
+    monthlyPriceMinor: 0,
   },
   {
     id: 'time-clock',
@@ -154,7 +154,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'sync.manage', description: 'Connect stores and resolve sync issues' }],
     nav: [{ label: 'Website sync', path: '/sync', permission: 'sync.manage' }],
     phase: 5,
-    monthlyPriceMinor: 2900,
+    monthlyPriceMinor: 0,
   },
   {
     id: 'reporting',
@@ -190,7 +190,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     permissions: [{ key: 'loyalty.manage', description: 'Set up the rewards program and adjust points' }],
     nav: [{ label: 'Loyalty', path: '/loyalty', permission: 'loyalty.manage' }],
     phase: 9,
-    monthlyPriceMinor: 900,
+    monthlyPriceMinor: 0,
   },
   {
     id: 'gift-cards',

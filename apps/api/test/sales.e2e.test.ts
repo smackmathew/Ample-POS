@@ -120,6 +120,8 @@ describe('checkout', () => {
     expect(free).toMatchObject({ status: 'completed', totalMinor: 0 });
     await sell(owner, [{ variantId: mug.id, quantity: 1, discountMinor: 1001 }]).expect(400);
 
+    // A second register at the same store needs more than the Starter plan's one.
+    await owner.put('/billing/plan', { plan: 'growth' }).expect(200);
     const staff = await owner.invite(await Client.signIn(app), 'staff');
     // Staff can't ring up on the owner's web register, or give discounts on their own.
     await sell(staff, [{ variantId: mug.id, quantity: 1 }], register.id).expect(403);

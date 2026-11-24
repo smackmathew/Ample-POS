@@ -31,6 +31,22 @@ export interface BillingSummary {
   included: string[];
   monthlyTotalMinor: number;
   currency: string;
+  plan: { id: PlanId; name: string; registersPerLocation: number };
+  plans: PlanInfo[];
+  website: { id: 'simple' | 'complex'; name: string; setupMinor: number; setupCharged: boolean } | null;
+  websiteAddons: { id: 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
+}
+
+export type PlanId = 'starter' | 'growth' | 'pro';
+
+export interface PlanInfo {
+  id: PlanId;
+  name: string;
+  tagline: string;
+  baseMinor: number;
+  extraLocationMinor: number;
+  registersPerLocation: number;
+  websiteMaintenanceMinor: number;
 }
 
 export interface NavSection {

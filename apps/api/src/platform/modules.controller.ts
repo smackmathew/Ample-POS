@@ -7,6 +7,7 @@ import {
   missingDependencies,
   MODULES,
   type ModuleId,
+  WEBSITE_TOOL,
 } from '@pos/modules';
 import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -72,6 +73,10 @@ export class ModulesController {
         throw new ConflictException({ code: 'unavailable', message: `${getModule(id).name} is temporarily unavailable` });
       }
       const [own] = await tx.select({ blocked: schema.tenantModules.blocked }).from(schema.tenantModules).where(eq(schema.tenantModules.moduleId, id));
+      if (id === WEBSITE_TOOL) {
+        const [billing] = await tx.select({ addon: schema.tenantBilling.websiteAddon }).from(schema.tenantBilling);
+        if (!billing?.addon) throw new ConflictException({ code: 'website_addon_required', message: 'Website sync comes with the online store add-on. Add it in Billing first.' });
+      }
       if (own?.blocked) throw new ConflictException({ code: 'blocked', message: `${getModule(id).name} was turned off for this business by Ample POS support. Contact support to turn it back on.` });
       const missing = missingDependencies(id, enabled);
       if (missing.length) {

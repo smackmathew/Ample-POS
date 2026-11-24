@@ -8,7 +8,7 @@ const NAV = [
   ['/platform/companies', 'Companies'],
   ['/platform/issues', 'Issues'],
   ['/platform/activity', 'Activity'],
-  ['/platform/tools', 'Tools & prices'],
+  ['/platform/tools', 'Plans & prices'],
   ['/platform/audit', 'Admin log'],
 ] as const;
 

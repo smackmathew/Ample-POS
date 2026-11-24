@@ -290,16 +290,34 @@ by the API. Written against Shopify Admin API version 2026-10.
 
 ## Billing
 
-- **Free trial, then pay for what's on.** Every business gets 14 days free.
-  After that each paid tool costs a monthly price per active location
-  (Product catalog and Reporting are included). Prices live in the module
-  registry (`monthlyPriceMinor`), so the Tools page, the Billing page and
-  Stripe all use the same numbers.
+- **Free trial, then a plan.** Every business gets 14 days free, then pays
+  for one of three plans (in `packages/modules/src/plans.ts`):
+
+  | Plan    | First location | Each extra location | Open registers per location | Online store sync |
+  | ------- | -------------- | ------------------- | --------------------------- | ----------------- |
+  | Starter | $39/mo         | $19/mo              | 1                           | $9.99/mo          |
+  | Growth  | $59/mo         | $29/mo              | 5                           | $14.99/mo         |
+  | Pro     | $79/mo         | $39/mo              | 10                          | $19.99/mo         |
+
+  Every plan includes the point of sale, product catalog, reports, customers,
+  loyalty and purchase orders. Inventory, time clock, scheduling, tasks and
+  gift cards are paid add-ons, charged per active location. Opening a register
+  past the plan's limit returns `409 register_limit`.
+- **Online store add-on.** A one-time setup fee ($399 online store, $599 custom
+  online store) plus the plan's monthly sync fee. It unlocks Shopify sync;
+  without it, turning that tool on returns `409 website_addon_required`. The
+  setup fee goes on the Checkout session, or on the next invoice if the
+  business already subscribes; moving from the $399 store to the $599 one
+  charges only the difference.
+- **Prices are editable.** The super admin changes plan prices, register
+  limits and setup fees under Plans & prices, and moves any company between
+  plans (an online store added there carries no setup fee). Subscriptions on
+  a changed plan update in the background.
 - **Stripe does the money.** Subscribing opens Stripe Checkout; invoices, cards
   and cancellation are in Stripe's customer portal. Ample POS creates its
   Stripe products and prices on first use (found by lookup key; a new price
   gets a new key, so existing prices are never edited). Every subscription
-  carries a $0 base item so it stays valid when no paid tool is on.
+  carries the plan as its base item.
 - **The plan follows the business.** Turning tools on or off, or adding and
   archiving locations, updates the subscription in the background (prorated),
   through the same outbox worker as Shopify sync.

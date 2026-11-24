@@ -74,7 +74,7 @@ describe('super admin dashboard', () => {
       stats: { sales30: 2, gross30Minor: 2000, tenders30: { cash: 2000 } },
       members: [{ email: owner.email, role: 'Owner' }],
     });
-    expect(detail.tools.find((t: { id: string }) => t.id === 'pos')).toMatchObject({ enabled: true, comped: false, available: true, monthlyPriceMinor: 4900 });
+    expect(detail.tools.find((t: { id: string }) => t.id === 'pos')).toMatchObject({ enabled: true, comped: false, available: true, monthlyPriceMinor: 0 });
 
     const tx = (await admin.get(`/platform/companies/${owner.tenantId}/transactions`).expect(200)).body.transactions;
     expect(tx).toHaveLength(2);
@@ -100,8 +100,11 @@ describe('super admin dashboard', () => {
     // Comped paid tools aren't billed; the business sees them as included.
     await tool({ enabled: true, comped: true }, 'loyalty').expect(200);
     const billing = (await owner.get('/billing').expect(200)).body;
-    expect(billing.lines.map((l: { moduleId: string }) => l.moduleId)).toEqual(['pos']);
+    expect(billing.lines.map((l: { moduleId: string }) => l.moduleId)).toEqual(['plan:starter']);
     expect(billing.included).toEqual(expect.arrayContaining(['Customers', 'Loyalty rewards']));
+    // A comped paid tool (Gift cards) isn't billed either.
+    await tool({ enabled: true, comped: true }, 'gift-cards').expect(200);
+    expect((await owner.get('/billing').expect(200)).body.lines.map((l: { moduleId: string }) => l.moduleId)).toEqual(['plan:starter']);
 
     // Blocked: switched off, and the business can't turn it back on.
     detail = (await tool({ blocked: true }, 'loyalty').expect(200)).body;
@@ -181,5 +184,26 @@ describe('super admin dashboard', () => {
       ['low', 'Register open for over a day'],
     ]);
     expect((await admin.get(`/platform/companies/${owner.tenantId}`).expect(200)).body.issues).toHaveLength(2);
+  });
+
+  it('changes plan prices for everyone, and a company’s plan and online store', async () => {
+    const admin = await Client.signIn(app, adminEmail);
+    const { owner } = await business();
+    try {
+      const catalog = (await admin.put('/platform/plans/starter', { baseMinor: 2900 }).expect(200)).body;
+      expect(catalog.plans.find((p: { id: string }) => p.id === 'starter')).toMatchObject({ baseMinor: 2900, extraLocationMinor: 1900, registersPerLocation: 1 });
+      expect((await owner.get('/billing').expect(200)).body.lines[0]).toMatchObject({ moduleId: 'plan:starter', unitMinor: 2900 });
+      await admin.put('/platform/plans/gold', { baseMinor: 1 }).expect(404);
+      expect((await admin.put('/platform/website-addons/simple', { setupMinor: 29900 }).expect(200)).body.websiteAddons[0]).toMatchObject({ id: 'simple', setupMinor: 29900 });
+
+      const detail = (await admin.put(`/platform/companies/${owner.tenantId}/plan`, { plan: 'pro', websiteAddon: 'simple' }).expect(200)).body;
+      expect(detail.billing).toMatchObject({ plan: 'pro', websiteAddon: 'simple' });
+      // An online store given by support carries no setup fee.
+      expect((await owner.get('/billing').expect(200)).body).toMatchObject({ plan: { id: 'pro' }, website: { id: 'simple', setupCharged: true } });
+      expect((await admin.get('/platform/companies').expect(200)).body.find((c: { id: string }) => c.id === owner.tenantId)).toMatchObject({ plan: 'pro', websiteAddon: 'simple' });
+    } finally {
+      await admin.put('/platform/plans/starter', { baseMinor: null }).expect(200);
+      await admin.put('/platform/website-addons/simple', { setupMinor: null }).expect(200);
+    }
   });
 });

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INCLUDED_TOOLS,
+  PLANS,
   MODULES,
   billableModules,
   PLATFORM_PERMISSIONS,
@@ -14,7 +16,16 @@ import {
 describe('module registry', () => {
   it('prices every module in whole cents, and only bills paid ones', () => {
     for (const m of MODULES) expect(Number.isInteger(m.monthlyPriceMinor) && m.monthlyPriceMinor >= 0).toBe(true);
-    expect(billableModules(['catalog', 'pos', 'reporting']).map((m) => m.id)).toEqual(['pos']);
+    expect(billableModules(['catalog', 'pos', 'reporting', 'inventory']).map((m) => m.id)).toEqual(['inventory']);
+  });
+
+  it('includes the point of sale, reports, customers and loyalty in every plan', () => {
+    for (const id of INCLUDED_TOOLS) expect(MODULES.find((m) => m.id === id)!.monthlyPriceMinor).toBe(0);
+    expect(PLANS.map((p) => [p.id, p.baseMinor, p.extraLocationMinor, p.registersPerLocation])).toEqual([
+      ['starter', 3900, 1900, 1],
+      ['growth', 5900, 2900, 5],
+      ['pro', 7900, 3900, 10],
+    ]);
   });
 
   it('has unique module ids and permission keys', () => {

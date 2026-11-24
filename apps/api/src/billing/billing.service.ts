@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { schema, type BilledItem } from '@pos/db';
-import { MODULES } from '@pos/modules';
-import { count, eq, isNull } from 'drizzle-orm';
+import { getModule, MODULES, WEBSITE_TOOL, type PlanId, type WebsiteAddonId } from '@pos/modules';
+import { billLineName, planSettings, websiteAddonSettings } from '../core/plan-settings';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import { APP_CONFIG, type AppConfig } from '../core/config';
 import { Db } from '../core/database';
 import { Events } from '../core/events';
@@ -11,7 +12,7 @@ import { ProviderUnavailableError } from '../payments/provider';
 import { StripeApiError } from '../payments/stripe.provider';
 import { enabledModuleIds } from '../platform/modules.controller';
 import { compedTools, toolSettings } from '../core/tool-settings';
-import { BILLING_PROVIDER, OPEN_STATUSES, sameItems, type BillingProvider, type ProviderSubscription } from './provider';
+import { BILLING_PROVIDER, LIVE_STATUSES, OPEN_STATUSES, sameItems, type BillingProvider, type ProviderSubscription } from './provider';
 import { standing } from './standing';
 
 type BillingRow = typeof schema.tenantBilling.$inferSelect;
@@ -37,20 +38,72 @@ export class BillingService {
   }
 
   /**
-   * Each enabled paid tool, billed once per active location (at least one), at
-   * its current price. Tools a platform admin made free aren't billed.
+   * What the business should be billed each month: its plan (first location,
+   * then each extra active location), each enabled paid add-on tool per
+   * location, and online store sync if it has the website add-on. Prices are
+   * the current ones (built in, or as changed by the super admin); tools a
+   * platform admin made free aren't billed.
    */
   async desiredItems(): Promise<BilledItem[]> {
     const [{ locations }] = (await this.db.tx.select({ locations: count() }).from(schema.locations).where(isNull(schema.locations.archivedAt))) as [
       { locations: number },
     ];
     const quantity = Math.max(1, Number(locations));
-    const [enabled, comped, settings] = await Promise.all([enabledModuleIds(this.db), compedTools(this.db.tx), toolSettings(this.db.tx)]);
-    return MODULES.filter((m) => enabled.has(m.id) && !comped.has(m.id) && settings.get(m.id)!.priceMinor > 0).map((m) => ({
-      moduleId: m.id,
-      quantity,
-      unitMinor: settings.get(m.id)!.priceMinor,
-    }));
+    const row = await this.row();
+    const [enabled, comped, settings, plans] = await Promise.all([enabledModuleIds(this.db), compedTools(this.db.tx), toolSettings(this.db.tx), planSettings(this.db.tx)]);
+    const plan = plans.get(row.plan)!;
+    const items: BilledItem[] = [
+      { moduleId: `plan:${plan.id}`, quantity: 1, unitMinor: plan.baseMinor },
+      ...(quantity > 1 ? [{ moduleId: `plan:${plan.id}:location`, quantity: quantity - 1, unitMinor: plan.extraLocationMinor }] : []),
+      ...MODULES.filter((m) => enabled.has(m.id) && !comped.has(m.id) && settings.get(m.id)!.priceMinor > 0).map((m) => ({
+        moduleId: m.id,
+        quantity,
+        unitMinor: settings.get(m.id)!.priceMinor,
+      })),
+      ...(row.websiteAddon ? [{ moduleId: 'website:maintenance', quantity: 1, unitMinor: plan.websiteMaintenanceMinor }] : []),
+    ];
+    return items.filter((i) => i.unitMinor! > 0);
+  }
+
+  /** Moves the business to another plan; the subscription follows (prorated). */
+  async setPlan(planId: PlanId) {
+    const row = await this.row(true);
+    if (row.plan === planId) return;
+    await this.db.tx.update(schema.tenantBilling).set({ plan: planId, updatedAt: new Date() }).where(eq(schema.tenantBilling.tenantId, currentTenant().tenantId));
+    await this.events.record('billing.items_changed', { type: 'plan', id: planId }, { from: row.plan, to: planId });
+  }
+
+  /**
+   * Adds (or removes) the online store. Its one-time setup fee is charged now
+   * when already subscribed, otherwise with the first payment at checkout.
+   * The website sync tool comes and goes with it.
+   */
+  async setWebsiteAddon(addonId: WebsiteAddonId | null) {
+    const { tenantId } = currentTenant();
+    const row = await this.row(true);
+    if (row.websiteAddon === addonId) return;
+    let chargedAt = row.websiteSetupChargedAt;
+    // Upgrading from the simple store to the custom one charges the difference.
+    const addons = await websiteAddonSettings(this.db.tx);
+    const owed = addonId ? addons.get(addonId)!.setupMinor - (chargedAt && row.websiteAddon ? addons.get(row.websiteAddon)!.setupMinor : 0) : 0;
+    const subscribed = row.subscriptionId && row.status && OPEN_STATUSES.has(row.status) && row.provider === this.provider.name && row.customerId;
+    if (addonId && owed > 0 && subscribed) {
+      await this.guard(() =>
+        this.provider.chargeOnce(row.customerId!, { key: `website:setup:${addonId}`, name: `${addons.get(addonId)!.name} setup`, amountMinor: owed }, `website-setup-${tenantId}-${addonId}`),
+      );
+      chargedAt = new Date();
+    }
+    await this.db.tx
+      .update(schema.tenantBilling)
+      .set({ websiteAddon: addonId, websiteSetupChargedAt: addonId ? chargedAt : row.websiteSetupChargedAt, updatedAt: new Date() })
+      .where(eq(schema.tenantBilling.tenantId, tenantId));
+    if (!addonId) {
+      await this.db.tx
+        .update(schema.tenantModules)
+        .set({ enabled: false, updatedAt: new Date() })
+        .where(and(eq(schema.tenantModules.moduleId, WEBSITE_TOOL), eq(schema.tenantModules.enabled, true)));
+    }
+    await this.events.record('billing.items_changed', { type: 'website_addon', id: addonId ?? 'none' }, { from: row.websiteAddon, to: addonId });
   }
 
   async summary() {
@@ -58,6 +111,8 @@ export class BillingService {
     const items = await this.desiredItems();
     const enabled = await enabledModuleIds(this.db);
     const subscribed = row.status !== null && OPEN_STATUSES.has(row.status);
+    const [plans, addons] = await Promise.all([planSettings(this.db.tx), websiteAddonSettings(this.db.tx)]);
+    const plan = plans.get(row.plan)!;
     return {
       standing: standing(row),
       trialEndsAt: row.trialEndsAt,
@@ -67,13 +122,22 @@ export class BillingService {
         ? { status: row.status, currentPeriodEnd: row.currentPeriodEnd, cancelAtPeriodEnd: row.cancelAtPeriodEnd, syncedAt: row.syncedAt }
         : null,
       // What the next bill is based on, from the tools that are on right now.
-      lines: items.map((i) => {
-        const mod = MODULES.find((m) => m.id === i.moduleId)!;
-        return { moduleId: i.moduleId, name: mod.name, unitMinor: i.unitMinor!, quantity: i.quantity, totalMinor: i.unitMinor! * i.quantity };
-      }),
+      lines: items.map((i) => ({
+        moduleId: i.moduleId,
+        name: billLineName(i.moduleId, plans) ?? getModule(i.moduleId as never).name,
+        unitMinor: i.unitMinor!,
+        quantity: i.quantity,
+        totalMinor: i.unitMinor! * i.quantity,
+      })),
       // Free tools, and paid ones that are free for this business.
       included: MODULES.filter((m) => enabled.has(m.id) && !items.some((i) => i.moduleId === m.id)).map((m) => m.name),
       monthlyTotalMinor: items.reduce((t, i) => t + i.unitMinor! * i.quantity, 0),
+      plan: { id: plan.id, name: plan.name, registersPerLocation: plan.registersPerLocation },
+      plans: [...plans.values()],
+      website: row.websiteAddon
+        ? { id: row.websiteAddon, name: addons.get(row.websiteAddon)!.name, setupMinor: addons.get(row.websiteAddon)!.setupMinor, setupCharged: Boolean(row.websiteSetupChargedAt) }
+        : null,
+      websiteAddons: [...addons.values()],
       currency: 'usd',
     };
   }
@@ -91,11 +155,18 @@ export class BillingService {
     const trialEnd = !row.subscriptionId && trialLeft >= MIN_TRIAL_CARRY_MS ? row.trialEndsAt : null;
     const page = `${this.config.WEB_URL}/b/${tenantId}/billing`;
     const items = await this.desiredItems();
+    // An online store's setup fee, if not paid yet, comes with the first payment.
+    const addons = await websiteAddonSettings(this.db.tx);
+    const oneTime =
+      row.websiteAddon && !row.websiteSetupChargedAt
+        ? [{ key: `website:setup:${row.websiteAddon}`, name: `${addons.get(row.websiteAddon)!.name} setup`, amountMinor: addons.get(row.websiteAddon)!.setupMinor }]
+        : [];
     const result = await this.guard(() =>
       this.provider.startCheckout({
         tenantId,
         customerId,
         items,
+        oneTime,
         trialEnd,
         successUrl: `${page}?checkout=success`,
         cancelUrl: `${page}?checkout=canceled`,
@@ -172,6 +243,8 @@ export class BillingService {
         currentPeriodEnd: sub?.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
         items: sub?.items ?? [],
+        // A pending online store setup fee goes out with the first payment.
+        ...(sub && LIVE_STATUSES.has(sub.status) && prev.websiteAddon && !prev.websiteSetupChargedAt ? { websiteSetupChargedAt: new Date() } : {}),
         syncedAt: new Date(),
         updatedAt: new Date(),
       })
