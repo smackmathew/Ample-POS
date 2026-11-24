@@ -40,7 +40,7 @@ export function AppShell({
       {sections.map((section, i) => (
         // Each titled group (Business, Product catalog, ...) sits in its own thin-bordered box.
         <div key={section.title ?? i} className={section.title ? 'overflow-hidden rounded-xl border border-brand' : ''}>
-          {section.title && <p className="bg-brand px-4 py-1.5 text-[11px] font-semibold tracking-wider text-white uppercase">{section.title}</p>}
+          {section.title && <p className="bg-brand-soft px-4 py-1.5 text-[11px] font-semibold tracking-wider text-brand uppercase">{section.title}</p>}
           <ul className={`space-y-0.5 ${section.title ? 'p-1.5' : ''}`}>
             {section.items.map((item) => (
               <li key={item.href}>
