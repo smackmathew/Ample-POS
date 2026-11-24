@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { AuthService, newToken } from './auth.service';
 import { APP_CONFIG, type AppConfig } from './config';
 import { Db } from './database';
-import { Mailer } from './mailer';
+import { MailError, Mailer } from './mailer';
 
 /**
  * Proving an account owns its email. Only enforced for built-in accounts while
@@ -38,14 +38,17 @@ export class EmailVerification {
     throw new ForbiddenException({ code: 'email_unverified', message: `Confirm your email address before you ${action}. Check your inbox for the link.` });
   }
 
-  /** Emails a verification link if there is something to verify. Returns whether one was sent. */
-  async send(userId: string): Promise<boolean> {
-    if (!this.enforced) return false;
+  /**
+   * Emails a verification link if there is something to verify. Returns whether
+   * one was sent; if sending failed, `error` says why.
+   */
+  async send(userId: string): Promise<{ sent: boolean; error?: string }> {
+    if (!this.enforced) return { sent: false };
     const { secret, secretHash } = newToken();
     const [row] = await this.db.pool.execute<{ verification_id: string; email: string }>(
       sql`select * from app_create_email_verification(${userId}::uuid, ${secretHash})`,
     );
-    if (!row) return false;
+    if (!row) return { sent: false };
     const link = `${this.config.WEB_URL}/verify?token=${row.verification_id}.${secret}`;
     try {
       await this.mailer.send(
@@ -53,10 +56,10 @@ export class EmailVerification {
         'Confirm your email for Ample POS',
         `Welcome to Ample POS.\n\nConfirm this is your email address by opening this link within 24 hours:\n${link}\n\nIf you didn’t create an Ample POS account, ignore this email.`,
       );
-      return true;
+      return { sent: true };
     } catch (err) {
       this.logger.error((err as Error).message);
-      return false;
+      return { sent: false, error: err instanceof MailError ? err.reason : 'the email service could not be reached' };
     }
   }
 }

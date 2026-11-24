@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpException, Inject, Logger, NotFoundException, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpException, Inject, Logger, NotFoundException, Post, Req, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import { z } from 'zod';
@@ -228,7 +228,12 @@ export class AuthController {
     const { user } = currentContext();
     this.limiter.check(`verify-send:${user!.userId}`, 3, 'A confirmation email was just sent. Check your inbox, or try again in a few minutes.');
     this.limiter.hit(`verify-send:${user!.userId}`, WINDOW);
-    return { sent: await this.verification.send(user!.userId) };
+    const result = await this.verification.send(user!.userId);
+    // Say so plainly instead of "check your inbox" when nothing went out.
+    if (result.error) {
+      throw new ServiceUnavailableException({ statusCode: 503, code: 'email_failed', message: `We couldn’t send the email (${result.error}). Please contact support.` });
+    }
+    return { sent: result.sent };
   }
 
   /** Spends the emailed link. No sign-in needed: the link itself is the proof. */

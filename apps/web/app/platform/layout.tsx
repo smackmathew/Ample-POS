@@ -10,6 +10,7 @@ const NAV = [
   ['/platform/issues', 'Issues'],
   ['/platform/activity', 'Activity'],
   ['/platform/tools', 'Plans & prices'],
+  ['/platform/email', 'Email'],
   ['/platform/audit', 'Admin log'],
 ] as const;
 

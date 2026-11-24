@@ -599,7 +599,11 @@ role, runs the migrations and starts the app at `https://<service>.onrender.com`
   dashboard (see *Super admin dashboard*).
 - Sign-in uses built-in accounts (see *Accounts and sign-in*). Add
   `RESEND_API_KEY` and `EMAIL_FROM` to let people reset forgotten passwords by
-  email.
+  email. With a Resend key set, new accounts must confirm their email before
+  creating a business, so `EMAIL_FROM` must be on a domain verified in Resend;
+  until then Resend only delivers to your own Resend account's address. The
+  super admin's **Email** page shows the setup, sends a test email (showing
+  Resend's own error), and can confirm someone's address by hand.
 - The free plans sleep after 15 idle minutes (the first visit then takes a
   minute, and background jobs pause) and the free database expires after 30
   days. Use paid plans for anything beyond trying it out.

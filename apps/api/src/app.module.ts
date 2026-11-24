@@ -56,6 +56,7 @@ import { PlatformAdminController } from './platform/platform-admin.controller';
 import { PlatformAccess } from './platform/platform-access';
 import { PlatformDb } from './core/platform-db';
 import { PricingController } from './billing/pricing.controller';
+import { PlatformEmailController } from './platform/platform-email.controller';
 import { ApiEvents } from './core/api-events';
 import { ApiKeysController } from './developer/api-keys.controller';
 import { EventsController } from './developer/events.controller';
@@ -85,6 +86,7 @@ export class AppModule {
         CustomersController,
         MerchantController,
         PlatformAdminController,
+        PlatformEmailController,
         LoyaltyController,
         GiftCardsController,
         SuppliersController,
