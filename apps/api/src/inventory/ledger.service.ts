@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { schema, type MovementReason } from '@pos/db';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { ApiEvents } from '../core/api-events';
 import { Db } from '../core/database';
 import { actorUserId, currentContext, currentTenant } from '../core/request-context';
 
@@ -29,7 +30,10 @@ export interface OperationResult {
 /** The only writer of stock movements. Balances follow via the database trigger. */
 @Injectable()
 export class LedgerService {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly api: ApiEvents,
+  ) {}
 
   async record(input: OperationInput): Promise<OperationResult> {
     const tx = this.db.tx;
@@ -71,7 +75,36 @@ export class LedgerService {
         })),
       )
       .returning();
+    await this.publish(input, operation.id, movements);
     return { operationId: operation.id, replayed: false, movements };
+  }
+
+  /** Tells other apps (change feed, webhooks) what moved and what's on hand now. */
+  private async publish(input: OperationInput, operationId: string, movements: OperationResult['movements']): Promise<void> {
+    const tx = this.db.tx;
+    const variantIds = [...new Set(movements.map((m) => m.variantId))];
+    const [levels, variants] = await Promise.all([
+      tx
+        .select({ locationId: schema.stockLevels.locationId, variantId: schema.stockLevels.variantId, onHand: schema.stockLevels.onHand })
+        .from(schema.stockLevels)
+        .where(inArray(schema.stockLevels.variantId, variantIds)),
+      tx.select({ id: schema.productVariants.id, sku: schema.productVariants.sku }).from(schema.productVariants).where(inArray(schema.productVariants.id, variantIds)),
+    ]);
+    const onHand = new Map(levels.map((l) => [`${l.locationId}:${l.variantId}`, l.onHand]));
+    const sku = new Map(variants.map((v) => [v.id, v.sku]));
+    await this.api.publish('inventory.changed', {
+      operationId,
+      kind: input.kind,
+      reference: input.reference ?? null,
+      lines: movements.map((m) => ({
+        locationId: m.locationId,
+        variantId: m.variantId,
+        sku: sku.get(m.variantId) ?? null,
+        quantityDelta: m.quantityDelta,
+        reason: m.reason,
+        onHand: onHand.get(`${m.locationId}:${m.variantId}`) ?? 0,
+      })),
+    });
   }
 
   private async validate(lines: MovementLine[]): Promise<void> {

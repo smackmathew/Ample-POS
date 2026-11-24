@@ -1,16 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { schema } from '@pos/db';
+import { ApiEvents } from './api-events';
 import { actorUserId, currentContext, currentTenant } from './request-context';
 
 /** Writes audit rows and outbox events inside the current request transaction. */
 @Injectable()
 export class Events {
+  constructor(private readonly api: ApiEvents) {}
+
   async audit(action: string, target: { type: string; id: string }, data: Record<string, unknown> = {}) {
-    const { tx, device } = currentContext();
+    const { tx, device, apiKey } = currentContext();
     await tx.insert(schema.auditLog).values({
       tenantId: currentTenant().tenantId,
       actorUserId: actorUserId(),
       actorDeviceId: device?.id ?? null,
+      actorApiKeyId: apiKey?.id ?? null,
       action,
       targetType: target.type,
       targetId: target.id,
@@ -18,13 +22,17 @@ export class Events {
     });
   }
 
-  /** Published asynchronously by a worker after the transaction commits. */
+  /**
+   * Published asynchronously by a worker after the transaction commits. Public
+   * event types also go to the API change feed and webhooks.
+   */
   async emit(topic: string, payload: Record<string, unknown>) {
     await currentContext().tx.insert(schema.outbox).values({
       tenantId: currentTenant().tenantId,
       topic,
       payload,
     });
+    await this.api.publish(topic, payload);
   }
 
   /** Record an audited change and the matching domain event together. */

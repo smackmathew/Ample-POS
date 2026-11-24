@@ -56,6 +56,12 @@ import { PlatformAdminController } from './platform/platform-admin.controller';
 import { PlatformAccess } from './platform/platform-access';
 import { PlatformDb } from './core/platform-db';
 import { PricingController } from './billing/pricing.controller';
+import { ApiEvents } from './core/api-events';
+import { ApiKeysController } from './developer/api-keys.controller';
+import { EventsController } from './developer/events.controller';
+import { IntegrationsController } from './developer/integrations.controller';
+import { safeWebhookFetch, WEBHOOK_FETCH, WebhookDispatcher } from './developer/webhook-dispatcher';
+import { WebhookEndpointsController } from './developer/webhooks.controller';
 import { DeviceSessionController } from './platform/device-session.controller';
 import { DevicesController } from './platform/devices.controller';
 import { IdentityController } from './platform/identity.controller';
@@ -107,6 +113,10 @@ export class AppModule {
         BillingController,
         BillingWebhookController,
         PricingController,
+        ApiKeysController,
+        EventsController,
+        WebhookEndpointsController,
+        IntegrationsController,
         TerminalController,
       ],
       providers: [
@@ -120,6 +130,9 @@ export class AppModule {
         TwoFactor,
         { provide: MAIL_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         Events,
+        ApiEvents,
+        WebhookDispatcher,
+        { provide: WEBHOOK_FETCH, useFactory: () => safeWebhookFetch(config) },
         LedgerService,
         SalesService,
         LoyaltyService,

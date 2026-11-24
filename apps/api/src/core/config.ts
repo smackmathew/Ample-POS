@@ -49,6 +49,8 @@ const schema = z
     /** Run the outbox worker inside the API process (turn off when running it separately). */
     WORKER_ENABLED: z.enum(['true', 'false']).default('true'),
     OUTBOX_POLL_MS: z.coerce.number().int().min(100).default(2000),
+    // Lets webhooks reach localhost and private networks (local development only).
+    WEBHOOK_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false'),
     /** How often to reconcile each store connection (missed orders, stock drift). */
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(10_000).default(15 * 60_000),
   })
