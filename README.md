@@ -288,6 +288,26 @@ by the API. Written against Shopify Admin API version 2026-10.
   hours worked with net sales per labor hour. Each section appears when its
   tool is on.
 
+## Public website
+
+The web app's front door (`apps/web/app/(site)`): a home page, Features,
+Pricing, and **Start free trial** (`/start`). Prices come from
+`GET /public/pricing`, which needs no sign-in and includes any changes the
+super admin made, so the website always matches what companies are billed.
+
+- **Signup** picks a plan (`/start?plan=growth` from a pricing card), an
+  optional online store, the business name and, for new visitors, an account.
+  It creates the business on that plan with the included tools on.
+- **Free trial** opens the new business. **Subscribe now** goes straight to
+  checkout; the plan is still free until the trial ends, and an online store's
+  setup fee is charged then.
+- **Email confirmation.** When new accounts must confirm their email, the
+  choices wait in a cookie and `/start/confirm` finishes setup once the link
+  is opened (the confirmation page links back to it).
+- **Dashboards.** Signed-in visitors see *Your dashboard* in the header, which
+  lists their businesses. Super admins also get the super admin dashboard
+  from their account page and the businesses list.
+
 ## Billing
 
 - **Free trial, then a plan.** Every business gets 14 days free, then pays

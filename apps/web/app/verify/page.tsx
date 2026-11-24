@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
+import { readPendingSetup } from '@/lib/site';
 
 /** Opened from the confirmation email. The link itself is the proof, so no sign-in is needed. */
 export default async function VerifyPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token } = await searchParams;
+  const setup = await readPendingSetup();
   let email: string | null = null;
   let problem: string | null = null;
   if (!token) problem = 'This link is incomplete. Open the full link from the email.';
@@ -26,8 +28,8 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
           problem
         )}
       </p>
-      <Link href="/businesses" className="btn mt-6 inline-block">
-        Continue
+      <Link href={email && setup ? '/start/confirm' : '/businesses'} className="btn mt-6 inline-block">
+        {email && setup ? `Finish setting up ${setup.business}` : 'Continue'}
       </Link>
     </main>
   );

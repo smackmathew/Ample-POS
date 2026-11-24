@@ -55,6 +55,7 @@ import { AuditController } from './platform/audit.controller';
 import { PlatformAdminController } from './platform/platform-admin.controller';
 import { PlatformAccess } from './platform/platform-access';
 import { PlatformDb } from './core/platform-db';
+import { PricingController } from './billing/pricing.controller';
 import { DeviceSessionController } from './platform/device-session.controller';
 import { DevicesController } from './platform/devices.controller';
 import { IdentityController } from './platform/identity.controller';
@@ -105,6 +106,7 @@ export class AppModule {
         ReportsController,
         BillingController,
         BillingWebhookController,
+        PricingController,
         TerminalController,
       ],
       providers: [

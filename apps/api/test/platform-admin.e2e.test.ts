@@ -196,6 +196,14 @@ describe('super admin dashboard', () => {
       await admin.put('/platform/plans/gold', { baseMinor: 1 }).expect(404);
       expect((await admin.put('/platform/website-addons/simple', { setupMinor: 29900 }).expect(200)).body.websiteAddons[0]).toMatchObject({ id: 'simple', setupMinor: 29900 });
 
+      // The public pricing page needs no sign-in and shows the new prices.
+      const pricing = (await request(app.getHttpServer()).get('/public/pricing').expect(200)).body;
+      expect(pricing.plans.map((p: { id: string; baseMinor: number }) => [p.id, p.baseMinor])).toEqual([['starter', 2900], ['growth', 5900], ['pro', 7900]]);
+      expect(pricing.websiteAddons[0]).toMatchObject({ id: 'simple', setupMinor: 29900 });
+      expect(pricing.tools.find((t: { id: string }) => t.id === 'loyalty')).toMatchObject({ included: true });
+      expect(pricing.tools.find((t: { id: string }) => t.id === 'inventory')).toMatchObject({ included: false, monthlyPriceMinor: 2900 });
+      expect(pricing.plans[0]).not.toHaveProperty('companies');
+
       const detail = (await admin.put(`/platform/companies/${owner.tenantId}/plan`, { plan: 'pro', websiteAddon: 'simple' }).expect(200)).body;
       expect(detail.billing).toMatchObject({ plan: 'pro', websiteAddon: 'simple' });
       // An online store given by support carries no setup fee.
