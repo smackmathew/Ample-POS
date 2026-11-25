@@ -34,6 +34,6 @@ export function billLineName(key: string, plans: Map<PlanId, PlanDefinition>): s
     if (!p) return null;
     return plan[2] ? `Extra locations (${p.name})` : `${p.name} plan, first location`;
   }
-  if (key === 'website:maintenance') return 'Online store sync';
+  if (key === 'website:maintenance') return 'Website sync';
   return null;
 }

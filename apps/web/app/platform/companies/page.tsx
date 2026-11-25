@@ -73,7 +73,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                 </td>
                 <td className="px-4 py-2 text-xs">
                   {c.plan ? PLAN_NAME[c.plan] : '—'}
-                  {c.websiteAddon && <div className="text-stone-500">+ online store</div>}
+                  {c.websiteAddon && <div className="text-stone-500">+ website</div>}
                 </td>
                 <td className={`px-4 py-2 text-xs ${MERCHANT[c.merchant]?.[1] ?? ''}`}>{MERCHANT[c.merchant]?.[0] ?? c.merchant}</td>
                 <td className="px-4 py-2 text-right tabular-nums">{c.mrrMinor ? usd(c.mrrMinor) : '—'}</td>

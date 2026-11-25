@@ -30,7 +30,7 @@ export default async function ToolsPage() {
             </div>
             <PriceField label="First location /mo" name="base" value={p.baseMinor} />
             <PriceField label="Each extra location /mo" name="extra" value={p.extraLocationMinor} />
-            <PriceField label="Online store sync /mo" name="maintenance" value={p.websiteMaintenanceMinor} />
+            <PriceField label="Website sync /mo" name="maintenance" value={p.websiteMaintenanceMinor} />
             <label className="block text-sm">
               Registers per location
               <input name="registers" inputMode="numeric" defaultValue={p.registersPerLocation} className="input mt-1" />

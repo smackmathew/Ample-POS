@@ -313,26 +313,29 @@ super admin made, so the website always matches what companies are billed.
 - **Free trial, then a plan.** Every business gets 14 days free, then pays
   for one of three plans (in `packages/modules/src/plans.ts`):
 
-  | Plan    | First location | Each extra location | Open registers per location | Online store sync |
-  | ------- | -------------- | ------------------- | --------------------------- | ----------------- |
-  | Starter | $39/mo         | $19/mo              | 1                           | $9.99/mo          |
-  | Growth  | $59/mo         | $29/mo              | 5                           | $14.99/mo         |
-  | Pro     | $79/mo         | $39/mo              | 10                          | $19.99/mo         |
+  | Plan    | First location | Each extra location | Open registers per location |
+  | ------- | -------------- | ------------------- | --------------------------- |
+  | Starter | $39/mo         | $19/mo              | 1                           |
+  | Growth  | $59/mo         | $29/mo              | 5                           |
+  | Pro     | $79/mo         | $39/mo              | 10                          |
 
   Every plan includes the point of sale, product catalog, reports, customers,
   loyalty and purchase orders. Inventory, time clock, scheduling, tasks and
   gift cards are paid add-ons at $4.99/mo each, charged per active location
   (the super admin can change any of these prices). Opening a register
   past the plan's limit returns `409 register_limit`.
-- **Online store add-on.** A one-time setup fee ($399 online store, $599 custom
-  online store) plus the plan's monthly sync fee. It unlocks Shopify sync;
-  without it, turning that tool on returns `409 website_addon_required`. The
-  setup fee goes on the Checkout session, or on the next invoice if the
-  business already subscribes; moving from the $399 store to the $599 one
-  charges only the difference.
+- **Website options.** Each is $9.99/mo for syncing (the plan's sync fee,
+  the same on every plan): *Website sync* for a site the business already has
+  (no setup fee), *Online store* (a simple store we set up, $399 once) or
+  *Website + online store* (multi-page, $599 once). Any option unlocks website
+  sync; without one, turning that tool on returns `409 website_addon_required`.
+  A setup fee goes on the Checkout session, or on the next invoice if the
+  business already subscribes. Setup fees already paid are remembered
+  (`website_setup_paid_minor`), so switching only ever charges the difference.
+  The pricing page's "custom website" line links to `CONTACT_EMAIL` when set.
 - **Prices are editable.** The super admin changes plan prices, register
   limits and setup fees under Plans & prices, and moves any company between
-  plans (an online store added there carries no setup fee). Subscriptions on
+  plans (a website option added there carries no setup fee). Subscriptions on
   a changed plan update in the background.
 - **Stripe does the money.** Subscribing opens Stripe Checkout; invoices, cards
   and cancellation are in Stripe's customer portal. Ample POS creates its

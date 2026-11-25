@@ -10,6 +10,9 @@ export default async function PricingPage() {
   const pricing = await getPricing();
   const included = pricing.tools.filter((t) => t.included && !t.withOnlineStore);
   const addOns = pricing.tools.filter((t) => !t.included && !t.withOnlineStore);
+  // The same on every plan today; if plans ever differ, show the lowest as "from".
+  const syncFee = Math.min(...pricing.plans.map((p) => p.websiteMaintenanceMinor));
+  const contact = process.env.CONTACT_EMAIL;
   const faqs: [string, string][] = [
     [
       'How does the free trial work?',
@@ -71,32 +74,34 @@ export default async function PricingPage() {
 
       <section id="online-store" className="bg-teal-50">
         <div className="mx-auto max-w-6xl px-4 py-16">
-          <h2 className="text-2xl font-semibold">Add an online store</h2>
+          <h2 className="text-2xl font-semibold">Sell online too</h2>
           <p className="mt-2 max-w-2xl text-stone-700">
-            We set up your store and keep its products, prices and stock in sync with your registers. Pay once for setup, then a monthly sync fee based on your plan.
+            Keep your website’s products, prices and stock in step with your registers. Connect the site you already have, or let us build one for you.
           </p>
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
             {pricing.websiteAddons.map((a) => (
-              <div key={a.id} className="rounded-2xl border border-teal-100 bg-white p-6">
+              <div key={a.id} className="flex flex-col rounded-2xl border border-teal-100 bg-white p-6">
                 <h3 className="text-lg font-semibold">{a.name}</h3>
-                <p className="mt-1 text-sm text-stone-600">{a.description}</p>
+                <p className="mt-1 flex-1 text-sm text-stone-600">{a.description}</p>
                 <p className="mt-4">
-                  <span className="text-3xl font-semibold">{price(a.setupMinor)}</span> <span className="text-stone-500">one-time setup</span>
+                  <span className="text-3xl font-semibold">{price(syncFee)}</span>
+                  <span className="text-stone-500">/mo</span>
                 </p>
+                <p className="text-sm text-stone-500">{a.setupMinor > 0 ? `+ ${price(a.setupMinor)} one-time setup` : 'No setup fee'}</p>
               </div>
             ))}
           </div>
-          <table className="mt-8 w-full max-w-md text-sm">
-            <caption className="mb-2 text-left font-medium">Monthly sync fee</caption>
-            <tbody className="divide-y divide-teal-100">
-              {pricing.plans.map((p) => (
-                <tr key={p.id}>
-                  <td className="py-2">On {p.name}</td>
-                  <td className="py-2 text-right font-medium">{price(p.websiteMaintenanceMinor)}/mo</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className="mt-8 text-stone-700">
+            Need a custom website or custom product syncing?{' '}
+            {contact ? (
+              <a href={`mailto:${contact}?subject=Custom%20website%20for%20Ample%20POS`} className="font-medium text-brand hover:underline">
+                Contact us
+              </a>
+            ) : (
+              <span className="font-medium">Contact us</span>
+            )}{' '}
+            and we’ll put together a quote.
+          </p>
         </div>
       </section>
 

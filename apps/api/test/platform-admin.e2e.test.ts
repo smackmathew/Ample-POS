@@ -194,12 +194,12 @@ describe('super admin dashboard', () => {
       expect(catalog.plans.find((p: { id: string }) => p.id === 'starter')).toMatchObject({ baseMinor: 2900, extraLocationMinor: 1900, registersPerLocation: 1 });
       expect((await owner.get('/billing').expect(200)).body.lines[0]).toMatchObject({ moduleId: 'plan:starter', unitMinor: 2900 });
       await admin.put('/platform/plans/gold', { baseMinor: 1 }).expect(404);
-      expect((await admin.put('/platform/website-addons/simple', { setupMinor: 29900 }).expect(200)).body.websiteAddons[0]).toMatchObject({ id: 'simple', setupMinor: 29900 });
+      expect((await admin.put('/platform/website-addons/simple', { setupMinor: 29900 }).expect(200)).body.websiteAddons[1]).toMatchObject({ id: 'simple', setupMinor: 29900 });
 
       // The public pricing page needs no sign-in and shows the new prices.
       const pricing = (await request(app.getHttpServer()).get('/public/pricing').expect(200)).body;
       expect(pricing.plans.map((p: { id: string; baseMinor: number }) => [p.id, p.baseMinor])).toEqual([['starter', 2900], ['growth', 5900], ['pro', 7900]]);
-      expect(pricing.websiteAddons[0]).toMatchObject({ id: 'simple', setupMinor: 29900 });
+      expect(pricing.websiteAddons[1]).toMatchObject({ id: 'simple', setupMinor: 29900 });
       expect(pricing.tools.find((t: { id: string }) => t.id === 'loyalty')).toMatchObject({ included: true });
       expect(pricing.tools.find((t: { id: string }) => t.id === 'inventory')).toMatchObject({ included: false, monthlyPriceMinor: 499 });
       expect(pricing.plans[0]).not.toHaveProperty('companies');

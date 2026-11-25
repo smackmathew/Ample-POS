@@ -17,7 +17,7 @@ const DETAILS: Record<string, string[]> = {
   scheduling: ['Shifts for each store', 'Staff availability', 'Publish the schedule for your team'],
   tasks: ['Opening and closing checklists', 'Assign to people or roles', 'A record of who did what'],
   reporting: ['Sales by day, product and payment type', 'Inventory on hand for each store', 'Labor hours from timecards'],
-  'ecommerce-sync': ['Products and prices shared with your online store', 'Stock kept in step both ways', 'Comes with the online store add-on'],
+  'ecommerce-sync': ['Products and prices shared with your website', 'Stock kept in step both ways', 'Comes with any website option'],
 };
 
 export default async function FeaturesPage() {
@@ -36,10 +36,10 @@ export default async function FeaturesPage() {
       <Group title="Add-ons" tools={paid} note={(t) => `${price(t.monthlyPriceMinor)}/mo per store`} />
       {store && (
         <section className="mt-14 rounded-2xl bg-teal-50 p-8">
-          <h2 className="text-2xl font-semibold">Online store</h2>
+          <h2 className="text-2xl font-semibold">Sell online too</h2>
           <p className="mt-2 max-w-2xl text-stone-700">
-            We build your online store and keep it in sync with the register. One-time setup from {price(Math.min(...pricing.websiteAddons.map((a) => a.setupMinor)))}, then a
-            small monthly sync fee that depends on your plan.
+            Keep your website in sync with the register for {price(Math.min(...pricing.plans.map((p) => p.websiteMaintenanceMinor)))}/mo. Connect the site you already have, or
+            let us build a simple online store or a multi-page website for a one-time setup fee.
           </p>
           <ul className="mt-4 grid gap-1 text-sm text-stone-700 sm:grid-cols-3">
             {(DETAILS[store.id] ?? []).map((d) => (
@@ -47,7 +47,7 @@ export default async function FeaturesPage() {
             ))}
           </ul>
           <Link href="/pricing#online-store" className="mt-5 inline-block text-sm font-medium text-brand hover:underline">
-            Online store pricing →
+            Website pricing →
           </Link>
         </section>
       )}

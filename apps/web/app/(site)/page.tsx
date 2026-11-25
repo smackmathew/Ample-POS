@@ -11,7 +11,7 @@ const HIGHLIGHTS = [
   ['Bring customers back', 'Customer profiles, emailed receipts and loyalty points they can spend at the counter.'],
   ['Run your team', 'Time clock, schedules and checklists, with timecards ready for payroll.'],
   ['See how you’re doing', 'Sales, inventory and labor reports for every store, or all of them at once.'],
-  ['Sell online too', 'Add an online store that shares your products, prices and stock with the register.'],
+  ['Sell online too', 'Sync the website you already have, or let us build one, sharing products, prices and stock with the register.'],
 ] as const;
 
 export default async function Home() {
