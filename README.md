@@ -404,9 +404,14 @@ printers, connected by **USB** (plugged into the register), a **network share**
 (`\\PC\Printer` or `smb://pc/printer`) or an **IP address** (raw printing,
 port 9100 by default). Each has a printer language (ESC/POS or Star for
 receipts; ZPL, EPL or TSPL for tags; or the system print dialog) and a paper
-or tag size. A register gets at most one printer of each kind, at its own
-location, and learns them from `GET /device` (`printers`). Revoking a register
-frees its printers. Sending print jobs from the register app is the next step;
+or tag size. A receipt printer belongs to one register (at most one each);
+tag printers belong to the location and are shared by every device there.
+Devices learn theirs from `GET /device` (`printers`).
+
+**Barcode scanners** (Symbol/Zebra and others; USB, Bluetooth or serial) can be
+attached to any device at their location: registers, handhelds or kiosks,
+more than one each (`/scanners`, `scanners` in `GET /device`). Revoking a
+device frees its receipt printer and scanners. Sending print jobs from the register app is the next step;
 this stores the setup the app will use.
 
 ## Mobile counting app

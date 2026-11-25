@@ -22,8 +22,36 @@ async function shop() {
   return { owner, store, other, register: reg.device, credential: reg.credential as string, handheld: handheld.device };
 }
 
+describe('barcode scanners', () => {
+  it('attaches scanners to any device at the location, and the device sees its own', async () => {
+    const { owner, store, other, register, credential, handheld } = await shop();
+    const front = (await owner.post('/scanners', { locationId: store.id, name: 'Front scanner', brand: 'Symbol', model: 'LS2208', connection: 'usb', deviceId: register.id }).expect(201)).body;
+    expect(front).toMatchObject({ brand: 'Symbol', model: 'LS2208', connection: 'usb', deviceId: register.id });
+    // More than one per device is fine, and handhelds can have them too.
+    await owner.post('/scanners', { locationId: store.id, name: 'Presentation', connection: 'usb', deviceId: register.id }).expect(201);
+    const bt = (await owner.post('/scanners', { locationId: store.id, name: 'Stockroom', brand: 'Symbol', model: 'CS4070', connection: 'bluetooth', deviceId: handheld.id }).expect(201)).body;
+    await owner.post('/scanners', { locationId: other.id, name: 'Elsewhere', connection: 'usb', deviceId: register.id }).expect(400);
+    await owner.post('/scanners', { locationId: store.id, name: 'Bad', connection: 'wifi' }).expect(400);
+
+    owner.deviceCredential = credential;
+    const me = (await owner.get('/device').expect(200)).body;
+    owner.deviceCredential = undefined;
+    expect(me.scanners.map((s: { name: string }) => s.name).sort()).toEqual(['Front scanner', 'Presentation']);
+
+    // Move one, remove one; revoking a device frees its scanners.
+    await owner.patch(`/scanners/${bt.id}`, { deviceId: null }).expect(200);
+    await owner.delete(`/scanners/${front.id}`).expect(200);
+    await owner.post(`/devices/${register.id}/revoke`).expect(201);
+    const list = (await owner.get('/scanners').expect(200)).body;
+    expect(list.map((s: { name: string; deviceId: string | null }) => [s.name, s.deviceId])).toEqual([
+      ['Presentation', null],
+      ['Stockroom', null],
+    ]);
+  });
+});
+
 describe('printers', () => {
-  it('adds receipt and tag printers by IP, network share or USB, and gives each register its own', async () => {
+  it('adds receipt printers per register and tag printers per location, by IP, network share or USB', async () => {
     const { owner, store, register, credential } = await shop();
     const receipt = (
       await owner
@@ -33,12 +61,15 @@ describe('printers', () => {
     expect(receipt).toMatchObject({ kind: 'receipt', connection: 'ip', address: '192.168.1.50', port: 9100, registerId: register.id });
     const tag = (
       await owner
-        .post('/printers', { locationId: store.id, kind: 'tag', name: 'Price tags', connection: 'network_share', address: '\\\\FRONT-PC\\Zebra', language: 'zpl', paper: '2x1in', registerId: register.id })
+        .post('/printers', { locationId: store.id, kind: 'tag', name: 'Price tags', connection: 'network_share', address: '\\\\FRONT-PC\\Zebra', language: 'zpl', paper: '2x1in' })
         .expect(201)
     ).body;
+    // Tag printers aren't tied to a register.
+    await owner.post('/printers', { locationId: store.id, kind: 'tag', name: 'X', connection: 'usb', language: 'zpl', registerId: register.id }).expect(400);
+    await owner.patch(`/printers/${tag.id}`, { registerId: register.id }).expect(400);
     await owner.post('/printers', { locationId: store.id, kind: 'receipt', name: 'Back office', connection: 'usb', language: 'system' }).expect(201);
 
-    // The register learns its printers when it checks in.
+    // The register learns its receipt printer and the location's tag printers when it checks in.
     owner.deviceCredential = credential;
     const me = (await owner.get('/device').expect(200)).body;
     owner.deviceCredential = undefined;
@@ -47,12 +78,10 @@ describe('printers', () => {
       ['tag', 'Price tags'],
     ]);
 
-    // One of each kind per register.
+    // One receipt printer per register.
     expect((await owner.post('/printers', { locationId: store.id, kind: 'receipt', name: 'Second', connection: 'usb', language: 'escpos', registerId: register.id }).expect(409)).body.message).toMatch(
-      /already has a printer of this kind/,
+      /already has a receipt printer/,
     );
-    // Move the tag printer off the register, then remove the receipt printer.
-    await owner.patch(`/printers/${tag.id}`, { registerId: null }).expect(200);
     await owner.delete(`/printers/${receipt.id}`).expect(200);
     const list = (await owner.get('/printers').expect(200)).body;
     expect(list.map((p: { name: string; registerId: string | null }) => [p.name, p.registerId])).toEqual([

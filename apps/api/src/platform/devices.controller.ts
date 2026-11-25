@@ -57,8 +57,9 @@ export class DevicesController {
       .where(and(eq(schema.devices.id, id), eq(schema.devices.status, 'active')))
       .returning(publicColumns);
     if (!device) throw new NotFoundException('Active device not found');
-    // Its printers stay at the location, ready for another register.
+    // Its printers and scanners stay at the location, ready for another device.
     await this.db.tx.update(schema.printers).set({ registerId: null, updatedAt: new Date() }).where(eq(schema.printers.registerId, id));
+    await this.db.tx.update(schema.scanners).set({ deviceId: null, updatedAt: new Date() }).where(eq(schema.scanners.deviceId, id));
     await this.events.record('device.revoked', { type: 'device', id });
     return device;
   }

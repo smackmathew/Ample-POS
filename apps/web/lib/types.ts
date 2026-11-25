@@ -116,6 +116,16 @@ export interface Printer {
   registerId: string | null;
 }
 
+export interface Scanner {
+  id: string;
+  locationId: string;
+  name: string;
+  brand: string | null;
+  model: string | null;
+  connection: 'usb' | 'bluetooth' | 'serial';
+  deviceId: string | null;
+}
+
 export interface Role {
   id: string;
   key: string;

@@ -844,3 +844,20 @@ export const printers = pgTable('printers', {
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Barcode scanners (migration 0026), attached to any device.
+export const SCANNER_CONNECTIONS = ['usb', 'bluetooth', 'serial'] as const;
+
+export const scanners = pgTable('scanners', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  name: text('name').notNull(),
+  brand: text('brand'),
+  model: text('model'),
+  connection: text('connection', { enum: SCANNER_CONNECTIONS }).notNull(),
+  deviceId: uuid('device_id'),
+  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
