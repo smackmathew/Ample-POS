@@ -22,6 +22,7 @@ export default function RootLayout() {
             <Stack.Screen name="register" options={{ headerShown: false }} />
             <Stack.Screen name="receiving/index" options={{ title: 'Receive a delivery' }} />
             <Stack.Screen name="receiving/[id]" options={{ title: 'Receive' }} />
+            <Stack.Screen name="tags" options={{ title: 'Print tags' }} />
           </Stack>
         </TerminalProvider>
       </SyncProvider>

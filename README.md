@@ -411,7 +411,26 @@ Devices learn theirs from `GET /device` (`printers`).
 **Barcode scanners** (Symbol/Zebra and others; USB, Bluetooth or serial) can be
 attached to any device at their location: registers, handhelds or kiosks,
 more than one each (`/scanners`, `scanners` in `GET /device`). Revoking a
-device frees its receipt printer and scanners. Sending print jobs from the register app is the next step;
+device frees its receipt printer and scanners.
+
+**Printing from the tablet app.** The register app prints a receipt as soon as
+a sale is paid, on the register's receipt printer, and opens the cash drawer
+plugged into it for cash sales. *Print receipt* prints it again. **Print tags**
+(register menu, or the handheld home screen) scans or searches products,
+takes a number of copies, and prints on one of the location's tag printers.
+
+- **IP printers** get raw commands straight over the network (port 9100):
+  ESC/POS or Star for receipts, ZPL, TSPL or EPL for tags (`react-native-tcp-socket`).
+- **USB, network share and "System print dialog" printers** go through the
+  tablet's print service (Android printing, AirPrint), so the printer needs
+  setting up on the tablet once.
+- Without a receipt printer, *Print receipt* opens the print dialog as before.
+
+The commands are built in `packages/receipts/src/printing.ts` (receipts at the
+paper width, plain ASCII; tags with name, price and a Code 128 barcode that
+narrows on small tags; long names shortened). The tablet keeps its last printer
+list, so printing works offline. The TCP module is native: build a new version of
+the app to get it. Sending print jobs from the register app is the next step;
 this stores the setup the app will use.
 
 ## Mobile counting app

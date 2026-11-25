@@ -176,3 +176,5 @@ export function receiptText(r: Receipt, width = 40): string {
     ...(rows.footer.length ? [rule, ...rows.footer.map(center)] : []),
   ].join('\n');
 }
+
+export * from './printing';
