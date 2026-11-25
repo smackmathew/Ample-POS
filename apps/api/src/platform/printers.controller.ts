@@ -40,8 +40,9 @@ const updateBody = z.object({
 type Printer = typeof schema.printers.$inferSelect;
 
 /**
- * Receipt and tag printers for each location, and the register each one
- * prints from. Registers fetch their printers with GET /device.
+ * Receipt and tag printers for each location. A receipt printer belongs to
+ * one register; tag printers are shared by every device at the location.
+ * Devices fetch theirs with GET /device.
  */
 @Controller('printers')
 @RequirePermission('devices.manage')
@@ -146,6 +147,9 @@ export class PrintersController {
     if (!LANGUAGES_FOR[p.kind].includes(p.language)) {
       throw new BadRequestException(`A ${p.kind} printer uses ${LANGUAGES_FOR[p.kind].join(', ')}`);
     }
+    if (p.kind === 'tag' && p.registerId) {
+      throw new BadRequestException('Tag printers belong to the location, not a register: any device there can print tags');
+    }
     if (p.registerId) {
       const [register] = await this.db.tx
         .select({ kind: schema.devices.kind, locationId: schema.devices.locationId })
@@ -164,7 +168,7 @@ export class PrintersController {
     } catch (err) {
       for (let e: unknown = err; e && typeof e === 'object'; e = (e as { cause?: unknown }).cause) {
         if ((e as { constraint_name?: string }).constraint_name === 'printers_one_per_register') {
-          throw new ConflictException('That register already has a printer of this kind. Unassign it first.');
+          throw new ConflictException('That register already has a receipt printer. Unassign it first.');
         }
       }
       throw err;

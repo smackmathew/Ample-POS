@@ -58,6 +58,7 @@ import { PlatformDb } from './core/platform-db';
 import { PricingController } from './billing/pricing.controller';
 import { PlatformEmailController } from './platform/platform-email.controller';
 import { PrintersController } from './platform/printers.controller';
+import { ScannersController } from './platform/scanners.controller';
 import { ApiEvents } from './core/api-events';
 import { ApiKeysController } from './developer/api-keys.controller';
 import { EventsController } from './developer/events.controller';
@@ -100,6 +101,7 @@ export class AppModule {
         DevicesController,
         DeviceSessionController,
         PrintersController,
+        ScannersController,
         AuditController,
         CatalogController,
         InventoryController,

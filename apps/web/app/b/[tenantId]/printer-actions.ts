@@ -44,3 +44,35 @@ export async function removePrinter(tenantId: string, id: string) {
   await api(`/printers/${id}`, { tenantId, method: 'DELETE' });
   revalidatePath(page(tenantId));
 }
+
+export async function addScanner(tenantId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api('/scanners', {
+      tenantId,
+      method: 'POST',
+      body: {
+        locationId: text(form, 'locationId'),
+        name: text(form, 'name'),
+        brand: text(form, 'brand'),
+        model: text(form, 'model'),
+        connection: text(form, 'connection'),
+        deviceId: text(form, 'deviceId'),
+      },
+    });
+    revalidatePath(page(tenantId));
+    return { ok: 'Scanner added' };
+  });
+}
+
+export async function assignScanner(tenantId: string, id: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/scanners/${id}`, { tenantId, method: 'PATCH', body: { deviceId: text(form, 'deviceId') } });
+    revalidatePath(page(tenantId));
+    return { ok: 'Saved' };
+  });
+}
+
+export async function removeScanner(tenantId: string, id: string) {
+  await api(`/scanners/${id}`, { tenantId, method: 'DELETE' });
+  revalidatePath(page(tenantId));
+}
