@@ -136,6 +136,7 @@ export default function Counts() {
           <ErrorText>{error}</ErrorText>
           {(revoked || last?.stopped === 'unauthorized') && <Button title="Pair again" onPress={() => router.push('/pair')} />}
           {canReceive && <Button title="Receive a delivery" variant="secondary" onPress={() => router.push('/receiving')} />}
+          <Button title="Print tags" variant="secondary" onPress={() => router.push('/tags')} />
           <Field label="New count" placeholder="e.g. Back room shelf A" value={name} onChangeText={setName} />
           <Button title="Start count" onPress={start} disabled={!name.trim() || offline} busy={busy} />
           <Text style={[styles.label, { marginTop: 8 }]}>OPEN COUNTS AT {session.device?.locationName?.toUpperCase()}</Text>

@@ -258,6 +258,7 @@ function menu(refreshCatalog: () => Promise<void>, canReceive: boolean) {
         ),
     },
     ...(canReceive ? [{ text: 'Receive a delivery', onPress: () => router.push('/receiving') }] : []),
+    { text: 'Print tags', onPress: () => router.push('/tags') },
     { text: 'Close register', onPress: () => router.push('/register/close') },
     { text: 'Cancel', style: 'cancel' },
   ]);

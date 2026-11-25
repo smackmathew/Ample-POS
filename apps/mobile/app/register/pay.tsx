@@ -1,10 +1,9 @@
 import type { Receipt } from '@pos/receipts';
-import { receiptHtml } from '@pos/receipts';
 import { formatMoney, parseMoney, quickCashAmounts, rewardsUsable, type CardOutcome, type Sale } from '@pos/sync';
-import * as Print from 'expo-print';
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
+import { isDirect, loadDeviceSetup, printReceipt, type DevicePrinter } from '@/printing';
 import { useRegister } from '@/register';
 import { useSession } from '@/session';
 import { useTerminal } from '@/terminal';
@@ -295,20 +294,41 @@ function Paid({ sale, change, onNewSale }: { sale: Sale; change: number | null; 
   const [busy, setBusy] = useState<'print' | 'email' | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const money = (minor: number) => formatMoney(minor, sale.currency);
+  const [printer, setPrinter] = useState<DevicePrinter | undefined>();
 
-  const print = async () => {
-    setBusy('print');
-    setNote(null);
-    try {
-      const receipt = await api.get<Receipt>(`/sales/${sale.id}/receipt`);
-      // The phone's own print service: AirPrint on iOS, Android printing (most receipt printers support one).
-      await Print.printAsync({ html: receiptHtml(receipt) });
-    } catch (err) {
-      setNote({ ok: false, text: (err as Error).message });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const print = useCallback(
+    async (target: DevicePrinter | undefined) => {
+      setBusy('print');
+      setNote(null);
+      try {
+        const receipt = await api.get<Receipt>(`/sales/${sale.id}/receipt`);
+        // Cash sales open the drawer plugged into a network receipt printer.
+        const openDrawer = receipt.payments.some((p) => p.method === 'cash');
+        setNote({ ok: true, text: await printReceipt(receipt, target, { openDrawer }) });
+      } catch (err) {
+        setNote({ ok: false, text: `Couldn’t print: ${(err as Error).message}` });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [api, sale.id],
+  );
+
+  // A receipt printer on the network prints straight away; others wait for the button.
+  useEffect(() => {
+    let cancelled = false;
+    loadDeviceSetup(api)
+      .then((setup) => {
+        if (cancelled) return;
+        const receiptPrinter = setup.printers.find((p) => p.kind === 'receipt');
+        setPrinter(receiptPrinter);
+        if (receiptPrinter && isDirect(receiptPrinter)) void print(receiptPrinter);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [api, print]);
 
   const send = async () => {
     setBusy('email');
@@ -343,7 +363,13 @@ function Paid({ sale, change, onNewSale }: { sale: Sale; change: number | null; 
           <Text style={{ fontSize: 40, fontWeight: '700' }}>{money(change)}</Text>
         </View>
       )}
-      <Button title="Print receipt" variant="secondary" onPress={print} busy={busy === 'print'} disabled={busy !== null} />
+      <Button
+        title={printer ? `Print receipt on ${printer.name}` : 'Print receipt'}
+        variant="secondary"
+        onPress={() => void print(printer)}
+        busy={busy === 'print'}
+        disabled={busy !== null}
+      />
       <View style={[styles.row, { alignItems: 'flex-end' }]}>
         <View style={{ flex: 1 }}>
           <Field label="Email receipt" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" placeholder="customer@example.com" />
