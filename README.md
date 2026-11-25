@@ -397,6 +397,18 @@ build (`npx expo run:ios`, `npx expo run:android`, or EAS Build); in Expo Go the
 register still works with cash and the simulated processor. Android needs 8.0
 (API 26) or newer.
 
+## Printers
+
+Devices → **Printers** keeps each location's receipt printers and tag (label)
+printers, connected by **USB** (plugged into the register), a **network share**
+(`\\PC\Printer` or `smb://pc/printer`) or an **IP address** (raw printing,
+port 9100 by default). Each has a printer language (ESC/POS or Star for
+receipts; ZPL, EPL or TSPL for tags; or the system print dialog) and a paper
+or tag size. A register gets at most one printer of each kind, at its own
+location, and learns them from `GET /device` (`printers`). Revoking a register
+frees its printers. Sending print jobs from the register app is the next step;
+this stores the setup the app will use.
+
 ## Mobile counting app
 
 `apps/mobile` is an Expo (SDK 54) app for phones and rugged handhelds.

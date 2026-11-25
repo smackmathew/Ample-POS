@@ -5,4 +5,5 @@ export { MOVEMENT_REASONS, type MovementReason } from './schema';
 export { PAYMENT_STATUSES, type PaymentStatus } from './schema';
 export { PUNCH_KINDS, type PunchKind } from './schema';
 export { PURCHASE_ORDER_STATUSES, type PurchaseOrderStatus } from './schema';
+export { PRINTER_CONNECTIONS, PRINTER_KINDS, PRINTER_LANGUAGES } from './schema';
 export type { BilledItem, LocationAddress, ReceiptSettings } from './schema';

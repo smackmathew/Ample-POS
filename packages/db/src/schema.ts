@@ -822,3 +822,25 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
+
+// Printers (migration 0025): receipt and tag printers per location, assigned to a register.
+export const PRINTER_KINDS = ['receipt', 'tag'] as const;
+export const PRINTER_CONNECTIONS = ['usb', 'network_share', 'ip'] as const;
+export const PRINTER_LANGUAGES = ['escpos', 'star', 'zpl', 'epl', 'tspl', 'system'] as const;
+
+export const printers = pgTable('printers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  name: text('name').notNull(),
+  kind: text('kind', { enum: PRINTER_KINDS }).notNull(),
+  connection: text('connection', { enum: PRINTER_CONNECTIONS }).notNull(),
+  address: text('address'),
+  port: integer('port'),
+  language: text('language', { enum: PRINTER_LANGUAGES }).notNull(),
+  paper: text('paper'),
+  registerId: uuid('register_id'),
+  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
