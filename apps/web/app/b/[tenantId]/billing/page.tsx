@@ -174,50 +174,52 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
             Change tools
           </Link>
         </div>
-        <table className="card mt-2 w-full text-sm">
-          <thead className="text-left text-stone-500">
-            <tr>
-              <th className="pb-2 font-medium">Item</th>
-              <th className="pb-2 text-right font-medium">Price</th>
-              <th className="pb-2 text-right font-medium">Qty</th>
-              <th className="pb-2 text-right font-medium">Monthly</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {b.lines.map((l) => (
-              <tr key={l.moduleId}>
-                <td className="py-2">{l.name}</td>
-                <td className="py-2 text-right">{money(l.unitMinor)}</td>
-                <td className="py-2 text-right">{l.quantity}</td>
-                <td className="py-2 text-right">{money(l.totalMinor)}</td>
-              </tr>
-            ))}
-            {b.included.length > 0 && (
+        <div className="card mt-2 overflow-x-auto p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-stone-50 text-left text-stone-500">
               <tr>
-                <td className="py-2 text-stone-600" colSpan={3}>
-                  Included: {b.included.join(', ')}
-                </td>
-                <td className="py-2 text-right text-stone-600">{money(0)}</td>
+                <th className="px-6 py-3 font-medium">Item</th>
+                <th className="px-6 py-3 text-right font-medium">Price</th>
+                <th className="px-6 py-3 text-right font-medium">Qty</th>
+                <th className="px-6 py-3 text-right font-medium">Monthly</th>
               </tr>
-            )}
-            {!b.lines.length && !b.included.length && (
-              <tr>
-                <td className="py-2 text-stone-600" colSpan={4}>
-                  No tools are on yet.
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {b.lines.map((l) => (
+                <tr key={l.moduleId}>
+                  <td className="px-6 py-3">{l.name}</td>
+                  <td className="px-6 py-3 text-right whitespace-nowrap">{money(l.unitMinor)}</td>
+                  <td className="px-6 py-3 text-right">{l.quantity}</td>
+                  <td className="px-6 py-3 text-right whitespace-nowrap">{money(l.totalMinor)}</td>
+                </tr>
+              ))}
+              {b.included.length > 0 && (
+                <tr>
+                  <td className="px-6 py-3 text-stone-600" colSpan={3}>
+                    <span className="font-medium text-stone-700">Included:</span> {b.included.join(', ')}
+                  </td>
+                  <td className="px-6 py-3 text-right text-stone-600">{money(0)}</td>
+                </tr>
+              )}
+              {!b.lines.length && !b.included.length && (
+                <tr>
+                  <td className="px-6 py-3 text-stone-600" colSpan={4}>
+                    No tools are on yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-stone-200 bg-brand-soft font-semibold">
+                <td className="px-6 py-4" colSpan={3}>
+                  Total per month
                 </td>
+                <td className="px-6 py-4 text-right text-base whitespace-nowrap text-brand">{money(b.monthlyTotalMinor)}</td>
               </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-stone-200 font-semibold">
-              <td className="pt-2" colSpan={3}>
-                Total per month
-              </td>
-              <td className="pt-2 text-right">{money(b.monthlyTotalMinor)}</td>
-            </tr>
-          </tfoot>
-        </table>
-        <p className="mt-2 text-xs text-stone-500">
+            </tfoot>
+          </table>
+        </div>
+        <p className="mt-3 px-1 text-xs leading-relaxed text-stone-500">
           Your plan covers your first location; each extra active location and each paid add-on tool (per location) is added. Changing plans or tools, or adding and archiving locations, updates your bill
           {sub ? ' automatically, with the difference prorated on your next invoice.' : '.'} Prices in US dollars, before any sales tax.
         </p>
