@@ -239,8 +239,7 @@ export interface CountEntry {
   countedBy: { email: string | null; displayName: string | null } | null;
 }
 
-export const variantLabel = (productName: string, variantName: string) =>
-  variantName === 'Default' ? productName : `${productName} — ${variantName}`;
+export const variantLabel = (productName: string, variantName: string) => (variantName === 'Default' ? productName : `${productName} — ${variantName}`);
 
 export interface RegisterSummary {
   id: string;
@@ -252,7 +251,15 @@ export interface RegisterSummary {
   openedAt: string;
   closedAt: string | null;
   countedCashMinor: number | null;
-  totals: { salesCount: number; grossMinor: number; cashMinor: number; cardMinor: number; giftCardMinor: number; cashRefundsMinor: number; expectedCashMinor: number | null };
+  totals: {
+    salesCount: number;
+    grossMinor: number;
+    cashMinor: number;
+    cardMinor: number;
+    giftCardMinor: number;
+    cashRefundsMinor: number;
+    expectedCashMinor: number | null;
+  };
   varianceMinor: number | null;
 }
 
@@ -327,7 +334,15 @@ export interface CustomerPoints {
   balance: number;
   rewardsAvailable: number;
   program: LoyaltyProgram;
-  entries: { id: string; kind: 'earn' | 'redeem' | 'adjust'; points: number; note: string | null; saleId: string | null; receiptNumber: number | null; createdAt: string }[];
+  entries: {
+    id: string;
+    kind: 'earn' | 'redeem' | 'adjust';
+    points: number;
+    note: string | null;
+    saleId: string | null;
+    receiptNumber: number | null;
+    createdAt: string;
+  }[];
 }
 
 export interface SaleSummary {
@@ -360,6 +375,8 @@ export interface CustomerSummary {
 export interface Customer extends CustomerSummary {
   note: string | null;
   sales: (Omit<SaleSummary, 'cashier' | 'cashierEmail' | 'customerId' | 'customerName'> & { completedAt: string | null })[];
+  /** Purchases imported from the previous system, one row per receipt. */
+  importedHistory: { receipt: string | null; soldOn: string; items: number; totalMinor: number; description: string }[];
 }
 
 export interface GiftCardSummary {
@@ -379,7 +396,15 @@ export interface GiftCard {
   status: 'active' | 'void';
   createdAt: string;
   balanceMinor: number;
-  entries: { id: string; kind: 'load' | 'redeem' | 'refund' | 'adjust' | 'void'; amountMinor: number; note: string | null; saleId: string | null; receiptNumber: number | null; createdAt: string }[];
+  entries: {
+    id: string;
+    kind: 'load' | 'redeem' | 'refund' | 'adjust' | 'void';
+    amountMinor: number;
+    note: string | null;
+    saleId: string | null;
+    receiptNumber: number | null;
+    createdAt: string;
+  }[];
 }
 
 export interface Supplier {
@@ -426,7 +451,16 @@ export interface PurchaseOrder {
   closedAt: string | null;
   createdAt: string;
   totalMinor: number;
-  lines: { id: string; variantId: string; description: string; sku: string | null; quantityOrdered: number; quantityReceived: number; unitCostMinor: number; onHand: number }[];
+  lines: {
+    id: string;
+    variantId: string;
+    description: string;
+    sku: string | null;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitCostMinor: number;
+    onHand: number;
+  }[];
   receipts: { id: string; note: string | null; createdAt: string; receivedBy: string | null; units: number }[];
 }
 

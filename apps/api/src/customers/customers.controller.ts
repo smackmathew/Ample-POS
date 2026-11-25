@@ -26,13 +26,17 @@ const phone = z
   .refine((v) => v === '' || v.replace('+', '').length >= 7, 'Enter a phone number with at least 7 digits')
   .transform((v) => v || null);
 
-const customerBody = z
-  .object({
-    name: z.string().trim().min(1, 'Enter a name').max(120),
-    email: email.optional(),
-    phone: phone.optional(),
-    note: z.string().trim().max(1000).optional().transform((v) => v || null),
-  });
+const customerBody = z.object({
+  name: z.string().trim().min(1, 'Enter a name').max(120),
+  email: email.optional(),
+  phone: phone.optional(),
+  note: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .transform((v) => v || null),
+});
 const updateBody = customerBody.partial().refine((b) => Object.keys(b).length > 0, 'Change at least one field');
 const listQuery = z.object({
   search: z.string().trim().max(100).optional(),
@@ -44,7 +48,10 @@ const listQuery = z.object({
 /** Visits, spending (after refunds) and last visit from completed sales. */
 const stats = {
   visits: sql<number>`(select count(*) from sales s where s.customer_id = customers.id and s.status = 'completed')`.mapWith(Number),
-  spentMinor: sql<number>`(select coalesce(sum(s.total_minor - (select coalesce(sum(r.amount_minor), 0) from refunds r where r.sale_id = s.id)), 0) from sales s where s.customer_id = customers.id and s.status = 'completed')`.mapWith(Number),
+  spentMinor:
+    sql<number>`(select coalesce(sum(s.total_minor - (select coalesce(sum(r.amount_minor), 0) from refunds r where r.sale_id = s.id)), 0) from sales s where s.customer_id = customers.id and s.status = 'completed')`.mapWith(
+      Number,
+    ),
   lastVisitAt: sql<string | null>`(select max(s.completed_at) from sales s where s.customer_id = customers.id and s.status = 'completed')`,
 };
 
@@ -133,7 +140,22 @@ export class CustomersController {
       .where(and(eq(s.customerId, id), sql`${s.status} <> 'open'`))
       .orderBy(desc(s.createdAt))
       .limit(100);
-    return { ...customer, sales };
+    // Purchases imported from the previous system, summed per receipt.
+    const h = schema.salesHistory;
+    const history = await this.db.tx
+      .select({
+        receipt: h.receipt,
+        soldOn: h.soldOn,
+        items: sql<number>`sum(${h.quantity})`.mapWith(Number),
+        totalMinor: sql<number>`sum(${h.totalMinor} + ${h.taxMinor})`.mapWith(Number),
+        description: sql<string>`string_agg(${h.description}, ', ' order by ${h.id})`,
+      })
+      .from(h)
+      .where(eq(h.customerId, id))
+      .groupBy(h.soldOn, sql`coalesce(${h.receipt}, ${h.id}::text)`, h.receipt)
+      .orderBy(desc(h.soldOn))
+      .limit(100);
+    return { ...customer, sales, importedHistory: history };
   }
 
   @RequirePermission('customers.manage')

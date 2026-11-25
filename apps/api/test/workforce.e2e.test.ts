@@ -264,7 +264,7 @@ describe('reports', () => {
 
     const today = localDate(new Date(), 'America/Chicago');
     const report = (await owner.get(`/reports/sales?from=${today}&to=${today}`).expect(200)).body;
-    expect(report.totals).toEqual({ salesCount: 3, grossMinor: 5500, discountMinor: 0, taxMinor: 500, refundsMinor: 1100, netMinor: 4400 });
+    expect(report.totals).toEqual({ salesCount: 3, grossMinor: 5500, discountMinor: 0, taxMinor: 500, refundsMinor: 1100, netMinor: 4400, importedMinor: 0 });
     expect(report.tenders).toEqual({ cash: 2200, card: 3300 });
     expect(report.topProducts.map((p: { description: string; quantity: number; revenueMinor: number }) => [p.description, p.quantity, p.revenueMinor])).toEqual([
       ['Mug', 3, 3300],

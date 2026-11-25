@@ -1,19 +1,7 @@
 // Drizzle table definitions mirroring migrations/*.sql. The SQL files are the
 // source of truth (they also carry RLS policies and grants); keep these in step.
 import { sql } from 'drizzle-orm';
-import {
-  bigint,
-  boolean,
-  date,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  smallint,
-  text,
-  timestamp,
-  uuid,
-} from 'drizzle-orm/pg-core';
+import { bigint, boolean, date, integer, jsonb, pgTable, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
@@ -50,7 +38,10 @@ export const roles = pgTable('roles', {
   tenantId: uuid('tenant_id').notNull(),
   key: text('key').notNull(),
   name: text('name').notNull(),
-  permissions: text('permissions').array().notNull().default(sql`'{}'`),
+  permissions: text('permissions')
+    .array()
+    .notNull()
+    .default(sql`'{}'`),
   isSystem: boolean('is_system').notNull().default(false),
   createdAt: createdAt(),
 });
@@ -60,7 +51,9 @@ export const memberships = pgTable('memberships', {
   tenantId: uuid('tenant_id').notNull(),
   userId: uuid('user_id').notNull(),
   roleId: uuid('role_id').notNull(),
-  status: text('status', { enum: ['active', 'suspended'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'suspended'] })
+    .notNull()
+    .default('active'),
   createdAt: createdAt(),
 });
 
@@ -68,7 +61,9 @@ export const locations = pgTable('locations', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull(),
   name: text('name').notNull(),
-  kind: text('kind', { enum: ['store', 'warehouse', 'office'] }).notNull().default('store'),
+  kind: text('kind', { enum: ['store', 'warehouse', 'office'] })
+    .notNull()
+    .default('store'),
   timezone: text('timezone').notNull(),
   taxRateBps: integer('tax_rate_bps').notNull().default(0),
   address: jsonb('address').$type<LocationAddress>(),
@@ -93,7 +88,9 @@ export const devices = pgTable('devices', {
   locationId: uuid('location_id').notNull(),
   name: text('name').notNull(),
   kind: text('kind', { enum: ['register', 'handheld', 'kiosk'] }).notNull(),
-  status: text('status', { enum: ['active', 'revoked'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'revoked'] })
+    .notNull()
+    .default('active'),
   secretHash: text('secret_hash').notNull(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   createdAt: createdAt(),
@@ -163,7 +160,9 @@ export const products = pgTable('products', {
   name: text('name').notNull(),
   description: text('description'),
   category: text('category'),
-  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'archived'] })
+    .notNull()
+    .default('active'),
   version: integer('version').notNull().default(1),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -178,7 +177,9 @@ export const productVariants = pgTable('product_variants', {
   priceMinor: bigint('price_minor', { mode: 'number' }).notNull(),
   costMinor: bigint('cost_minor', { mode: 'number' }),
   trackInventory: boolean('track_inventory').notNull().default(true),
-  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'archived'] })
+    .notNull()
+    .default('active'),
   position: integer('position').notNull().default(0),
   version: integer('version').notNull().default(1),
   createdAt: createdAt(),
@@ -196,15 +197,7 @@ export const variantBarcodes = pgTable(
   (t) => [primaryKey({ columns: [t.tenantId, t.barcode] })],
 );
 
-export const MOVEMENT_REASONS = [
-  'receive',
-  'sale',
-  'return',
-  'transfer_out',
-  'transfer_in',
-  'adjustment',
-  'count_adjustment',
-] as const;
+export const MOVEMENT_REASONS = ['receive', 'sale', 'return', 'transfer_out', 'transfer_in', 'adjustment', 'count_adjustment'] as const;
 export type MovementReason = (typeof MOVEMENT_REASONS)[number];
 
 export const inventoryOperations = pgTable('inventory_operations', {
@@ -251,7 +244,9 @@ export const countSessions = pgTable('count_sessions', {
   tenantId: uuid('tenant_id').notNull(),
   locationId: uuid('location_id').notNull(),
   name: text('name').notNull(),
-  status: text('status', { enum: ['open', 'submitted', 'approved', 'cancelled'] }).notNull().default('open'),
+  status: text('status', { enum: ['open', 'submitted', 'approved', 'cancelled'] })
+    .notNull()
+    .default('open'),
   startedBy: uuid('started_by').notNull(),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
   submittedBy: uuid('submitted_by'),
@@ -292,7 +287,9 @@ export const registerSessions = pgTable('register_sessions', {
   tenantId: uuid('tenant_id').notNull(),
   locationId: uuid('location_id').notNull(),
   deviceId: uuid('device_id'),
-  status: text('status', { enum: ['open', 'closed'] }).notNull().default('open'),
+  status: text('status', { enum: ['open', 'closed'] })
+    .notNull()
+    .default('open'),
   openingFloatMinor: money('opening_float_minor').notNull(),
   openedBy: uuid('opened_by').notNull(),
   openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
@@ -308,7 +305,9 @@ export const sales = pgTable('sales', {
   locationId: uuid('location_id').notNull(),
   registerSessionId: uuid('register_session_id').notNull(),
   deviceId: uuid('device_id'),
-  status: text('status', { enum: ['open', 'completed', 'voided'] }).notNull().default('open'),
+  status: text('status', { enum: ['open', 'completed', 'voided'] })
+    .notNull()
+    .default('open'),
   currency: text('currency').notNull(),
   subtotalMinor: money('subtotal_minor').notNull(),
   discountMinor: money('discount_minor').notNull(),
@@ -332,7 +331,9 @@ export const saleLines = pgTable('sale_lines', {
   saleId: uuid('sale_id').notNull(),
   position: integer('position').notNull(),
   /** item: a product. gift_card: selling (or reloading) a gift card, with no product. */
-  kind: text('kind', { enum: ['item', 'gift_card'] }).notNull().default('item'),
+  kind: text('kind', { enum: ['item', 'gift_card'] })
+    .notNull()
+    .default('item'),
   variantId: uuid('variant_id'),
   giftCardCode: text('gift_card_code'),
   description: text('description').notNull(),
@@ -412,7 +413,9 @@ export const integrationConnections = pgTable('integration_connections', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull(),
   provider: text('provider', { enum: ['shopify'] }).notNull(),
-  status: text('status', { enum: ['active', 'error', 'disconnected'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'error', 'disconnected'] })
+    .notNull()
+    .default('active'),
   shopDomain: text('shop_domain').notNull(),
   credentials: text('credentials').notNull(),
   settings: jsonb('settings').$type<{ onlineOrdersLocationId?: string }>().notNull().default({}),
@@ -516,7 +519,9 @@ export const shifts = pgTable('shifts', {
   endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
   position: text('position'),
   notes: text('notes'),
-  status: text('status', { enum: ['draft', 'published'] }).notNull().default('draft'),
+  status: text('status', { enum: ['draft', 'published'] })
+    .notNull()
+    .default('draft'),
   publishedAt: timestamp('published_at', { withTimezone: true }),
   createdBy: uuid('created_by').notNull(),
   createdAt: createdAt(),
@@ -529,7 +534,10 @@ export const checklists = pgTable('checklists', {
   locationId: uuid('location_id'),
   title: text('title').notNull(),
   recurrence: text('recurrence', { enum: ['once', 'daily', 'weekly'] }).notNull(),
-  weekdays: smallint('weekdays').array().notNull().default(sql`'{}'`),
+  weekdays: smallint('weekdays')
+    .array()
+    .notNull()
+    .default(sql`'{}'`),
   dueDate: date('due_date', { mode: 'string' }),
   assigneeUserId: uuid('assignee_user_id'),
   assigneeRoleKey: text('assignee_role_key'),
@@ -587,7 +595,9 @@ export const tenantBilling = pgTable('tenant_billing', {
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   items: jsonb('items').$type<BilledItem[]>().notNull().default([]),
   /** starter, growth or pro (see PLANS in @pos/modules). */
-  plan: text('plan', { enum: ['starter', 'growth', 'pro'] }).notNull().default('starter'),
+  plan: text('plan', { enum: ['starter', 'growth', 'pro'] })
+    .notNull()
+    .default('starter'),
   /** The website option: sync an existing site, or a simple or complex online store. */
   websiteAddon: text('website_addon', { enum: ['sync', 'simple', 'complex'] }),
   /** Setup fees paid (or given) so far, so a switch only charges the difference. */
@@ -635,7 +645,9 @@ export const giftCards = pgTable('gift_cards', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull(),
   code: text('code').notNull(),
-  status: text('status', { enum: ['active', 'void'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'void'] })
+    .notNull()
+    .default('active'),
   createdAt: createdAt(),
 });
 
@@ -814,7 +826,9 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   eventId: bigint('event_id', { mode: 'number' }),
   type: text('type').notNull(),
   body: jsonb('body').$type<Record<string, unknown>>().notNull(),
-  status: text('status', { enum: ['pending', 'delivered', 'failed'] }).notNull().default('pending'),
+  status: text('status', { enum: ['pending', 'delivered', 'failed'] })
+    .notNull()
+    .default('pending'),
   attempts: integer('attempts').notNull().default(0),
   nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
   responseStatus: integer('response_status'),
@@ -840,7 +854,9 @@ export const printers = pgTable('printers', {
   language: text('language', { enum: PRINTER_LANGUAGES }).notNull(),
   paper: text('paper'),
   registerId: uuid('register_id'),
-  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'archived'] })
+    .notNull()
+    .default('active'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -857,13 +873,15 @@ export const scanners = pgTable('scanners', {
   model: text('model'),
   connection: text('connection', { enum: SCANNER_CONNECTIONS }).notNull(),
   deviceId: uuid('device_id'),
-  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'archived'] })
+    .notNull()
+    .default('active'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Import & export center (migration 0027).
-export const IMPORT_KINDS = ['products', 'customers', 'suppliers'] as const;
+export const IMPORT_KINDS = ['products', 'customers', 'suppliers', 'gift_cards', 'loyalty', 'sales'] as const;
 export const IMPORT_SOURCES = ['qbpos', 'ample', 'other'] as const;
 
 export const importBatches = pgTable('import_batches', {
@@ -873,7 +891,9 @@ export const importBatches = pgTable('import_batches', {
   source: text('source', { enum: IMPORT_SOURCES }).notNull(),
   fileName: text('file_name').notNull(),
   locationId: uuid('location_id'),
-  status: text('status', { enum: ['preview', 'committed', 'undone'] }).notNull().default('preview'),
+  status: text('status', { enum: ['preview', 'committed', 'undone'] })
+    .notNull()
+    .default('preview'),
   headers: text('headers').array().notNull(),
   rows: jsonb('rows').$type<string[][] | null>(),
   mapping: jsonb('mapping').$type<Record<string, string | null>>().notNull(),
@@ -889,8 +909,26 @@ export const importBatchItems = pgTable('import_batch_items', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
   tenantId: uuid('tenant_id').notNull(),
   batchId: uuid('batch_id').notNull(),
-  entityType: text('entity_type', { enum: ['product', 'variant', 'barcode', 'customer', 'supplier'] }).notNull(),
+  entityType: text('entity_type', { enum: ['product', 'variant', 'barcode', 'customer', 'supplier', 'gift_card', 'loyalty'] }).notNull(),
   entityId: text('entity_id').notNull(),
   action: text('action', { enum: ['created', 'updated'] }).notNull(),
   before: jsonb('before').$type<Record<string, unknown> | null>(),
+});
+
+// Sales from before Ample POS (migration 0028), for reports and customer history.
+export const salesHistory = pgTable('sales_history', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: uuid('tenant_id').notNull(),
+  batchId: uuid('batch_id').notNull(),
+  locationId: uuid('location_id').notNull(),
+  soldOn: date('sold_on', { mode: 'string' }).notNull(),
+  receipt: text('receipt'),
+  customerId: uuid('customer_id'),
+  variantId: uuid('variant_id'),
+  sku: text('sku'),
+  description: text('description').notNull(),
+  quantity: integer('quantity').notNull(),
+  totalMinor: bigint('total_minor', { mode: 'number' }).notNull(),
+  taxMinor: bigint('tax_minor', { mode: 'number' }).notNull().default(0),
+  createdAt: createdAt(),
 });

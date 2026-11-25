@@ -7,7 +7,7 @@ import { commitImport, saveMapping } from '../../import-actions';
 interface Preview {
   batch: {
     id: string;
-    kind: 'products' | 'customers' | 'suppliers';
+    kind: keyof typeof WHAT;
     source: 'qbpos' | 'ample' | 'other';
     fileName: string;
     locationId: string | null;
@@ -20,7 +20,14 @@ interface Preview {
   planned: { line: number; action: 'create' | 'update' | 'error'; label: string; errors: string[] }[];
 }
 
-const WHAT = { products: 'products', customers: 'customers', suppliers: 'suppliers' } as const;
+const WHAT = {
+  products: 'products',
+  customers: 'customers',
+  suppliers: 'suppliers',
+  gift_cards: 'gift cards',
+  loyalty: 'point balances',
+  sales: 'sales lines',
+} as const;
 const ACTION = {
   create: ['New', 'bg-brand-soft text-brand'],
   update: ['Update', 'bg-sky-50 text-sky-800'],
@@ -61,26 +68,41 @@ export default async function ImportPreviewPage({ params }: { params: Promise<{ 
       </header>
 
       <section className="grid gap-4 sm:grid-cols-3">
-        <Tile label={`New ${what}`} value={counts.create ?? 0} tone="text-brand" />
-        <Tile label={`${what[0]!.toUpperCase()}${what.slice(1)} to update`} value={counts.update ?? 0} tone="text-sky-800" />
+        {batch.kind !== 'loyalty' && <Tile label={`New ${what}`} value={counts.create ?? 0} tone="text-brand" />}
+        {batch.kind !== 'sales' && <Tile label={`${what[0]!.toUpperCase()}${what.slice(1)} to update`} value={counts.update ?? 0} tone="text-sky-800" />}
         <Tile label="Rows skipped" value={counts.error ?? 0} tone={counts.error ? 'text-red-700' : 'text-stone-900'} />
       </section>
 
-      <ActionForm action={commitImport.bind(null, tenantId, batch.id)} className="card flex flex-wrap items-center justify-between gap-3 border-teal-200 bg-brand-soft">
+      <ActionForm
+        action={commitImport.bind(null, tenantId, batch.id)}
+        className="card flex flex-wrap items-center justify-between gap-3 border-teal-200 bg-brand-soft"
+      >
         <p className="text-sm text-stone-700">
           {importable
-            ? `Import adds ${counts.create ?? 0} and updates ${counts.update ?? 0} ${what}${batch.kind === 'products' && batch.locationId ? ', and sets their stock' : ''}. You can undo it afterwards.`
+            ? batch.kind === 'sales' && !batch.locationId
+              ? 'Choose the store these sales were made at under Columns, then update the preview.'
+              : `${summary(batch.kind, counts.create ?? 0, counts.update ?? 0, Boolean(batch.locationId))} You can undo it afterwards.`
             : 'Nothing to import yet: check the columns below.'}
         </p>
-        <button className="btn" disabled={!importable}>
+        <button className="btn" disabled={!importable || (batch.kind === 'sales' && !batch.locationId)}>
           Import {importable} {what}
         </button>
       </ActionForm>
 
-      <ActionForm action={saveMapping.bind(null, tenantId, batch.id, fields.map((f) => f.key))} className="card grid gap-4">
+      <ActionForm
+        action={saveMapping.bind(
+          null,
+          tenantId,
+          batch.id,
+          fields.map((f) => f.key),
+        )}
+        className="card grid gap-4"
+      >
         <div>
           <h2 className="text-lg font-semibold">Columns</h2>
-          <p className="text-sm text-stone-600">Each piece of information and the column of your file it comes from. Change any that are wrong, then update the preview.</p>
+          <p className="text-sm text-stone-600">
+            Each piece of information and the column of your file it comes from. Change any that are wrong, then update the preview.
+          </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {fields.map((f) => (
@@ -96,11 +118,11 @@ export default async function ImportPreviewPage({ params }: { params: Promise<{ 
               </select>
             </label>
           ))}
-          {batch.kind === 'products' && (
+          {(batch.kind === 'products' || batch.kind === 'sales') && (
             <label className="block text-sm">
-              Set stock at
+              {batch.kind === 'sales' ? 'Store these sales were made at' : 'Set stock at'}
               <select name="locationId" defaultValue={batch.locationId ?? ''} className="input mt-1">
-                <option value="">Don’t set stock</option>
+                <option value="">{batch.kind === 'sales' ? 'Choose a location' : 'Don’t set stock'}</option>
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -143,6 +165,13 @@ export default async function ImportPreviewPage({ params }: { params: Promise<{ 
       </section>
     </div>
   );
+}
+
+function summary(kind: keyof typeof WHAT, create: number, update: number, stock: boolean) {
+  if (kind === 'sales') return `Import adds ${create} lines of past sales to your reports and customers. Stock and your till are not changed.`;
+  if (kind === 'loyalty') return `Import sets the points balance of ${update} customers to the number in the file.`;
+  if (kind === 'gift_cards') return `Import adds ${create} gift cards and sets the balance of ${update} existing ones.`;
+  return `Import adds ${create} and updates ${update} ${WHAT[kind]}${kind === 'products' && stock ? ', and sets their stock' : ''}.`;
 }
 
 function Tile({ label, value, tone }: { label: string; value: number; tone: string }) {

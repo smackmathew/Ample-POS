@@ -124,7 +124,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ tenan
               {customer.sales.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-4 text-stone-500">
-                    No purchases yet.
+                    {customer.importedHistory.length ? 'No purchases in Ample POS yet.' : 'No purchases yet.'}
                   </td>
                 </tr>
               )}
@@ -133,9 +133,44 @@ export default async function CustomerPage({ params }: { params: Promise<{ tenan
         </div>
       </section>
 
+      {customer.importedHistory.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Before Ample POS</h2>
+          <p className="text-sm text-stone-500">Purchases imported from your previous system.</p>
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-stone-500">
+                <tr>
+                  <th className="pb-2">Receipt</th>
+                  <th className="pb-2">Date</th>
+                  <th className="pb-2">Items</th>
+                  <th className="pb-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customer.importedHistory.map((h, i) => (
+                  <tr key={`${h.receipt ?? i}-${h.soldOn}`} className="border-t border-stone-100 align-top">
+                    <td className="py-2 font-medium">{h.receipt ? `#${h.receipt}` : '—'}</td>
+                    <td className="py-2 text-stone-500">{formatDate(`${h.soldOn}T12:00:00Z`, 'UTC')}</td>
+                    <td className="py-2 text-stone-600">
+                      <span className="line-clamp-2">{h.description}</span>
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{money(h.totalMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {canManage && (
         <>
-          <ActionForm key={`${customer.name}|${customer.email}|${customer.phone}|${customer.note}`} action={updateCustomer.bind(null, tenantId, customer.id)} className="card grid gap-3 sm:grid-cols-2">
+          <ActionForm
+            key={`${customer.name}|${customer.email}|${customer.phone}|${customer.note}`}
+            action={updateCustomer.bind(null, tenantId, customer.id)}
+            className="card grid gap-3 sm:grid-cols-2"
+          >
             <h2 className="font-medium sm:col-span-2">Edit details</h2>
             <label className="text-sm">
               Name
@@ -160,7 +195,9 @@ export default async function CustomerPage({ params }: { params: Promise<{ tenan
 
           <ActionForm action={deleteCustomer.bind(null, tenantId, customer.id)} className="card space-y-2 border-red-200">
             <h2 className="font-medium">Delete customer</h2>
-            <p className="text-sm text-stone-600">Removes their name and contact details for good. Their past sales stay in your records, without a customer.</p>
+            <p className="text-sm text-stone-600">
+              Removes their name and contact details for good. Their past sales stay in your records, without a customer.
+            </p>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="confirm" /> Delete {customer.name}’s details
             </label>
