@@ -103,6 +103,19 @@ export interface Device {
   createdAt: string;
 }
 
+export interface Printer {
+  id: string;
+  locationId: string;
+  name: string;
+  kind: 'receipt' | 'tag';
+  connection: 'usb' | 'network_share' | 'ip';
+  address: string | null;
+  port: number | null;
+  language: 'escpos' | 'star' | 'zpl' | 'epl' | 'tspl' | 'system';
+  paper: string | null;
+  registerId: string | null;
+}
+
 export interface Role {
   id: string;
   key: string;
