@@ -32,7 +32,7 @@ export default async function ConfirmPage() {
       <ActionForm action={finishSetup} className="card mt-8 space-y-3">
         <p className="text-sm text-stone-600">
           {setup.business} · {setup.plan[0]!.toUpperCase() + setup.plan.slice(1)} plan
-          {setup.website ? ' · online store' : ''} · {setup.subscribe ? 'subscribe now' : 'free trial'}
+          {setup.website ? ' · website' : ''} · {setup.subscribe ? 'subscribe now' : 'free trial'}
         </p>
         <button className="btn">{verified ? 'Finish setup' : 'I’ve confirmed it, finish setup'}</button>
       </ActionForm>

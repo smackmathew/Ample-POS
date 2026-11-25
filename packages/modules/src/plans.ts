@@ -25,11 +25,11 @@ export interface PlanDefinition {
  */
 export const PLANS: readonly PlanDefinition[] = [
   { id: 'starter', name: 'Starter', tagline: 'One register per store', baseMinor: 3900, extraLocationMinor: 1900, registersPerLocation: 1, websiteMaintenanceMinor: 999 },
-  { id: 'growth', name: 'Growth', tagline: 'Up to 5 registers per store', baseMinor: 5900, extraLocationMinor: 2900, registersPerLocation: 5, websiteMaintenanceMinor: 1499 },
-  { id: 'pro', name: 'Pro', tagline: 'Up to 10 registers per store', baseMinor: 7900, extraLocationMinor: 3900, registersPerLocation: 10, websiteMaintenanceMinor: 1999 },
+  { id: 'growth', name: 'Growth', tagline: 'Up to 5 registers per store', baseMinor: 5900, extraLocationMinor: 2900, registersPerLocation: 5, websiteMaintenanceMinor: 999 },
+  { id: 'pro', name: 'Pro', tagline: 'Up to 10 registers per store', baseMinor: 7900, extraLocationMinor: 3900, registersPerLocation: 10, websiteMaintenanceMinor: 999 },
 ];
 
-export const WEBSITE_ADDON_IDS = ['simple', 'complex'] as const;
+export const WEBSITE_ADDON_IDS = ['sync', 'simple', 'complex'] as const;
 export type WebsiteAddonId = (typeof WEBSITE_ADDON_IDS)[number];
 
 export interface WebsiteAddonDefinition {
@@ -40,10 +40,15 @@ export interface WebsiteAddonDefinition {
   setupMinor: number;
 }
 
-/** An online store synced with in-store sales and stock: a one-time setup, then the plan's monthly sync fee. */
+/**
+ * Website options, each with the plan's monthly sync fee: sync an existing
+ * website (no setup fee), or have us build a simple online store or a
+ * multi-page website (a one-time setup fee).
+ */
 export const WEBSITE_ADDONS: readonly WebsiteAddonDefinition[] = [
-  { id: 'simple', name: 'Online store', description: 'A ready-made online store synced with your in-store products, prices and stock.', setupMinor: 39900 },
-  { id: 'complex', name: 'Custom online store', description: 'A custom-designed online store with more pages and features, synced the same way.', setupMinor: 59900 },
+  { id: 'sync', name: 'Website sync', description: 'Keep the website you already have (WordPress, Shopify or other) in sync with your POS: products, prices and stock.', setupMinor: 0 },
+  { id: 'simple', name: 'Online store', description: 'A simple online store set up for you, synced with your POS.', setupMinor: 39900 },
+  { id: 'complex', name: 'Website + online store', description: 'A multi-page website with your products, set up for you and synced with your POS.', setupMinor: 59900 },
 ];
 
 /** Tools every plan includes (shown on the pricing page). */

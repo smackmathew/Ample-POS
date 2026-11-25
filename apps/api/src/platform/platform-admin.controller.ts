@@ -279,7 +279,15 @@ export class PlatformAdminController {
         .update(schema.tenantBilling)
         .set({
           ...(body.plan ? { plan: body.plan } : {}),
-          ...(body.websiteAddon !== undefined ? { websiteAddon: body.websiteAddon, ...(body.websiteAddon ? { websiteSetupChargedAt: new Date() } : {}) } : {}),
+          // An option set by support carries no setup fee: it counts as paid.
+          ...(body.websiteAddon !== undefined
+            ? {
+                websiteAddon: body.websiteAddon,
+                ...(body.websiteAddon
+                  ? { websiteSetupChargedAt: new Date(), websiteSetupPaidMinor: sql`greatest(${schema.tenantBilling.websiteSetupPaidMinor}, ${(await websiteAddonSettings(tx)).get(body.websiteAddon)!.setupMinor})` }
+                  : {}),
+              }
+            : {}),
         })
         .where(eq(schema.tenantBilling.tenantId, id));
       if (body.websiteAddon === null) {

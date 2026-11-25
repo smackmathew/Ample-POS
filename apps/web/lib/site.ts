@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { api, TOKEN_COOKIE } from './api';
 
 export type PlanId = 'starter' | 'growth' | 'pro';
-export type WebsiteAddonId = 'simple' | 'complex';
+export type WebsiteAddonId = 'sync' | 'simple' | 'complex';
 
 export interface PublicPricing {
   trialDays: number;
@@ -28,7 +28,7 @@ export function price(minor: number): string {
 }
 
 export const isPlanId = (v: unknown): v is PlanId => v === 'starter' || v === 'growth' || v === 'pro';
-export const isWebsiteAddonId = (v: unknown): v is WebsiteAddonId => v === 'simple' || v === 'complex';
+export const isWebsiteAddonId = (v: unknown): v is WebsiteAddonId => v === 'sync' || v === 'simple' || v === 'complex';
 
 /** What the visitor chose at signup, kept while they confirm their email. */
 export interface PendingSetup {

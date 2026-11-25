@@ -67,9 +67,9 @@ export default async function StartPage({ searchParams }: { searchParams: Promis
             </fieldset>
 
             <fieldset>
-              <legend className="text-lg font-semibold">2. Add an online store?</legend>
-              <p className="mt-1 text-sm text-stone-500">Optional. The setup fee is charged when you subscribe; the monthly sync fee depends on your plan.</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <legend className="text-lg font-semibold">2. Sell online too?</legend>
+              <p className="mt-1 text-sm text-stone-500">Optional. Any setup fee is charged when you subscribe.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className={choice}>
                   <input type="radio" name="website" value="none" defaultChecked={website === 'none'} className="mt-1 accent-brand" />
                   <span className="text-sm">
@@ -82,11 +82,8 @@ export default async function StartPage({ searchParams }: { searchParams: Promis
                     <input type="radio" name="website" value={a.id} defaultChecked={website === a.id} className="mt-1 accent-brand" />
                     <span className="text-sm">
                       <span className="block font-semibold">{a.name}</span>
-                      <span className="block">{price(a.setupMinor)} one-time setup</span>
-                      <span className="block text-stone-500">
-                        + sync from {price(Math.min(...pricing.plans.map((p) => p.websiteMaintenanceMinor)))}
-                        /mo, by plan
-                      </span>
+                      <span className="block">{price(Math.min(...pricing.plans.map((p) => p.websiteMaintenanceMinor)))}/mo</span>
+                      <span className="block text-stone-500">{a.setupMinor > 0 ? `+ ${price(a.setupMinor)} one-time setup` : 'No setup fee'}</span>
                     </span>
                   </label>
                 ))}
@@ -135,7 +132,7 @@ export default async function StartPage({ searchParams }: { searchParams: Promis
               </div>
               <p className="mt-3 text-sm text-stone-600">
                 <strong>Free trial:</strong> start selling today and add a card from Billing before the trial ends. <strong>Subscribe now:</strong> enter your
-                card at checkout; the plan is still free until the trial ends, and an online store’s setup fee is charged right away.
+                card at checkout; the plan is still free until the trial ends, and a website setup fee is charged right away.
               </p>
             </div>
           </div>

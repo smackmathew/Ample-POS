@@ -69,8 +69,9 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
             Online store
             <select name="website" defaultValue={c.billing.websiteAddon ?? 'none'} className="input mt-1 w-48">
               <option value="none">None</option>
+              <option value="sync">Website sync</option>
               <option value="simple">Online store</option>
-              <option value="complex">Custom online store</option>
+              <option value="complex">Website + online store</option>
             </select>
           </label>
           <button className="btn-secondary">Save</button>

@@ -36,7 +36,7 @@ export interface Overview {
 
 export interface PlanCatalog {
   plans: { id: 'starter' | 'growth' | 'pro'; name: string; tagline: string; baseMinor: number; extraLocationMinor: number; registersPerLocation: number; websiteMaintenanceMinor: number; companies: number }[];
-  websiteAddons: { id: 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
+  websiteAddons: { id: 'sync' | 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
 }
 
 export const PLAN_NAME: Record<string, string> = { starter: 'Starter', growth: 'Growth', pro: 'Pro' };
@@ -54,7 +54,7 @@ export interface CompanyRow {
   mrrMinor: number;
   toolsOn: number;
   plan: 'starter' | 'growth' | 'pro' | null;
-  websiteAddon: 'simple' | 'complex' | null;
+  websiteAddon: 'sync' | 'simple' | 'complex' | null;
   merchant: 'off' | 'platform' | 'platform:pending' | 'own';
   locations: number;
   members: number;
@@ -93,7 +93,7 @@ export interface Company {
     items: { moduleId: string; quantity: number; unitMinor?: number }[];
     mrrMinor: number;
     plan: 'starter' | 'growth' | 'pro';
-    websiteAddon: 'simple' | 'complex' | null;
+    websiteAddon: 'sync' | 'simple' | 'complex' | null;
     websiteSetupChargedAt: string | null;
   } | null;
   tools: CompanyTool[];

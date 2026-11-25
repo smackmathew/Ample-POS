@@ -588,8 +588,10 @@ export const tenantBilling = pgTable('tenant_billing', {
   items: jsonb('items').$type<BilledItem[]>().notNull().default([]),
   /** starter, growth or pro (see PLANS in @pos/modules). */
   plan: text('plan', { enum: ['starter', 'growth', 'pro'] }).notNull().default('starter'),
-  /** An online store add-on: simple or complex. */
-  websiteAddon: text('website_addon', { enum: ['simple', 'complex'] }),
+  /** The website option: sync an existing site, or a simple or complex online store. */
+  websiteAddon: text('website_addon', { enum: ['sync', 'simple', 'complex'] }),
+  /** Setup fees paid (or given) so far, so a switch only charges the difference. */
+  websiteSetupPaidMinor: bigint('website_setup_paid_minor', { mode: 'number' }).notNull().default(0),
   websiteSetupChargedAt: timestamp('website_setup_charged_at', { withTimezone: true }),
   syncedAt: timestamp('synced_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

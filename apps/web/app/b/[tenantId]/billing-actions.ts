@@ -47,6 +47,6 @@ export async function chooseWebsite(tenantId: string, addon: string | null, _: A
   return attempt(async () => {
     await api('/billing/website', { tenantId, method: 'PUT', body: { addon } });
     revalidatePath(`/b/${tenantId}`, 'layout');
-    return { ok: addon ? 'Online store added. Turn on Website sync in Tools to connect it.' : 'Online store removed' };
+    return { ok: addon ? 'Website option added. Turn on Website sync in Tools to connect it.' : 'Website option removed' };
   });
 }

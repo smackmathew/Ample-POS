@@ -83,19 +83,22 @@ export class BillingService {
     const row = await this.row(true);
     if (row.websiteAddon === addonId) return;
     let chargedAt = row.websiteSetupChargedAt;
-    // Upgrading from the simple store to the custom one charges the difference.
+    let paid = row.websiteSetupPaidMinor;
+    // Setup fees already paid count toward the new option, so a switch only charges the difference.
     const addons = await websiteAddonSettings(this.db.tx);
-    const owed = addonId ? addons.get(addonId)!.setupMinor - (chargedAt && row.websiteAddon ? addons.get(row.websiteAddon)!.setupMinor : 0) : 0;
+    const setup = addonId ? addons.get(addonId)!.setupMinor : 0;
+    const owed = Math.max(0, setup - paid);
     const subscribed = row.subscriptionId && row.status && OPEN_STATUSES.has(row.status) && row.provider === this.provider.name && row.customerId;
     if (addonId && owed > 0 && subscribed) {
       await this.guard(() =>
-        this.provider.chargeOnce(row.customerId!, { key: `website:setup:${addonId}`, name: `${addons.get(addonId)!.name} setup`, amountMinor: owed }, `website-setup-${tenantId}-${addonId}`),
+        this.provider.chargeOnce(row.customerId!, { key: `website:setup:${addonId}`, name: `${addons.get(addonId)!.name} setup`, amountMinor: owed }, `website-setup-${tenantId}-${addonId}-${paid}`),
       );
       chargedAt = new Date();
+      paid = setup;
     }
     await this.db.tx
       .update(schema.tenantBilling)
-      .set({ websiteAddon: addonId, websiteSetupChargedAt: addonId ? chargedAt : row.websiteSetupChargedAt, updatedAt: new Date() })
+      .set({ websiteAddon: addonId, websiteSetupChargedAt: chargedAt, websiteSetupPaidMinor: paid, updatedAt: new Date() })
       .where(eq(schema.tenantBilling.tenantId, tenantId));
     if (!addonId) {
       await this.db.tx
@@ -135,7 +138,13 @@ export class BillingService {
       plan: { id: plan.id, name: plan.name, registersPerLocation: plan.registersPerLocation },
       plans: [...plans.values()],
       website: row.websiteAddon
-        ? { id: row.websiteAddon, name: addons.get(row.websiteAddon)!.name, setupMinor: addons.get(row.websiteAddon)!.setupMinor, setupCharged: Boolean(row.websiteSetupChargedAt) }
+        ? {
+            id: row.websiteAddon,
+            name: addons.get(row.websiteAddon)!.name,
+            setupMinor: addons.get(row.websiteAddon)!.setupMinor,
+            setupCharged: row.websiteSetupPaidMinor >= addons.get(row.websiteAddon)!.setupMinor,
+            setupOwedMinor: Math.max(0, addons.get(row.websiteAddon)!.setupMinor - row.websiteSetupPaidMinor),
+          }
         : null,
       websiteAddons: [...addons.values()],
       currency: 'usd',
@@ -157,10 +166,8 @@ export class BillingService {
     const items = await this.desiredItems();
     // An online store's setup fee, if not paid yet, comes with the first payment.
     const addons = await websiteAddonSettings(this.db.tx);
-    const oneTime =
-      row.websiteAddon && !row.websiteSetupChargedAt
-        ? [{ key: `website:setup:${row.websiteAddon}`, name: `${addons.get(row.websiteAddon)!.name} setup`, amountMinor: addons.get(row.websiteAddon)!.setupMinor }]
-        : [];
+    const owed = row.websiteAddon ? Math.max(0, addons.get(row.websiteAddon)!.setupMinor - row.websiteSetupPaidMinor) : 0;
+    const oneTime = owed > 0 ? [{ key: `website:setup:${row.websiteAddon}`, name: `${addons.get(row.websiteAddon!)!.name} setup`, amountMinor: owed }] : [];
     const result = await this.guard(() =>
       this.provider.startCheckout({
         tenantId,
@@ -234,6 +241,9 @@ export class BillingService {
   private async save(sub: ProviderSubscription | null, before?: BillingRow): Promise<void> {
     const prev = before ?? (await this.row());
     const { tenantId } = currentTenant();
+    // A pending website setup fee goes out with the first payment (it was on the checkout).
+    const setup = prev.websiteAddon ? (await websiteAddonSettings(this.db.tx)).get(prev.websiteAddon)!.setupMinor : 0;
+    const setupPaidNow = Boolean(sub && LIVE_STATUSES.has(sub.status) && prev.websiteAddon && prev.websiteSetupPaidMinor < setup);
     await this.db.tx
       .update(schema.tenantBilling)
       .set({
@@ -243,8 +253,7 @@ export class BillingService {
         currentPeriodEnd: sub?.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
         items: sub?.items ?? [],
-        // A pending online store setup fee goes out with the first payment.
-        ...(sub && LIVE_STATUSES.has(sub.status) && prev.websiteAddon && !prev.websiteSetupChargedAt ? { websiteSetupChargedAt: new Date() } : {}),
+        ...(setupPaidNow ? { websiteSetupChargedAt: new Date(), websiteSetupPaidMinor: setup } : {}),
         syncedAt: new Date(),
         updatedAt: new Date(),
       })

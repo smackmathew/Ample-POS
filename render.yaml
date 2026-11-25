@@ -38,6 +38,7 @@ services:
       # RESEND_API_KEY / EMAIL_FROM (reset and confirmation emails; without them owners make reset links on the Team page).
       #   Set both: EMAIL_FROM must be an address on a domain verified in Resend, e.g. "Ample POS <no-reply@yourdomain.com>".
       #   Check it from the super admin dashboard: /platform/email.
+      # CONTACT_EMAIL (shown on the pricing page for custom website quotes)
 
 databases:
   - name: ample-pos-db

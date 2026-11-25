@@ -33,8 +33,8 @@ export interface BillingSummary {
   currency: string;
   plan: { id: PlanId; name: string; registersPerLocation: number };
   plans: PlanInfo[];
-  website: { id: 'simple' | 'complex'; name: string; setupMinor: number; setupCharged: boolean } | null;
-  websiteAddons: { id: 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
+  website: { id: 'sync' | 'simple' | 'complex'; name: string; setupMinor: number; setupCharged: boolean; setupOwedMinor: number } | null;
+  websiteAddons: { id: 'sync' | 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
 }
 
 export type PlanId = 'starter' | 'growth' | 'pro';

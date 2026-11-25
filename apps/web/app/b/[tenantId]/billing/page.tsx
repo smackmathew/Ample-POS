@@ -120,8 +120,8 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-medium">Online store</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <h2 className="font-medium">Website</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {b.websiteAddons.map((a) => {
             const current = b.website?.id === a.id;
             return (
@@ -132,11 +132,24 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
                 </div>
                 <p className="text-sm text-stone-600">{a.description}</p>
                 <p className="text-sm">
-                  <strong>{money(a.setupMinor)}</strong> one-time setup + {money(b.plans.find((p) => p.id === b.plan.id)!.websiteMaintenanceMinor)}/mo sync on {b.plan.name}
+                  {a.setupMinor > 0 ? (
+                    <>
+                      <strong>{money(a.setupMinor)}</strong> one-time setup +{' '}
+                    </>
+                  ) : (
+                    'No setup fee · '
+                  )}
+                  {money(b.plans.find((p) => p.id === b.plan.id)!.websiteMaintenanceMinor)}/mo sync
                 </p>
                 {current ? (
                   <p className="text-xs text-stone-500">
-                    {b.website!.setupCharged ? 'Setup paid.' : sub ? 'Setup is on your next invoice.' : 'Setup is charged when you subscribe.'}
+                    {b.website!.setupMinor === 0
+                      ? 'Connect your website under Website sync in Tools.'
+                      : b.website!.setupCharged
+                        ? 'Setup paid.'
+                        : sub
+                          ? 'Setup is on your next invoice.'
+                          : `Setup (${money(b.website!.setupOwedMinor)}) is charged when you subscribe.`}
                   </p>
                 ) : (
                   <ActionForm action={chooseWebsite.bind(null, tenantId, a.id)} className="mt-auto pt-2">
@@ -149,7 +162,7 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
         </div>
         {b.website && (
           <ActionForm action={chooseWebsite.bind(null, tenantId, null)}>
-            <button className="text-sm text-stone-600 hover:underline">Remove the online store</button>
+            <button className="text-sm text-stone-600 hover:underline">Remove the website option</button>
           </ActionForm>
         )}
       </section>

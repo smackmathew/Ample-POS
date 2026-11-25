@@ -328,8 +328,8 @@ describe('plans', () => {
     await owner.put('/modules/catalog', { enabled: true }).expect(200);
     expect((await owner.put('/modules/ecommerce-sync', { enabled: true }).expect(409)).body.code).toBe('website_addon_required');
     const summary = (await owner.put('/billing/website', { addon: 'complex' }).expect(200)).body;
-    expect(summary.website).toEqual({ id: 'complex', name: 'Custom online store', setupMinor: 59900, setupCharged: false });
-    expect(summary.lines.at(-1)).toEqual({ moduleId: 'website:maintenance', name: 'Online store sync', unitMinor: 999, quantity: 1, totalMinor: 999 });
+    expect(summary.website).toEqual({ id: 'complex', name: 'Website + online store', setupMinor: 59900, setupCharged: false, setupOwedMinor: 59900 });
+    expect(summary.lines.at(-1)).toEqual({ moduleId: 'website:maintenance', name: 'Website sync', unitMinor: 999, quantity: 1, totalMinor: 999 });
     await owner.put('/modules/ecommerce-sync', { enabled: true }).expect(200);
 
     // Checkout charges the setup once (the simulated provider subscribes at once).
@@ -341,5 +341,31 @@ describe('plans', () => {
     expect(removed.website).toBeNull();
     expect(removed.lines.map((l: { moduleId: string }) => l.moduleId)).toEqual(['plan:starter']);
     expect((await owner.get('/modules').expect(200)).body.find((m: { id: string }) => m.id === 'ecommerce-sync').enabled).toBe(false);
+  });
+
+  it('syncs an existing website for the monthly fee only, and never charges the same setup twice', async () => {
+    const { owner } = await business();
+    await owner.post('/billing/checkout').expect(201);
+    const provider = app.get<{ charges: { charge: { amountMinor: number } }[] }>(BILLING_PROVIDER);
+    const before = provider.charges.length;
+    const charged = () => provider.charges.slice(before).map((c) => c.charge.amountMinor);
+
+    // Website sync: no setup fee, the same $9.99 a month on every plan.
+    const sync = (await owner.put('/billing/website', { addon: 'sync' }).expect(200)).body;
+    expect(sync.website).toMatchObject({ id: 'sync', setupMinor: 0, setupCharged: true });
+    expect(sync.lines.at(-1)).toMatchObject({ moduleId: 'website:maintenance', unitMinor: 999 });
+    await owner.put('/billing/plan', { plan: 'pro' }).expect(200);
+    expect((await owner.get('/billing').expect(200)).body.lines.at(-1)).toMatchObject({ moduleId: 'website:maintenance', unitMinor: 999 });
+
+    await owner.put('/billing/website', { addon: 'simple' }).expect(200);
+    expect(charged()).toEqual([39900]);
+    // Down to sync and back up: the store was already paid for.
+    await owner.put('/billing/website', { addon: 'sync' }).expect(200);
+    await owner.put('/billing/website', { addon: 'simple' }).expect(200);
+    expect(charged()).toEqual([39900]);
+    // Up to the multi-page website: only the difference.
+    await owner.put('/billing/website', { addon: 'complex' }).expect(200);
+    expect(charged()).toEqual([39900, 20000]);
+    expect((await owner.get('/billing').expect(200)).body.website).toMatchObject({ id: 'complex', setupCharged: true, setupOwedMinor: 0 });
   });
 });

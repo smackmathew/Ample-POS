@@ -23,7 +23,7 @@ export function PlanCards({ pricing }: { pricing: PublicPricing }) {
               </Check>
               <Check>{price(p.extraLocationMinor)}/mo for each extra location</Check>
               <Check>Sales, reports, customers and loyalty included</Check>
-              <Check>Online store sync {price(p.websiteMaintenanceMinor)}/mo, if you add a store</Check>
+              <Check>Website sync {price(p.websiteMaintenanceMinor)}/mo, if you want it</Check>
             </ul>
             <Link href={`/start?plan=${p.id}`} className={`mt-6 w-full ${popular ? 'btn' : 'btn-secondary'}`}>
               Start {pricing.trialDays}-day free trial
