@@ -594,6 +594,32 @@ applies to it too. Policies let it read every business. It can change only
 tool settings, suspensions, the tool catalog and its own log, and can't read
 passwords, sessions or two-step secrets.
 
+## Import & export
+
+Business → **Import & export** (needs `data.manage`, owners by default) brings
+a business's data in from another system, starting with **QuickBooks POS**.
+
+- **Files:** CSV (or tab-separated) exports of the item list (products and stock), the customer list, or the vendor list.
+  Up to 20,000 rows and 10 MB per file. Excel files are saved as CSV first.
+- **Presets** match column names: QuickBooks POS (Item Number, Item Name,
+  Attribute, Size, Department Name, Regular Price, Average Unit Cost, UPC,
+  Alternate Lookup, Qty 1, First/Last Name, EMail, Phone 1, Company...), our
+  own export columns, or a best guess for other systems. Any column can be
+  re-mapped on the preview.
+- **Preview first:** every row is marked new, update or skipped (with the reason),
+  and nothing is saved until *Import*. Items match existing ones by SKU / item
+  number, then barcode; customers by email, then phone; suppliers by name.
+  Items with an attribute or size become variants of one product.
+- **Stock:** quantities are set (not added) at the chosen location, as one stock
+  adjustment.
+- **Undo:** each import records what it created and the values it changed
+  (`import_batch_items`), so it can be undone. New products are archived and
+  their barcodes freed, changed values restored, the stock adjustment reversed,
+  and new customers removed unless they've bought something since.
+- **Export** (`GET /exports/{products,customers,suppliers}.csv`) writes the
+  same columns the import reads, so a file can be edited and imported back.
+  Cells that look like spreadsheet formulas are written as text.
+
 ## API for other apps
 
 A business can connect its own systems (a hub, an ERP, a supplier feed) under

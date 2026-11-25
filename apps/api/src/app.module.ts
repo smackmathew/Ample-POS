@@ -59,6 +59,8 @@ import { PricingController } from './billing/pricing.controller';
 import { PlatformEmailController } from './platform/platform-email.controller';
 import { PrintersController } from './platform/printers.controller';
 import { ScannersController } from './platform/scanners.controller';
+import { ImportsController } from './imports/imports.controller';
+import { ImportsService } from './imports/imports.service';
 import { ApiEvents } from './core/api-events';
 import { ApiKeysController } from './developer/api-keys.controller';
 import { EventsController } from './developer/events.controller';
@@ -102,6 +104,7 @@ export class AppModule {
         DeviceSessionController,
         PrintersController,
         ScannersController,
+        ImportsController,
         AuditController,
         CatalogController,
         InventoryController,
@@ -137,6 +140,7 @@ export class AppModule {
         { provide: MAIL_FETCH, useValue: ((url, init) => fetch(url, init)) satisfies typeof fetch },
         Events,
         ApiEvents,
+        ImportsService,
         WebhookDispatcher,
         { provide: WEBHOOK_FETCH, useFactory: () => safeWebhookFetch(config) },
         LedgerService,
