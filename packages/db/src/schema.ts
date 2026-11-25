@@ -861,3 +861,36 @@ export const scanners = pgTable('scanners', {
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Import & export center (migration 0027).
+export const IMPORT_KINDS = ['products', 'customers', 'suppliers'] as const;
+export const IMPORT_SOURCES = ['qbpos', 'ample', 'other'] as const;
+
+export const importBatches = pgTable('import_batches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  kind: text('kind', { enum: IMPORT_KINDS }).notNull(),
+  source: text('source', { enum: IMPORT_SOURCES }).notNull(),
+  fileName: text('file_name').notNull(),
+  locationId: uuid('location_id'),
+  status: text('status', { enum: ['preview', 'committed', 'undone'] }).notNull().default('preview'),
+  headers: text('headers').array().notNull(),
+  rows: jsonb('rows').$type<string[][] | null>(),
+  mapping: jsonb('mapping').$type<Record<string, string | null>>().notNull(),
+  stats: jsonb('stats').$type<Record<string, number>>().notNull().default({}),
+  operationId: uuid('operation_id'),
+  createdBy: uuid('created_by'),
+  createdAt: createdAt(),
+  committedAt: timestamp('committed_at', { withTimezone: true }),
+  undoneAt: timestamp('undone_at', { withTimezone: true }),
+});
+
+export const importBatchItems = pgTable('import_batch_items', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  tenantId: uuid('tenant_id').notNull(),
+  batchId: uuid('batch_id').notNull(),
+  entityType: text('entity_type', { enum: ['product', 'variant', 'barcode', 'customer', 'supplier'] }).notNull(),
+  entityId: text('entity_id').notNull(),
+  action: text('action', { enum: ['created', 'updated'] }).notNull(),
+  before: jsonb('before').$type<Record<string, unknown> | null>(),
+});

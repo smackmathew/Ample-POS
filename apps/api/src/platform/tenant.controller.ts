@@ -23,6 +23,7 @@ const PLATFORM_NAV = [
   { label: 'Roles', path: '/roles', permission: 'roles.manage' },
   { label: 'Audit log', path: '/audit', permission: 'audit.read' },
   { label: 'Billing', path: '/billing', permission: 'billing.manage' },
+  { label: 'Import & export', path: '/import', permission: 'data.manage' },
   { label: 'API & webhooks', path: '/developers', permission: 'api.manage' },
 ];
 
