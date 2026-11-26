@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 
 export const colors = {
-  brand: '#0f766e',
+  /** Logo navy: primary buttons and headers. */
+  navy: '#0b2e50',
+  /** Logo green, darkened so text on white stays readable: success, totals, highlights. */
+  brand: '#13803f',
   text: '#1c1917',
   muted: '#78716c',
   border: '#d6d3d1',
@@ -70,7 +73,7 @@ export const styles = StyleSheet.create({
   label: { fontSize: 13, color: colors.muted },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, backgroundColor: '#fff', color: colors.text },
   button: { borderRadius: 8, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  primary: { backgroundColor: colors.brand },
+  primary: { backgroundColor: colors.navy },
   secondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
   buttonText: { fontSize: 16, fontWeight: '600' },
   card: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e7e5e4', padding: 14 },

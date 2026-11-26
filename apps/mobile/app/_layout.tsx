@@ -13,7 +13,7 @@ export default function RootLayout() {
       <SyncProvider>
         <TerminalProvider>
           <StatusBar style="auto" />
-          <Stack screenOptions={{ headerTintColor: '#0f766e' }}>
+          <Stack screenOptions={{ headerTintColor: '#0b2e50' }}>
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
             <Stack.Screen name="pair" options={{ title: 'Pair this device' }} />
