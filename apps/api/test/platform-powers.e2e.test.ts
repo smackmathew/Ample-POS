@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -121,6 +122,52 @@ describe('editing businesses', () => {
     // The old owner can no longer do owner things; the new one can.
     await owner.patch('/tenant', { name: 'Mine' }).expect(403);
     await manager.patch('/tenant', { name: 'Mine now' }).expect(200);
+  });
+});
+
+describe('trials and free accounts', () => {
+  it('adds days to a trial, and makes a business free so it never goes read-only or pays', async () => {
+    const { owner, tenantId } = await shop('Our Test Shop');
+    const admin = await Client.signIn(app, adminEmail);
+    for (const m of ['time-clock']) await owner.put(`/modules/${m}`, { enabled: true }).expect(200);
+    const store = (await owner.post('/locations', { name: 'Main', timezone: 'UTC' }).expect(201)).body;
+
+    // The trial ran out: paid tools are read-only.
+    const sql = adminSql();
+    await sql`update tenant_billing set trial_ends_at = now() - interval '1 day' where tenant_id = ${tenantId}`;
+    await sql.end();
+    await owner.post('/timeclock/punches', { id: randomUUID(), kind: 'in', locationId: store.id }).expect(402);
+
+    // Adding 7 days counts from today when the trial already ended.
+    await admin.put(`/platform/companies/${tenantId}/trial`, {}).expect(400);
+    const extended = (await admin.put(`/platform/companies/${tenantId}/trial`, { addDays: 7 }).expect(200)).body;
+    const days = (Date.parse(extended.billing.trialEndsAt) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThan(7.1);
+    expect(extended.billing.standing).toBe('trial');
+    // ...and from the current end when it's still running.
+    const more = (await admin.put(`/platform/companies/${tenantId}/trial`, { addDays: 7 }).expect(200)).body;
+    expect((Date.parse(more.billing.trialEndsAt) - Date.parse(extended.billing.trialEndsAt)) / 86_400_000).toBeCloseTo(7, 3);
+
+    // Free: needs a reason, never lapses, nothing to pay.
+    await admin.put(`/platform/companies/${tenantId}/free`, { free: true }).expect(400);
+    const free = (await admin.put(`/platform/companies/${tenantId}/free`, { free: true, reason: 'Our own test business' }).expect(200)).body;
+    expect(free.billing).toMatchObject({ standing: 'free', freeReason: 'Our own test business' });
+    const sql2 = adminSql();
+    await sql2`update tenant_billing set trial_ends_at = now() - interval '30 days' where tenant_id = ${tenantId}`;
+    await sql2.end();
+    await owner.post('/timeclock/punches', { id: randomUUID(), kind: 'in', locationId: store.id }).expect(201);
+    expect((await owner.get('/tenant').expect(200)).body.billing.standing).toBe('free');
+    expect((await owner.get('/billing').expect(200)).body).toMatchObject({ standing: 'free', free: { since: expect.any(String) } });
+    expect((await owner.post('/billing/checkout').expect(409)).body.code).toBe('free_account');
+    expect((await admin.get('/platform/companies?status=free').expect(200)).body.map((c: { id: string }) => c.id)).toContain(tenantId);
+    const audit = (await owner.get('/audit').expect(200)).body;
+    expect(JSON.stringify(audit)).toContain('billing.made_free');
+
+    // Ending it gives a fresh 14-day trial rather than locking them out at once.
+    const ended = (await admin.put(`/platform/companies/${tenantId}/free`, { free: false }).expect(200)).body;
+    expect(ended.billing.standing).toBe('trial');
+    expect((Date.parse(ended.billing.trialEndsAt) - Date.now()) / 86_400_000).toBeGreaterThan(13.9);
   });
 });
 

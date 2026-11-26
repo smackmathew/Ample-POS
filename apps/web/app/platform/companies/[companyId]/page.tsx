@@ -3,9 +3,11 @@ import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { METHOD, SEVERITY, STANDING, usd, utc, type ActivityEntry, type Company, type Transaction } from '@/lib/platform';
 import {
+  addTrialDays,
   cardPaymentsOff,
   renameCompany,
   restoreCompany,
+  setCompanyFree,
   setCompanyOwner,
   setCompanyPlan,
   setCompanyTrial,
@@ -108,14 +110,26 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
             <button className="btn-secondary">Rename</button>
           </ActionForm>
           {c.billing && (
-            <ActionForm action={setCompanyTrial.bind(null, c.id)} className="space-y-2">
-              <label className="block text-sm">
-                Free trial ends
-                <input name="trialEndsAt" type="date" defaultValue={c.billing.trialEndsAt.slice(0, 10)} required className="input mt-1" />
-              </label>
-              <button className="btn-secondary">Move trial end</button>
-              <p className="text-xs text-stone-500">Only matters until they subscribe. Up to a year from today.</p>
-            </ActionForm>
+            <div className="space-y-2">
+              <ActionForm action={setCompanyTrial.bind(null, c.id)} className="space-y-2">
+                <label className="block text-sm">
+                  Free trial ends
+                  <input name="trialEndsAt" type="date" defaultValue={c.billing.trialEndsAt.slice(0, 10)} required className="input mt-1" />
+                </label>
+                <button className="btn-secondary">Set date</button>
+              </ActionForm>
+              <ActionForm action={addTrialDays.bind(null, c.id)} className="flex flex-wrap items-center gap-1.5 text-sm">
+                <span className="text-stone-500">Add</span>
+                {[7, 14, 30, 90].map((d) => (
+                  <button key={d} name="days" value={d} className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 hover:bg-stone-50">
+                    +{d} days
+                  </button>
+                ))}
+              </ActionForm>
+              <p className="text-xs text-stone-500">
+                Only matters until they subscribe. Days are added from today if the trial already ended. Up to a year out.
+              </p>
+            </div>
           )}
           <ActionForm action={setCompanyOwner.bind(null, c.id)} className="space-y-2">
             <label className="block text-sm">
@@ -148,6 +162,34 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
           </ActionForm>
         </div>
       </section>
+
+      {c.billing && (
+        <section className={`card space-y-2 ${c.billing.freeSince ? 'border-violet-200 bg-violet-50/40' : ''}`}>
+          <h2 className="font-medium">Free account</h2>
+          {c.billing.freeSince ? (
+            <>
+              <p className="text-sm">
+                Free since {utc(c.billing.freeSince, false)}: {c.billing.freeReason}. Never billed, and paid tools never go read-only.
+              </p>
+              {c.billing.status && ['active', 'trialing', 'past_due'].includes(c.billing.status) && (
+                <p className="text-sm text-amber-800">They still have a paid subscription. Cancel it in Stripe so they aren’t charged.</p>
+              )}
+              <ActionForm action={setCompanyFree.bind(null, c.id, false)}>
+                <button className="btn-secondary">End free account</button>
+              </ActionForm>
+              <p className="text-xs text-stone-500">They get a 14-day trial to subscribe, so nobody is locked out at once.</p>
+            </>
+          ) : (
+            <ActionForm action={setCompanyFree.bind(null, c.id, true)} className="flex flex-wrap gap-2">
+              <p className="w-full text-sm text-stone-600">
+                For your own test businesses, staff and partners: never billed, every tool fully usable, whatever the trial says.
+              </p>
+              <input name="reason" placeholder="Why, e.g. our own test business" required className="input max-w-sm" />
+              <button className="btn">Make this business free</button>
+            </ActionForm>
+          )}
+        </section>
+      )}
 
       {c.billing && (
         <ActionForm action={setCompanyPlan.bind(null, c.id)} className="card flex flex-wrap items-end gap-3">
@@ -369,6 +411,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
 
 function billingNote(c: Company): string {
   if (!c.billing) return 'No billing record';
+  if (c.billing.standing === 'free') return 'Free account: not billed';
   if (c.billing.standing === 'trial') return `Trial ends ${utc(c.billing.trialEndsAt, false)}`;
   if (c.billing.currentPeriodEnd)
     return `${c.billing.cancelAtPeriodEnd ? 'Ends' : 'Renews'} ${utc(c.billing.currentPeriodEnd, false)} · ${c.billing.provider ?? ''}`;

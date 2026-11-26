@@ -75,15 +75,17 @@ export default async function Dashboard({ params }: { params: Promise<{ tenantId
   const billing = current.billing;
   const trialDays = billing ? Math.max(0, Math.ceil((Date.parse(billing.trialEndsAt) - Date.now()) / 86_400_000)) : 0;
   const status =
-    billing?.standing === 'trial'
-      ? `Free trial · ${trialDays} day${trialDays === 1 ? '' : 's'} left`
-      : billing?.standing === 'active'
-        ? 'Subscribed'
-        : billing?.standing === 'past_due'
-          ? 'Payment problem'
-          : billing?.standing === 'lapsed'
-            ? 'Trial ended'
-            : null;
+    billing?.standing === 'free'
+      ? 'Free account'
+      : billing?.standing === 'trial'
+        ? `Free trial · ${trialDays} day${trialDays === 1 ? '' : 's'} left`
+        : billing?.standing === 'active'
+          ? 'Subscribed'
+          : billing?.standing === 'past_due'
+            ? 'Payment problem'
+            : billing?.standing === 'lapsed'
+              ? 'Trial ended'
+              : null;
 
   const todayNet = week?.days.find((d) => d.date === today)?.netMinor ?? 0;
   const todayCount = week?.days.find((d) => d.date === today)?.salesCount ?? 0;

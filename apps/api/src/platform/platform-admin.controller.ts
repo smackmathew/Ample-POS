@@ -29,7 +29,7 @@ const days = z.coerce.number().int().min(1).max(365).default(30);
 const overviewQuery = z.object({ days });
 const companiesQuery = z.object({
   search: z.string().trim().max(100).optional(),
-  status: z.enum(['all', 'trial', 'active', 'past_due', 'lapsed', 'suspended']).default('all'),
+  status: z.enum(['all', 'free', 'trial', 'active', 'past_due', 'lapsed', 'suspended']).default('all'),
 });
 const toolBody = z
   .object({ enabled: z.boolean().optional(), comped: z.boolean().optional(), blocked: z.boolean().optional() })
@@ -56,7 +56,17 @@ const companyPlanBody = z
   .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
 const reasonBody = z.object({ reason: z.string().trim().min(3, 'Say why you’re looking, for the business’s audit log').max(300) });
 const nameBody = z.object({ name: z.string().trim().min(1).max(100) });
-const trialBody = z.object({ trialEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-31') });
+const trialBody = z
+  .object({
+    trialEndsAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-31')
+      .optional(),
+    /** Adds days to the trial: from its current end, or from today if it already ended. */
+    addDays: z.number().int().min(1).max(365).optional(),
+  })
+  .refine((b) => Boolean(b.trialEndsAt) !== Boolean(b.addDays), 'Give a date or a number of days');
+const freeBody = z.object({ free: z.boolean(), reason: z.string().trim().max(300).optional() });
 const ownerBody = z.object({
   userId: z.string().uuid(),
   /** What current owners become: a role key such as 'manager', or null to keep them as owners too. */
@@ -85,6 +95,7 @@ type BillingRow = {
   current_period_end: Date | string | null;
   cancel_at_period_end: boolean;
   items: { moduleId: string; quantity: number; unitMinor?: number }[];
+  free_since?: Date | string | null;
 };
 
 function standingOf(b: BillingRow | null | undefined): Standing | null {
@@ -94,6 +105,7 @@ function standingOf(b: BillingRow | null | undefined): Standing | null {
     trialEndsAt: new Date(b.trial_ends_at),
     currentPeriodEnd: b.current_period_end ? new Date(b.current_period_end) : null,
     cancelAtPeriodEnd: b.cancel_at_period_end,
+    freeSince: b.free_since ? new Date(b.free_since) : null,
   });
 }
 
@@ -129,9 +141,9 @@ export class PlatformAdminController {
     return this.platform.run(async (tx) => {
       const since = sql`now() - make_interval(days => ${q.days})`;
       const tenants = await tx.execute<{ id: string; created_at: Date; suspended_at: Date | null } & BillingRow>(sql`
-        select t.id, t.created_at, t.suspended_at, b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items
+        select t.id, t.created_at, t.suspended_at, b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items, b.free_since
         from tenants t left join tenant_billing b on b.tenant_id = t.id`);
-      const byStanding: Record<Standing, number> = { trial: 0, active: 0, past_due: 0, lapsed: 0 };
+      const byStanding: Record<Standing, number> = { free: 0, trial: 0, active: 0, past_due: 0, lapsed: 0 };
       let mrrMinor = 0;
       for (const t of tenants) {
         const s = t.trial_ends_at ? standingOf(t) : null;
@@ -215,7 +227,7 @@ export class PlatformAdminController {
         } & BillingRow
       >(sql`
         select t.id, t.name, t.slug, t.created_at, t.suspended_at, t.suspended_reason,
-               b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items, b.plan, b.website_addon,
+               b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items, b.free_since, b.plan, b.website_addon,
                (select u.email from memberships m join roles r on r.id = m.role_id join users u on u.id = m.user_id
                  where m.tenant_id = t.id and r.key = 'owner' order by m.created_at limit 1) as owner_email,
                (select count(*) from tenant_modules tm where tm.tenant_id = t.id and tm.enabled) as tools,
@@ -450,9 +462,6 @@ export class PlatformAdminController {
   @Put('companies/:id/trial')
   async setTrial(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(trialBody)) body: z.infer<typeof trialBody>) {
     const admin = await this.access.require();
-    const end = new Date(`${body.trialEndsAt}T23:59:59Z`);
-    if (Number.isNaN(end.getTime())) throw new BadRequestException('That isn’t a date');
-    if (end.getTime() > Date.now() + 366 * 86_400_000) throw new BadRequestException('A trial can be at most a year from today');
     return this.platform.run(async (tx) => {
       await this.lockTenant(tx, id);
       const [before] = await tx
@@ -460,6 +469,11 @@ export class PlatformAdminController {
         .from(schema.tenantBilling)
         .where(eq(schema.tenantBilling.tenantId, id));
       if (!before) throw new NotFoundException('This business has no billing record');
+      const end = body.addDays
+        ? new Date(Math.max(before.trialEndsAt.getTime(), Date.now()) + body.addDays * 86_400_000)
+        : new Date(`${body.trialEndsAt}T23:59:59Z`);
+      if (Number.isNaN(end.getTime())) throw new BadRequestException('That isn’t a date');
+      if (end.getTime() > Date.now() + 366 * 86_400_000) throw new BadRequestException('A trial can be at most a year from today');
       await tx.update(schema.tenantBilling).set({ trialEndsAt: end }).where(eq(schema.tenantBilling.tenantId, id));
       await tx.insert(schema.auditLog).values({
         tenantId: id,
@@ -470,6 +484,42 @@ export class PlatformAdminController {
         data: { by: 'Ample POS support', from: before.trialEndsAt, to: end },
       });
       await this.log(tx, admin, 'company.trial_changed', id, { from: before.trialEndsAt, to: end });
+      return this.companyDetail(tx, id);
+    });
+  }
+
+  /**
+   * Makes a business free (staff, testing, partners) or ends that. A free
+   * business is never billed and its paid tools never go read-only. Ending it
+   * starts a 14-day trial if the old one has run out, so nobody is locked out at once.
+   */
+  @Put('companies/:id/free')
+  async setFree(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(freeBody)) body: z.infer<typeof freeBody>) {
+    const admin = await this.access.require();
+    if (body.free && !body.reason) throw new BadRequestException('Say why it’s free, e.g. “Our own test business”');
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const b = schema.tenantBilling;
+      const [before] = await tx.select({ freeSince: b.freeSince, trialEndsAt: b.trialEndsAt }).from(b).where(eq(b.tenantId, id));
+      if (!before) throw new NotFoundException('This business has no billing record');
+      const graceEnd = new Date(Date.now() + 14 * 86_400_000);
+      await tx
+        .update(b)
+        .set(
+          body.free
+            ? { freeSince: before.freeSince ?? new Date(), freeReason: body.reason! }
+            : { freeSince: null, freeReason: null, ...(before.trialEndsAt < graceEnd ? { trialEndsAt: graceEnd } : {}) },
+        )
+        .where(eq(b.tenantId, id));
+      await tx.insert(schema.auditLog).values({
+        tenantId: id,
+        actorUserId: admin.userId,
+        action: body.free ? 'billing.made_free' : 'billing.free_ended',
+        targetType: 'tenant',
+        targetId: id,
+        data: { by: 'Ample POS support', reason: body.reason ?? null },
+      });
+      await this.log(tx, admin, body.free ? 'company.made_free' : 'company.free_ended', id, { reason: body.reason ?? null });
       return this.companyDetail(tx, id);
     });
   }
@@ -837,6 +887,7 @@ export class PlatformAdminController {
           current_period_end: billing.currentPeriodEnd,
           cancel_at_period_end: billing.cancelAtPeriodEnd,
           items: billing.items,
+          free_since: billing.freeSince,
         }
       : null;
     return {
@@ -860,6 +911,8 @@ export class PlatformAdminController {
             plan: billing.plan,
             websiteAddon: billing.websiteAddon,
             websiteSetupChargedAt: billing.websiteSetupChargedAt,
+            freeSince: billing.freeSince,
+            freeReason: billing.freeReason,
           }
         : null,
       merchant: merchant ?? null,

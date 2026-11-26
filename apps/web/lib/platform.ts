@@ -1,4 +1,4 @@
-export type Standing = 'trial' | 'active' | 'past_due' | 'lapsed';
+export type Standing = 'free' | 'trial' | 'active' | 'past_due' | 'lapsed';
 export type Severity = 'high' | 'medium' | 'low';
 
 export interface PlatformAccess {
@@ -104,6 +104,8 @@ export interface Company {
     plan: 'starter' | 'growth' | 'pro';
     websiteAddon: 'sync' | 'simple' | 'complex' | null;
     websiteSetupChargedAt: string | null;
+    freeSince: string | null;
+    freeReason: string | null;
   } | null;
   tools: CompanyTool[];
   merchant: {
@@ -197,6 +199,7 @@ export interface AdminLogEntry {
 }
 
 export const STANDING: Record<Standing, [string, string]> = {
+  free: ['Free account', 'bg-violet-50 text-violet-800'],
   trial: ['Trial', 'bg-sky-50 text-sky-800'],
   active: ['Subscribed', 'bg-teal-50 text-teal-800'],
   past_due: ['Payment failing', 'bg-red-50 text-red-800'],
