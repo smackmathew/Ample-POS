@@ -31,6 +31,9 @@ export const users = pgTable('users', {
   displayName: text('display_name'),
   createdAt: createdAt(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Turned off by Ample POS staff: can't sign in (migration 0029). */
+  disabledAt: timestamp('disabled_at', { withTimezone: true }),
+  disabledReason: text('disabled_reason'),
 });
 
 export const roles = pgTable('roles', {
@@ -931,4 +934,15 @@ export const salesHistory = pgTable('sales_history', {
   totalMinor: bigint('total_minor', { mode: 'number' }).notNull(),
   taxMinor: bigint('tax_minor', { mode: 'number' }).notNull().default(0),
   createdAt: createdAt(),
+});
+
+// A platform admin viewing a business read-only, as its owner (migration 0029).
+export const platformSupportSessions = pgTable('platform_support_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  adminUserId: uuid('admin_user_id').notNull(),
+  reason: text('reason').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
 });

@@ -9,9 +9,9 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { schema } from '@pos/db';
+import { schema, type Transaction } from '@pos/db';
 import { getModule, hasPermission, type ModuleId } from '@pos/modules';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { READ_METHODS, standing } from '../billing/standing';
 import { effectivePermissions } from './api-keys';
 import { verifyDeviceCredential } from './device-auth';
@@ -21,7 +21,9 @@ import { Db } from './database';
 import { MODULE_KEY, NO_API_KEY, NO_TENANT_KEY, PERMISSION_KEY, PUBLIC_KEY } from './decorators';
 import { runWithContext, type RequestContext } from './request-context';
 import { toolSetting } from './tool-settings';
+import { PlatformAccess } from '../platform/platform-access';
 
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -34,6 +36,7 @@ export class TenantContextInterceptor implements NestInterceptor {
   constructor(
     private readonly reflector: Reflector,
     private readonly db: Db,
+    private readonly platformAccess: PlatformAccess,
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -78,9 +81,21 @@ export class TenantContextInterceptor implements NestInterceptor {
             .from(schema.memberships)
             .innerJoin(schema.roles, eq(schema.roles.id, schema.memberships.roleId))
             .where(and(eq(schema.memberships.userId, user.userId), eq(schema.memberships.status, 'active')));
-          // RLS already limits rows to the selected business, so no row means no access.
+          // RLS already limits rows to the selected business, so no row means no access...
           if (!membership) {
-            throw new ForbiddenException(apiKey ? 'The person who created this API key is no longer part of the business' : 'You are not a member of this business');
+            // ...unless Ample POS staff opened a support view of this business: read-only, as its owner.
+            const support = apiKey ? null : await this.supportSession(tx, user.userId);
+            if (!support) {
+              throw new ForbiddenException(
+                apiKey ? 'The person who created this API key is no longer part of the business' : 'You are not a member of this business',
+              );
+            }
+            if (!READ_METHODS.has(req.method)) {
+              throw new HttpException({ statusCode: 403, code: 'support_read_only', message: 'Support view is read-only: changes can’t be made here' }, 403);
+            }
+            ctx.tenant = { tenantId: tenantId!, membershipId: NIL_UUID, roleId: NIL_UUID, roleKey: 'support', permissions: ['*'], supportSessionId: support };
+            if (moduleId) await this.requireModule(tx, moduleId);
+            return runWithContext(ctx, () => lastValueFrom(next.handle(), { defaultValue: undefined }));
           }
           // An API key gets what it was given, never more than its creator has now.
           const permissions = apiKey ? effectivePermissions(apiKey.permissions, membership.permissions) : membership.permissions;
@@ -138,5 +153,25 @@ export class TenantContextInterceptor implements NestInterceptor {
         return runWithContext(ctx, () => lastValueFrom(next.handle(), { defaultValue: undefined }));
       }),
     );
+  }
+
+  /** The signed-in admin's live support session for the selected business, if they are still a platform admin. */
+  private async supportSession(tx: Transaction, userId: string): Promise<string | null> {
+    const [session] = await tx
+      .select({ id: schema.platformSupportSessions.id })
+      .from(schema.platformSupportSessions)
+      .where(and(isNull(schema.platformSupportSessions.endedAt), gt(schema.platformSupportSessions.expiresAt, sql`now()`)))
+      .limit(1);
+    if (!session) return null;
+    return (await this.platformAccess.check(tx, userId)).ok ? session.id : null;
+  }
+
+  /** A support view still only shows tools the business has on. */
+  private async requireModule(tx: Transaction, moduleId: ModuleId) {
+    const [entitlement] = await tx
+      .select({ enabled: schema.tenantModules.enabled })
+      .from(schema.tenantModules)
+      .where(eq(schema.tenantModules.moduleId, moduleId));
+    if (!entitlement?.enabled) throw new ForbiddenException(`${getModule(moduleId).name} is not enabled for this business`);
   }
 }

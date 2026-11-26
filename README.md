@@ -586,6 +586,23 @@ on the *Your businesses* page.
     being billed until switched back on.
   - Change a tool's monthly price, or clear it to go back to the built-in
     price. Subscriptions move to the new price at their next update.
+- **Support view:** open any business read-only, exactly as its owner sees
+  it, for an hour (`POST /platform/companies/:id/support` with a reason). The
+  API lets the admin in as a non-member with every permission but refuses any
+  change (`support_read_only`); it re-checks that they're still staff on every
+  request. The visit and the reason go in the business's own audit log
+  (`support.view_started` / `support.view_ended`). A banner in the business
+  view says it's a support view, with a button to end it.
+- **Business details:** rename a business, move the end of its free trial
+  (until it subscribes; up to a year out), and change its owner (an existing
+  member; current owners step down to a role you choose, or stay owners).
+- **People** (`/platform/users`): find anyone by name, email or business, or
+  filter to unconfirmed emails, locked-out or turned-off accounts. For someone:
+  their businesses and roles, how they sign in, and what support did. Support
+  can make a password reset link (emailed, and shown to pass on; 24 hours),
+  confirm their email, turn off two-step sign-in (signs them out everywhere),
+  or turn the account off with a reason: they can't sign in, and existing
+  sessions stop at once. Staff accounts can't be turned off.
 - **Admin log:** every change made from the dashboard, and by whom.
 
 The dashboard reads through its own database role, `pos_platform`. It's

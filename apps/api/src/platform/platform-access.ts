@@ -1,5 +1,5 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
-import { schema } from '@pos/db';
+import { schema, type Transaction } from '@pos/db';
 import { eq } from 'drizzle-orm';
 import { AuthService } from '../core/auth.service';
 import { APP_CONFIG, type AppConfig } from '../core/config';
@@ -26,9 +26,12 @@ export class PlatformAccess {
     private readonly twoFactor: TwoFactor,
   ) {}
 
-  async check(): Promise<{ ok: true; admin: PlatformAdmin } | { ok: false; code: string; message: string }> {
-    const userId = currentUserId();
-    const [user] = await currentContext().tx.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId));
+  /** Also used outside platform routes (the support view), with that request's transaction and user. */
+  async check(
+    tx: Transaction = currentContext().tx,
+    userId: string = currentUserId(),
+  ): Promise<{ ok: true; admin: PlatformAdmin } | { ok: false; code: string; message: string }> {
+    const [user] = await tx.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId));
     const email = user?.email?.toLowerCase() ?? '';
     if (!email || !this.config.PLATFORM_ADMIN_EMAILS.includes(email)) {
       return { ok: false, code: 'not_platform_admin', message: 'This page is for Ample POS staff' };

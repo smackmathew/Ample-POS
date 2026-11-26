@@ -6,6 +6,8 @@ import { APP_CONFIG, type AppConfig } from './config';
 import { Db } from './database';
 import type { AuthUser } from './request-context';
 
+export const ACCOUNT_DISABLED = 'This account has been turned off. Contact Ample POS support.';
+
 const DEV_ISSUER = 'pos-hub-dev';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,18 +55,17 @@ export class AuthService {
   async authenticate(token: string): Promise<AuthUser> {
     if (this.config.AUTH_MODE === 'password') return this.fromSession(token);
     const identity = await this.verifyJwt(token);
-    const [row] = await this.db.pool.execute<{ id: string }>(
-      sql`select app_upsert_user(${identity.subject}, ${identity.email}, ${identity.name}) as id`,
+    const [row] = await this.db.pool.execute<{ id: string; disabled: boolean }>(
+      sql`with u as (select app_upsert_user(${identity.subject}, ${identity.email}, ${identity.name}) as id) select id, app_user_disabled(id) as disabled from u`,
     );
+    if (row!.disabled) throw new UnauthorizedException({ code: 'account_disabled', message: ACCOUNT_DISABLED });
     return { userId: row!.id, subject: identity.subject, sessionId: null };
   }
 
   private async fromSession(token: string): Promise<AuthUser> {
     const parts = splitToken(token);
     if (parts) {
-      const [row] = await this.db.pool.execute<{ user_id: string | null }>(
-        sql`select app_session_user(${parts.id}::uuid, ${sha256(parts.secret)}) as user_id`,
-      );
+      const [row] = await this.db.pool.execute<{ user_id: string | null }>(sql`select app_session_user(${parts.id}::uuid, ${sha256(parts.secret)}) as user_id`);
       if (row?.user_id) return { userId: row.user_id, subject: `local|${row.user_id}`, sessionId: parts.id };
     }
     throw new UnauthorizedException('Your session has ended. Sign in again.');

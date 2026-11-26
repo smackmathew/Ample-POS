@@ -15,6 +15,8 @@ export interface TenantMembership {
   roleId: string;
   roleKey: string;
   permissions: string[];
+  /** Set when Ample POS staff are viewing the business read-only (see the support view). */
+  supportSessionId?: string;
 }
 
 export interface DeviceIdentity {

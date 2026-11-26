@@ -56,6 +56,7 @@ import { PlatformAdminController } from './platform/platform-admin.controller';
 import { PlatformAccess } from './platform/platform-access';
 import { PlatformDb } from './core/platform-db';
 import { PricingController } from './billing/pricing.controller';
+import { PlatformPeopleController } from './platform/platform-people.controller';
 import { PlatformEmailController } from './platform/platform-email.controller';
 import { PrintersController } from './platform/printers.controller';
 import { ScannersController } from './platform/scanners.controller';
@@ -91,6 +92,7 @@ export class AppModule {
         MerchantController,
         PlatformAdminController,
         PlatformEmailController,
+        PlatformPeopleController,
         LoyaltyController,
         GiftCardsController,
         SuppliersController,
@@ -170,7 +172,9 @@ export class AppModule {
           provide: MERCHANT_CONNECT,
           inject: [STRIPE_FETCH],
           useFactory: (stripeFetch: typeof fetch): MerchantConnect =>
-            config.PAYMENTS_PROVIDER === 'stripe' ? new StripeConnect(config.STRIPE_SECRET_KEY!, stripeFetch) : new SimulatedConnect(new StripeConnect('', stripeFetch)),
+            config.PAYMENTS_PROVIDER === 'stripe'
+              ? new StripeConnect(config.STRIPE_SECRET_KEY!, stripeFetch)
+              : new SimulatedConnect(new StripeConnect('', stripeFetch)),
         },
         CardProviders,
         MerchantService,
