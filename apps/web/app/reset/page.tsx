@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { resetPassword } from '../session-actions';
+import { Logo } from '@/components/app-shell';
 
 export default async function ResetPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token } = await searchParams;
   return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
+    <main className="mx-auto mt-16 max-w-sm px-4">
+      <div className="mb-8">
+        <Logo height={36} />
+      </div>
       <h1 className="text-2xl font-semibold">Choose a new password</h1>
       {token ? (
         <>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { authConfig } from '@/lib/api';
 import { devSignIn, signIn } from '../session-actions';
+import { Logo } from '@/components/app-shell';
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
@@ -9,11 +10,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   if (config.mode === 'dev') {
     return (
-      <main className="mx-auto mt-24 max-w-sm px-4">
+      <main className="mx-auto mt-16 max-w-sm px-4">
+        <div className="mb-8">
+          <Logo height={36} />
+        </div>
         <h1 className="text-2xl font-semibold">Sign in to Ample POS</h1>
         <p className="mt-2 text-sm text-stone-600">
-          Demo sign-in: enter any email to continue. Anyone can sign in as any email here, so use test data only, never real
-          customer or payment details.
+          Demo sign-in: enter any email to continue. Anyone can sign in as any email here, so use test data only, never real customer or payment details.
         </p>
         <ActionForm action={devSignIn} className="card mt-6 grid gap-3">
           <label className="block text-sm">
@@ -31,7 +34,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   }
 
   return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
+    <main className="mx-auto mt-16 max-w-sm px-4">
+      <div className="mb-8">
+        <Logo height={36} />
+      </div>
       <h1 className="text-2xl font-semibold">Sign in to Ample POS</h1>
       <ActionForm action={signIn} className="card mt-6 grid gap-3">
         <input type="hidden" name="next" value={next ?? ''} />

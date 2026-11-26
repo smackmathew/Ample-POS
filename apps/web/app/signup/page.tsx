@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { signUp } from '../session-actions';
+import { Logo } from '@/components/app-shell';
 
 export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
   return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
+    <main className="mx-auto mt-16 max-w-sm px-4">
+      <div className="mb-8">
+        <Logo height={36} />
+      </div>
       <h1 className="text-2xl font-semibold">Create your account</h1>
       <p className="mt-2 text-sm text-stone-600">
         For business owners and team members alike. Joining a team? Create your account, then enter the invitation code you were given.

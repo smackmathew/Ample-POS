@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
+import { Logo } from '@/components/app-shell';
 
 /** Opened from the link sent to the new address. The link is the proof, so no sign-in is needed. */
 export default async function EmailChangePage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
@@ -15,7 +16,10 @@ export default async function EmailChangePage({ searchParams }: { searchParams: 
     }
   }
   return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
+    <main className="mx-auto mt-16 max-w-sm px-4">
+      <div className="mb-8">
+        <Logo height={36} />
+      </div>
       <h1 className="text-2xl font-semibold">{email ? 'Email changed' : 'Couldn’t change your email'}</h1>
       <p className="mt-2 text-sm text-stone-600">
         {email ? (

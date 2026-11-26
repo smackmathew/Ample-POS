@@ -8,10 +8,12 @@ export interface ShellSection {
   items: { href: string; label: string; exact?: boolean }[];
 }
 
-export function Logo({ href = '/' }: { href?: string }) {
+/** The Ample POS logo (public/logo.png, 4.9:1). */
+export function Logo({ href = '/', height = 28 }: { href?: string; height?: number }) {
   return (
-    <Link href={href} className="text-lg font-semibold tracking-tight">
-      Ample <span className="text-brand">POS</span>
+    <Link href={href} className="inline-flex shrink-0 items-center" aria-label="Ample POS home">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.png" alt="Ample POS" width={Math.round(height * 4.9)} height={height} style={{ height, width: 'auto' }} />
     </Link>
   );
 }

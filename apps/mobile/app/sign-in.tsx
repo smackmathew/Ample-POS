@@ -1,7 +1,7 @@
 import { ApiClient, ApiError } from '@pos/sync';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
 import { useSession } from '@/session';
 import { Button, ErrorText, Field, styles } from '@/ui';
 
@@ -56,7 +56,7 @@ export default function SignIn() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Ample POS</Text>
+        <Image source={require('../assets/logo.png')} accessibilityLabel="Ample POS" resizeMode="contain" style={{ width: 220, height: 45, marginBottom: 8 }} />
         <Text style={styles.muted}>Sign in with your Ample POS account. New here? Create one in the web hub first.</Text>
         {challenge ? (
           <>

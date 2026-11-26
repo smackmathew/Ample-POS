@@ -1,10 +1,14 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { forgotPassword } from '../session-actions';
+import { Logo } from '@/components/app-shell';
 
 export default function ForgotPage() {
   return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
+    <main className="mx-auto mt-16 max-w-sm px-4">
+      <div className="mb-8">
+        <Logo height={36} />
+      </div>
       <h1 className="text-2xl font-semibold">Reset your password</h1>
       <p className="mt-2 text-sm text-stone-600">Enter your account’s email and we’ll send you a link to choose a new password.</p>
       <ActionForm action={forgotPassword} className="card mt-6 grid gap-3">
