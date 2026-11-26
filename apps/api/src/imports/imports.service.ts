@@ -5,13 +5,38 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { Db } from '../core/database';
 import { Events } from '../core/events';
 import { currentTenant, currentUserId } from '../core/request-context';
+import { GiftCardService } from '../gift-cards/gift-cards.service';
 import { LedgerService } from '../inventory/ledger.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { parseCsv } from './csv';
-import { autoMap, FIELDS, normalize, type CustomerRow, type ImportKind, type ImportSource, type NormalizedRow, type ProductRow, type SupplierRow } from './presets';
+import {
+  autoMap,
+  FIELDS,
+  normalize,
+  type AnyRow,
+  type CustomerRow,
+  type GiftCardRow,
+  type ImportKind,
+  type ImportSource,
+  type LoyaltyRow,
+  type NormalizedRow,
+  type ProductRow,
+  type SaleHistoryRow,
+  type SupplierRow,
+} from './presets';
 
 export const MAX_ROWS = 20_000;
 const SOURCE_NAME: Record<ImportSource, string> = { qbpos: 'QuickBooks POS', ample: 'an Ample POS export', other: 'a spreadsheet' };
-const TOOL_FOR: Record<ImportKind, ModuleId> = { products: 'catalog', customers: 'customers', suppliers: 'purchasing' };
+const TOOL_FOR: Record<ImportKind, ModuleId> = {
+  products: 'catalog',
+  customers: 'customers',
+  suppliers: 'purchasing',
+  gift_cards: 'gift-cards',
+  loyalty: 'loyalty',
+  sales: 'pos',
+};
+/** Imports that happen at one location. */
+const AT_LOCATION = new Set<ImportKind>(['products', 'sales']);
 
 type Batch = typeof schema.importBatches.$inferSelect;
 type Action = 'create' | 'update' | 'error';
@@ -33,6 +58,8 @@ export class ImportsService {
     private readonly db: Db,
     private readonly events: Events,
     private readonly ledger: LedgerService,
+    private readonly giftCards: GiftCardService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   async start(input: { kind: ImportKind; source: ImportSource; fileName: string; csv: string; locationId?: string | null }) {
@@ -42,7 +69,7 @@ export class ImportsService {
     if (!rows.length) throw new BadRequestException('The file has a header row but no data');
     if (rows.length > MAX_ROWS) throw new BadRequestException(`Up to ${MAX_ROWS.toLocaleString('en-US')} rows per file; split it and import each part`);
     const cleanHeaders = headers.map((h, i) => h.trim() || `Column ${i + 1}`);
-    const locationId = input.kind === 'products' ? (input.locationId ?? null) : null;
+    const locationId = AT_LOCATION.has(input.kind) ? (input.locationId ?? null) : null;
     if (locationId) await this.requireLocation(locationId);
     const [batch] = await this.db.tx
       .insert(schema.importBatches)
@@ -118,7 +145,7 @@ export class ImportsService {
     if (locationId) await this.requireLocation(locationId);
     await this.db.tx
       .update(schema.importBatches)
-      .set({ mapping: clean, ...(locationId !== undefined && batch.kind === 'products' ? { locationId } : {}) })
+      .set({ mapping: clean, ...(locationId !== undefined && AT_LOCATION.has(batch.kind) ? { locationId } : {}) })
       .where(eq(schema.importBatches.id, id));
     return this.preview(id);
   }
@@ -129,12 +156,16 @@ export class ImportsService {
     if (batch.status !== 'preview' || !batch.rows) throw new ConflictException('This import has already been run');
     await this.requireTool(TOOL_FOR[batch.kind]);
     const rows = normalize(batch.kind, batch.headers, batch.rows, batch.mapping);
-    const stats: { counts: Record<string, number>; failures: { line: number; error: string }[]; operationId?: string } =
-      batch.kind === 'products'
-        ? await this.importProducts(batch, rows as NormalizedRow<ProductRow>[])
-        : batch.kind === 'customers'
-          ? await this.importCustomers(batch, rows as NormalizedRow<CustomerRow>[])
-          : await this.importSuppliers(batch, rows as NormalizedRow<SupplierRow>[]);
+    if (batch.kind === 'sales' && !batch.locationId) throw new BadRequestException('Choose the location these sales were made at');
+    const run: Record<ImportKind, () => Promise<{ counts: Record<string, number>; failures: { line: number; error: string }[]; operationId?: string }>> = {
+      products: () => this.importProducts(batch, rows as NormalizedRow<ProductRow>[]),
+      customers: () => this.importCustomers(batch, rows as NormalizedRow<CustomerRow>[]),
+      suppliers: () => this.importSuppliers(batch, rows as NormalizedRow<SupplierRow>[]),
+      gift_cards: () => this.importGiftCards(batch, rows as NormalizedRow<GiftCardRow>[]),
+      loyalty: () => this.importLoyalty(batch, rows as NormalizedRow<LoyaltyRow>[]),
+      sales: () => this.importSales(batch, rows as NormalizedRow<SaleHistoryRow>[]),
+    };
+    const stats = await run[batch.kind]();
     await this.db.tx
       .update(schema.importBatches)
       .set({ status: 'committed', committedAt: new Date(), rows: null, stats: stats.counts, operationId: stats.operationId ?? null })
@@ -177,29 +208,74 @@ export class ImportsService {
           await tx.update(schema.products).set({ status: 'archived', updatedAt: new Date() }).where(eq(schema.products.id, item.entityId));
           break;
         case 'variant:updated':
-          await tx.update(schema.productVariants).set({ ...(before as object), updatedAt: new Date() }).where(eq(schema.productVariants.id, item.entityId));
+          await tx
+            .update(schema.productVariants)
+            .set({ ...(before as object), updatedAt: new Date() })
+            .where(eq(schema.productVariants.id, item.entityId));
           break;
         case 'product:updated':
-          await tx.update(schema.products).set({ ...(before as object), updatedAt: new Date() }).where(eq(schema.products.id, item.entityId));
+          await tx
+            .update(schema.products)
+            .set({ ...(before as object), updatedAt: new Date() })
+            .where(eq(schema.products.id, item.entityId));
           break;
         case 'customer:created': {
           // Keep customers who have bought something since the import.
-          const [{ n }] = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from sales where customer_id = ${item.entityId}`)) as unknown as [{ n: number }];
+          const [{ n }] = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from sales where customer_id = ${item.entityId}`)) as unknown as [
+            { n: number },
+          ];
           if (n > 0) kept++;
           else await tx.delete(schema.customers).where(eq(schema.customers.id, item.entityId));
           break;
         }
         case 'customer:updated':
-          await tx.update(schema.customers).set({ ...(before as object), updatedAt: new Date() }).where(eq(schema.customers.id, item.entityId));
+          await tx
+            .update(schema.customers)
+            .set({ ...(before as object), updatedAt: new Date() })
+            .where(eq(schema.customers.id, item.entityId));
           break;
         case 'supplier:created':
           await tx.update(schema.suppliers).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(schema.suppliers.id, item.entityId));
           break;
+        case 'gift_card:created': {
+          // Void it unless it has been spent since.
+          const balance = await this.giftCards.balance(item.entityId);
+          if (balance === Number(before.amountMinor ?? 0)) {
+            await this.giftCards.record({ giftCardId: item.entityId, kind: 'void', amountMinor: -balance, note: `Undo import of ${batch.fileName}` });
+            await tx.update(schema.giftCards).set({ status: 'void' }).where(eq(schema.giftCards.id, item.entityId));
+          } else kept++;
+          break;
+        }
+        case 'gift_card:updated': {
+          const delta = Number(before.deltaMinor ?? 0);
+          if ((await this.giftCards.balance(item.entityId)) - delta >= 0) {
+            await this.giftCards.record({ giftCardId: item.entityId, kind: 'adjust', amountMinor: -delta, note: `Undo import of ${batch.fileName}` });
+          } else kept++;
+          break;
+        }
+        case 'loyalty:updated': {
+          const delta = Number(before.deltaPoints ?? 0);
+          if (delta !== 0) {
+            await tx.insert(schema.loyaltyEntries).values({
+              tenantId: batch.tenantId,
+              customerId: item.entityId,
+              kind: 'adjust',
+              points: -delta,
+              note: `Undo import of ${batch.fileName}`,
+              createdBy: currentUserId(),
+            });
+          }
+          break;
+        }
         case 'supplier:updated':
-          await tx.update(schema.suppliers).set({ ...(before as object), updatedAt: new Date() }).where(eq(schema.suppliers.id, item.entityId));
+          await tx
+            .update(schema.suppliers)
+            .set({ ...(before as object), updatedAt: new Date() })
+            .where(eq(schema.suppliers.id, item.entityId));
           break;
       }
     }
+    if (batch.kind === 'sales') await tx.delete(schema.salesHistory).where(eq(schema.salesHistory.batchId, id));
     await tx.update(schema.importBatches).set({ status: 'undone', undoneAt: new Date() }).where(eq(schema.importBatches.id, id));
     await this.events.audit('import.undone', { type: 'import', id }, { kind: batch.kind, fileName: batch.fileName, kept });
     return { undone: true, kept };
@@ -207,8 +283,47 @@ export class ImportsService {
 
   // --- planning (preview) -------------------------------------------------
 
-  private async plan(batch: Batch, rows: NormalizedRow<ProductRow | CustomerRow | SupplierRow>[]): Promise<Planned[]> {
+  private async plan(batch: Batch, rows: NormalizedRow<AnyRow>[]): Promise<Planned[]> {
     const fail = (r: NormalizedRow<unknown>): Planned => ({ line: r.line, action: 'error', label: '', errors: r.errors });
+    if (batch.kind === 'gift_cards') {
+      const cards = await this.existingGiftCards(rows.flatMap((r) => (r.data ? [(r.data as GiftCardRow).code] : [])));
+      const seen = new Set<string>();
+      return rows.map((r) => {
+        if (!r.data) return fail(r);
+        const d = r.data as GiftCardRow;
+        const label = `•••• ${d.code.slice(-4)} · $${(d.balanceMinor / 100).toFixed(2)}`;
+        if (seen.has(d.code)) return { line: r.line, action: 'error', label, errors: ['This card appears more than once in the file'] };
+        seen.add(d.code);
+        const card = cards.get(d.code);
+        if (card?.status === 'void') return { line: r.line, action: 'error', label, errors: ['This gift card was voided in Ample POS'] };
+        return {
+          line: r.line,
+          action: card ? 'update' : 'create',
+          label,
+          errors: d.balanceMinor === 0 && !card ? ['Zero balance: the card is added with nothing on it'] : r.errors,
+        };
+      });
+    }
+    if (batch.kind === 'loyalty') {
+      const finder = await this.customerFinder(rows.flatMap((r) => (r.data ? [r.data as LoyaltyRow] : [])));
+      return rows.map((r) => {
+        if (!r.data) return fail(r);
+        const d = r.data as LoyaltyRow;
+        const found = finder(d);
+        const label = `${found?.name ?? d.name ?? d.email ?? d.phone} · ${d.points.toLocaleString('en-US')} points`;
+        if (!found) return { line: r.line, action: 'error', label, errors: ['No customer with this email, phone or name: import customers first'] };
+        return { line: r.line, action: 'update', label, errors: r.errors };
+      });
+    }
+    if (batch.kind === 'sales') {
+      return rows.map((r) => {
+        if (!r.data) return fail(r);
+        const d = r.data as SaleHistoryRow;
+        const errors = [...r.errors];
+        if (!batch.locationId) errors.push('Choose the location these sales were made at');
+        return { line: r.line, action: 'create', label: `${d.soldOn} · ${d.quantity} × ${d.description} · $${(d.totalMinor / 100).toFixed(2)}`, errors };
+      });
+    }
     if (batch.kind === 'products') {
       const data = rows.flatMap((r) => (r.data ? [r.data as ProductRow] : []));
       const { bySku, byBarcode } = await this.existingVariants(data);
@@ -276,8 +391,18 @@ export class ImportsService {
     const phones = [...new Set(rows.flatMap((r) => (r.phone ? [r.phone] : [])))];
     const byEmail = new Map<string, typeof c.$inferSelect>();
     const byPhone = new Map<string, typeof c.$inferSelect>();
-    for (let i = 0; i < emails.length; i += 1000) for (const f of await this.db.tx.select().from(c).where(inArray(c.email, emails.slice(i, i + 1000)))) byEmail.set(f.email!, f);
-    for (let i = 0; i < phones.length; i += 1000) for (const f of await this.db.tx.select().from(c).where(inArray(c.phone, phones.slice(i, i + 1000)))) byPhone.set(f.phone!, f);
+    for (let i = 0; i < emails.length; i += 1000)
+      for (const f of await this.db.tx
+        .select()
+        .from(c)
+        .where(inArray(c.email, emails.slice(i, i + 1000))))
+        byEmail.set(f.email!, f);
+    for (let i = 0; i < phones.length; i += 1000)
+      for (const f of await this.db.tx
+        .select()
+        .from(c)
+        .where(inArray(c.phone, phones.slice(i, i + 1000))))
+        byPhone.set(f.phone!, f);
     return { byEmail, byPhone };
   }
 
@@ -326,7 +451,12 @@ export class ImportsService {
           let id: string;
           if (found) {
             const [pv] = await sp
-              .select({ name: schema.productVariants.name, priceMinor: schema.productVariants.priceMinor, costMinor: schema.productVariants.costMinor, status: schema.productVariants.status })
+              .select({
+                name: schema.productVariants.name,
+                priceMinor: schema.productVariants.priceMinor,
+                costMinor: schema.productVariants.costMinor,
+                status: schema.productVariants.status,
+              })
               .from(schema.productVariants)
               .where(eq(schema.productVariants.id, found.id));
             const [pp] = await sp
@@ -348,23 +478,31 @@ export class ImportsService {
               .update(schema.products)
               .set({ ...(d.category ? { category: d.category } : {}), status: 'active', version: sql`${schema.products.version} + 1`, updatedAt: new Date() })
               .where(eq(schema.products.id, found.productId));
-            items.push({ entityType: 'variant', entityId: found.id, action: 'updated', before: pv ?? null }, { entityType: 'product', entityId: found.productId, action: 'updated', before: pp ?? null });
+            items.push(
+              { entityType: 'variant', entityId: found.id, action: 'updated', before: pv ?? null },
+              { entityType: 'product', entityId: found.productId, action: 'updated', before: pp ?? null },
+            );
             id = found.id;
           } else {
             const groupKey = d.variant !== 'Default' ? d.name.toLowerCase() : null;
             let product = groupKey ? newProducts.get(groupKey) : undefined;
             if (!product) {
-              const [created] = await sp
-                .insert(schema.products)
-                .values({ tenantId, name: d.name, category: d.category })
-                .returning({ id: schema.products.id });
+              const [created] = await sp.insert(schema.products).values({ tenantId, name: d.name, category: d.category }).returning({ id: schema.products.id });
               product = { id: created!.id, variants: 0 };
               if (groupKey) newProducts.set(groupKey, product);
               items.push({ entityType: 'product', entityId: product.id, action: 'created', before: null });
             }
             const [variant] = await sp
               .insert(schema.productVariants)
-              .values({ tenantId, productId: product.id, name: d.variant, sku: d.sku, priceMinor: d.priceMinor, costMinor: d.costMinor, position: product.variants++ })
+              .values({
+                tenantId,
+                productId: product.id,
+                name: d.variant,
+                sku: d.sku,
+                priceMinor: d.priceMinor,
+                costMinor: d.costMinor,
+                position: product.variants++,
+              })
               .returning({ id: schema.productVariants.id });
             items.push({ entityType: 'variant', entityId: variant!.id, action: 'created', before: null });
             id = variant!.id;
@@ -395,7 +533,15 @@ export class ImportsService {
       const tracked = await tx
         .select({ id: schema.productVariants.id })
         .from(schema.productVariants)
-        .where(and(inArray(schema.productVariants.id, stock.map((s) => s.variantId)), eq(schema.productVariants.trackInventory, true)));
+        .where(
+          and(
+            inArray(
+              schema.productVariants.id,
+              stock.map((s) => s.variantId),
+            ),
+            eq(schema.productVariants.trackInventory, true),
+          ),
+        );
       const trackedIds = new Set(tracked.map((t) => t.id));
       const current = await tx
         .select({ variantId: schema.stockLevels.variantId, onHand: schema.stockLevels.onHand })
@@ -404,14 +550,23 @@ export class ImportsService {
       const onHand = new Map(current.map((c) => [c.variantId, c.onHand]));
       const lines = stock
         .filter((s) => trackedIds.has(s.variantId))
-        .map((s) => ({ locationId: batch.locationId!, variantId: s.variantId, quantityDelta: s.onHand - (onHand.get(s.variantId) ?? 0), reason: 'adjustment' as const }))
+        .map((s) => ({
+          locationId: batch.locationId!,
+          variantId: s.variantId,
+          quantityDelta: s.onHand - (onHand.get(s.variantId) ?? 0),
+          reason: 'adjustment' as const,
+        }))
         .filter((l) => l.quantityDelta !== 0);
       if (lines.length) {
         const note = `Imported from ${SOURCE_NAME[batch.source]}: ${batch.fileName}`;
         const result = await this.ledger.record({ kind: 'adjustment', note, reference: { type: 'import', id: batch.id }, lines });
         operationId = result.operationId;
         counts.stockSet = lines.length;
-        await this.events.record('inventory.adjusted', { type: 'operation', id: result.operationId }, { note, source: 'import', lines: lines.map(({ reason: _r, ...l }) => l) });
+        await this.events.record(
+          'inventory.adjusted',
+          { type: 'operation', id: result.operationId },
+          { note, source: 'import', lines: lines.map(({ reason: _r, ...l }) => l) },
+        );
       }
     }
     return { counts, failures, operationId };
@@ -433,13 +588,26 @@ export class ImportsService {
             const before = { name: found.name, email: found.email, phone: found.phone, note: found.note };
             await sp
               .update(schema.customers)
-              .set({ name: d.name, ...(d.email ? { email: d.email } : {}), ...(d.phone ? { phone: d.phone } : {}), ...(d.note ? { note: d.note } : {}), updatedAt: new Date() })
+              .set({
+                name: d.name,
+                ...(d.email ? { email: d.email } : {}),
+                ...(d.phone ? { phone: d.phone } : {}),
+                ...(d.note ? { note: d.note } : {}),
+                updatedAt: new Date(),
+              })
               .where(eq(schema.customers.id, found.id));
-            await sp.insert(schema.importBatchItems).values({ tenantId, batchId: batch.id, entityType: 'customer', entityId: found.id, action: 'updated', before });
+            await sp
+              .insert(schema.importBatchItems)
+              .values({ tenantId, batchId: batch.id, entityType: 'customer', entityId: found.id, action: 'updated', before });
             counts.updated++;
           } else {
-            const [c] = await sp.insert(schema.customers).values({ tenantId, ...d, createdBy: currentUserId() }).returning();
-            await sp.insert(schema.importBatchItems).values({ tenantId, batchId: batch.id, entityType: 'customer', entityId: c!.id, action: 'created', before: null });
+            const [c] = await sp
+              .insert(schema.customers)
+              .values({ tenantId, ...d, createdBy: currentUserId() })
+              .returning();
+            await sp
+              .insert(schema.importBatchItems)
+              .values({ tenantId, batchId: batch.id, entityType: 'customer', entityId: c!.id, action: 'created', before: null });
             // Later rows in the file with the same email or phone update this one.
             if (c!.email) existing.byEmail.set(c!.email, c!);
             if (c!.phone) existing.byPhone.set(c!.phone, c!);
@@ -478,11 +646,18 @@ export class ImportsService {
                 updatedAt: new Date(),
               })
               .where(eq(schema.suppliers.id, found.id));
-            await sp.insert(schema.importBatchItems).values({ tenantId, batchId: batch.id, entityType: 'supplier', entityId: found.id, action: 'updated', before });
+            await sp
+              .insert(schema.importBatchItems)
+              .values({ tenantId, batchId: batch.id, entityType: 'supplier', entityId: found.id, action: 'updated', before });
             counts.updated++;
           } else {
-            const [s] = await sp.insert(schema.suppliers).values({ tenantId, ...d }).returning();
-            await sp.insert(schema.importBatchItems).values({ tenantId, batchId: batch.id, entityType: 'supplier', entityId: s!.id, action: 'created', before: null });
+            const [s] = await sp
+              .insert(schema.suppliers)
+              .values({ tenantId, ...d })
+              .returning();
+            await sp
+              .insert(schema.importBatchItems)
+              .values({ tenantId, batchId: batch.id, entityType: 'supplier', entityId: s!.id, action: 'created', before: null });
             existing.set(s!.name.toLowerCase(), s!);
             counts.created++;
           }
@@ -495,6 +670,152 @@ export class ImportsService {
     return { counts, failures };
   }
 
+  private async existingGiftCards(codes: string[]) {
+    const out = new Map<string, typeof schema.giftCards.$inferSelect>();
+    const unique = [...new Set(codes)];
+    for (let i = 0; i < unique.length; i += 1000) {
+      for (const c of await this.db.tx
+        .select()
+        .from(schema.giftCards)
+        .where(inArray(schema.giftCards.code, unique.slice(i, i + 1000))))
+        out.set(c.code, c);
+    }
+    return out;
+  }
+
+  /** Finds a customer by email, then phone, then a name that only one customer has. */
+  private async customerFinder(rows: { email: string | null; phone: string | null; name: string | null }[]) {
+    const { byEmail, byPhone } = await this.existingCustomers(rows.map((r) => ({ name: r.name ?? '', email: r.email, phone: r.phone, note: null })));
+    const names = [...new Set(rows.flatMap((r) => (r.name ? [r.name.toLowerCase()] : [])))];
+    const byName = new Map<string, { id: string; name: string } | null>();
+    for (let i = 0; i < names.length; i += 1000) {
+      const found = await this.db.tx
+        .select({ id: schema.customers.id, name: schema.customers.name })
+        .from(schema.customers)
+        .where(inArray(sql`lower(${schema.customers.name})`, names.slice(i, i + 1000)));
+      for (const f of found) {
+        const key = f.name.toLowerCase();
+        // Two customers with the same name: don't guess.
+        byName.set(key, byName.has(key) ? null : f);
+      }
+    }
+    return (r: { email: string | null; phone: string | null; name: string | null }) =>
+      (r.email && byEmail.get(r.email)) || (r.phone && byPhone.get(r.phone)) || (r.name && byName.get(r.name.toLowerCase())) || null;
+  }
+
+  private async importGiftCards(batch: Batch, rows: NormalizedRow<GiftCardRow>[]) {
+    const { tenantId } = currentTenant();
+    const cards = await this.existingGiftCards(rows.flatMap((r) => (r.data ? [r.data.code] : [])));
+    const failures = rows.filter((r) => !r.data).map((r) => ({ line: r.line, error: r.errors.join('; ') }));
+    const counts = { created: 0, updated: 0, failed: failures.length };
+    const note = `Imported from ${SOURCE_NAME[batch.source]}: ${batch.fileName}`;
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (!r.data) continue;
+      const d = r.data;
+      if (seen.has(d.code)) {
+        counts.failed++;
+        failures.push({ line: r.line, error: 'This card appears more than once in the file' });
+        continue;
+      }
+      seen.add(d.code);
+      try {
+        await this.db.tx.transaction(async (sp) => {
+          const card = cards.get(d.code);
+          if (card?.status === 'void') throw new Error('This gift card was voided in Ample POS');
+          if (card) {
+            const delta = d.balanceMinor - (await this.giftCards.balance(card.id));
+            await this.giftCards.record({ giftCardId: card.id, kind: 'adjust', amountMinor: delta, note });
+            await sp
+              .insert(schema.importBatchItems)
+              .values({ tenantId, batchId: batch.id, entityType: 'gift_card', entityId: card.id, action: 'updated', before: { deltaMinor: delta } });
+            counts.updated++;
+          } else {
+            const [created] = await sp.insert(schema.giftCards).values({ tenantId, code: d.code }).returning();
+            await this.giftCards.record({ giftCardId: created!.id, kind: 'load', amountMinor: d.balanceMinor, note });
+            await sp.insert(schema.importBatchItems).values({
+              tenantId,
+              batchId: batch.id,
+              entityType: 'gift_card',
+              entityId: created!.id,
+              action: 'created',
+              before: { amountMinor: d.balanceMinor },
+            });
+            counts.created++;
+          }
+        });
+      } catch (err) {
+        counts.failed++;
+        failures.push({ line: r.line, error: friendly(err) });
+      }
+    }
+    return { counts, failures };
+  }
+
+  private async importLoyalty(batch: Batch, rows: NormalizedRow<LoyaltyRow>[]) {
+    const { tenantId } = currentTenant();
+    const find = await this.customerFinder(rows.flatMap((r) => (r.data ? [r.data] : [])));
+    const failures = rows.filter((r) => !r.data).map((r) => ({ line: r.line, error: r.errors.join('; ') }));
+    const counts = { created: 0, updated: 0, failed: failures.length };
+    const note = `Imported from ${SOURCE_NAME[batch.source]}: ${batch.fileName}`;
+    for (const r of rows) {
+      if (!r.data) continue;
+      const customer = find(r.data);
+      if (!customer) {
+        counts.failed++;
+        failures.push({ line: r.line, error: 'No customer with this email, phone or name: import customers first' });
+        continue;
+      }
+      // The file gives the balance; record the difference so history adds up.
+      const delta = r.data.points - (await this.loyalty.balance(customer.id));
+      if (delta !== 0) {
+        await this.db.tx
+          .insert(schema.loyaltyEntries)
+          .values({ tenantId, customerId: customer.id, kind: 'adjust', points: delta, note, createdBy: currentUserId() });
+      }
+      await this.db.tx
+        .insert(schema.importBatchItems)
+        .values({ tenantId, batchId: batch.id, entityType: 'loyalty', entityId: customer.id, action: 'updated', before: { deltaPoints: delta } });
+      counts.updated++;
+    }
+    return { counts, failures };
+  }
+
+  private async importSales(batch: Batch, rows: NormalizedRow<SaleHistoryRow>[]) {
+    const { tenantId } = currentTenant();
+    const data = rows.flatMap((r) => (r.data ? [r.data] : []));
+    const find = await this.customerFinder(data.map((d) => ({ email: d.customerEmail, phone: null, name: d.customerName })));
+    const { bySku } = await this.existingVariants(data.map((d) => ({ sku: d.sku, barcodes: [] }) as unknown as ProductRow));
+    const failures = rows.filter((r) => !r.data).map((r) => ({ line: r.line, error: r.errors.join('; ') }));
+    const values = data.map((d) => ({
+      tenantId,
+      batchId: batch.id,
+      locationId: batch.locationId!,
+      soldOn: d.soldOn,
+      receipt: d.receipt,
+      customerId: find({ email: d.customerEmail, phone: null, name: d.customerName })?.id ?? null,
+      variantId: (d.sku && bySku.get(d.sku.toLowerCase())?.id) || null,
+      sku: d.sku,
+      description: d.description,
+      quantity: d.quantity,
+      totalMinor: d.totalMinor,
+      taxMinor: d.taxMinor,
+    }));
+    for (let i = 0; i < values.length; i += 500) await this.db.tx.insert(schema.salesHistory).values(values.slice(i, i + 500));
+    const receipts = new Set(data.map((d, i) => d.receipt ?? `line-${i}`)).size;
+    return {
+      counts: {
+        created: values.length,
+        updated: 0,
+        failed: failures.length,
+        receipts,
+        linkedCustomers: values.filter((v) => v.customerId).length,
+        linkedProducts: values.filter((v) => v.variantId).length,
+      },
+      failures,
+    };
+  }
+
   // --- helpers -----------------------------------------------------------------
 
   private async find(id: string): Promise<Batch> {
@@ -504,7 +825,18 @@ export class ImportsService {
   }
 
   private summary(b: Batch) {
-    return { id: b.id, kind: b.kind, source: b.source, fileName: b.fileName, locationId: b.locationId, status: b.status, headers: b.headers, mapping: b.mapping, stats: b.stats, createdAt: b.createdAt };
+    return {
+      id: b.id,
+      kind: b.kind,
+      source: b.source,
+      fileName: b.fileName,
+      locationId: b.locationId,
+      status: b.status,
+      headers: b.headers,
+      mapping: b.mapping,
+      stats: b.stats,
+      createdAt: b.createdAt,
+    };
   }
 
   async requireTool(moduleId: ModuleId) {
@@ -538,4 +870,3 @@ function friendly(err: unknown): string {
   }
   return (err as Error)?.message ?? 'Could not save';
 }
-

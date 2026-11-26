@@ -599,7 +599,8 @@ passwords, sessions or two-step secrets.
 Business → **Import & export** (needs `data.manage`, owners by default) brings
 a business's data in from another system, starting with **QuickBooks POS**.
 
-- **Files:** CSV (or tab-separated) exports of the item list (products and stock), the customer list, or the vendor list.
+- **Files:** CSV (or tab-separated) exports of the item list (products and stock), the customer list, the vendor list,
+  gift card balances, loyalty points, or sales history.
   Up to 20,000 rows and 10 MB per file. Excel files are saved as CSV first.
 - **Presets** match column names: QuickBooks POS (Item Number, Item Name,
   Attribute, Size, Department Name, Regular Price, Average Unit Cost, UPC,
@@ -616,6 +617,17 @@ a business's data in from another system, starting with **QuickBooks POS**.
   (`import_batch_items`), so it can be undone. New products are archived and
   their barcodes freed, changed values restored, the stock adjustment reversed,
   and new customers removed unless they've bought something since.
+- **Gift cards** (needs Gift cards on): matched by code. A new card is loaded
+  with the file's balance; an existing one gets an adjustment up or down to it.
+  Undo voids new cards that haven't been spent and reverses the adjustments.
+- **Loyalty points** (needs Loyalty on): matched to an existing customer by
+  email, then phone, then a name only one customer has. The balance is set to
+  the file's number with an `adjust` entry; undo reverses it.
+- **Sales history** goes into `sales_history`, not `sales`: it never touches
+  stock, payments, tills or receipts numbering. Lines are linked to products by
+  SKU and to customers by email or name where they match. It counts in
+  `/reports/sales` (days, totals with `importedMinor`, top products) and shows
+  on the customer page as *Before Ample POS*. Undo deletes the batch's lines.
 - **Export** (`GET /exports/{products,customers,suppliers}.csv`) writes the
   same columns the import reads, so a file can be edited and imported back.
   Cells that look like spreadsheet formulas are written as text.

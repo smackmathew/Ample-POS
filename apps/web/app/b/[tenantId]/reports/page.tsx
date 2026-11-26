@@ -5,7 +5,7 @@ import type { CurrentTenant, Location } from '@/lib/types';
 
 interface SalesReport {
   days: { date: string; salesCount: number; grossMinor: number; discountMinor: number; taxMinor: number; refundsMinor: number; netMinor: number }[];
-  totals: { salesCount: number; grossMinor: number; taxMinor: number; refundsMinor: number; netMinor: number };
+  totals: { salesCount: number; grossMinor: number; taxMinor: number; refundsMinor: number; netMinor: number; importedMinor: number };
   tenders: Record<string, number>;
   topProducts: { variantId: string; description: string; quantity: number; revenueMinor: number }[];
 }
@@ -85,6 +85,9 @@ export default async function ReportsPage({
             <Stat label="Refunds" value={money(sales.totals.refundsMinor)} />
             <Stat label="Tax collected" value={money(sales.totals.taxMinor)} />
           </div>
+          {sales.totals.importedMinor !== 0 && (
+            <p className="text-sm text-stone-500">Includes {money(sales.totals.importedMinor)} of sales history imported from your previous system.</p>
+          )}
           <div className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-stone-500">

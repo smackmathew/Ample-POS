@@ -50,27 +50,61 @@ export class ReportsController {
       where p.status = 'succeeded' and s.status = 'completed' ${loc}
         and (s.completed_at at time zone l.timezone)::date between ${q.from}::date and ${q.to}::date
       group by 1`);
-    const top = await this.db.tx.execute<{ variant_id: string; description: string; quantity: string; revenue: string }>(sql`
-      select sl.variant_id, min(sl.description) as description, sum(sl.quantity) as quantity, sum(sl.total_minor) as revenue
-      from sale_lines sl join sales s on s.id = sl.sale_id join locations l on l.id = s.location_id
-      where s.status = 'completed' and sl.kind = 'item' ${loc}
-        and (s.completed_at at time zone l.timezone)::date between ${q.from}::date and ${q.to}::date
-      group by sl.variant_id order by sum(sl.total_minor) desc limit 10`);
+    // Sales history imported from the previous system counts too, so year-on-year reports still work.
+    const hloc = q.locationId ? sql`and h.location_id = ${q.locationId}` : sql``;
+    const history = await this.db.tx.execute<{ day: string; sales: string; gross: string; tax: string }>(sql`
+      select h.sold_on::text as day, count(distinct coalesce(h.receipt, h.id::text)) as sales,
+             sum(h.total_minor + h.tax_minor) as gross, sum(h.tax_minor) as tax
+      from sales_history h
+      where h.sold_on between ${q.from}::date and ${q.to}::date ${hloc}
+      group by 1`);
+    const top = await this.db.tx.execute<{ variant_id: string | null; description: string; quantity: string; revenue: string }>(sql`
+      select variant_id, min(description) as description, sum(quantity) as quantity, sum(revenue) as revenue from (
+        select sl.variant_id, sl.variant_id::text as k, sl.description, sl.quantity, sl.total_minor as revenue
+        from sale_lines sl join sales s on s.id = sl.sale_id join locations l on l.id = s.location_id
+        where s.status = 'completed' and sl.kind = 'item' ${loc}
+          and (s.completed_at at time zone l.timezone)::date between ${q.from}::date and ${q.to}::date
+        union all
+        select h.variant_id, coalesce(h.variant_id::text, lower(h.description)), h.description, h.quantity, h.total_minor
+        from sales_history h
+        where h.sold_on between ${q.from}::date and ${q.to}::date ${hloc}
+      ) t
+      group by k, variant_id order by sum(revenue) desc limit 10`);
 
     const refundByDay = new Map(refunds.map((r) => [r.day, n(r.refunds)]));
-    const allDays = [...new Set([...days.map((d) => d.day), ...refundByDay.keys()])].sort();
+    const historyByDay = new Map(history.map((h) => [h.day, h]));
+    const allDays = [...new Set([...days.map((d) => d.day), ...refundByDay.keys(), ...historyByDay.keys()])].sort();
     const rows = allDays.map((day) => {
       const d = days.find((x) => x.day === day);
-      const gross = n(d?.gross);
+      const h = historyByDay.get(day);
+      const importedMinor = n(h?.gross);
+      const gross = n(d?.gross) + importedMinor;
       const refundsMinor = refundByDay.get(day) ?? 0;
-      return { date: day, salesCount: n(d?.sales), grossMinor: gross, discountMinor: n(d?.discount), taxMinor: n(d?.tax), refundsMinor, netMinor: gross - refundsMinor };
+      return {
+        date: day,
+        salesCount: n(d?.sales) + n(h?.sales),
+        grossMinor: gross,
+        discountMinor: n(d?.discount),
+        taxMinor: n(d?.tax) + n(h?.tax),
+        refundsMinor,
+        netMinor: gross - refundsMinor,
+        importedMinor,
+      };
     });
     const sum = (k: keyof (typeof rows)[number]) => rows.reduce((t, r) => t + (r[k] as number), 0);
     return {
       from: q.from,
       to: q.to,
       days: rows,
-      totals: { salesCount: sum('salesCount'), grossMinor: sum('grossMinor'), discountMinor: sum('discountMinor'), taxMinor: sum('taxMinor'), refundsMinor: sum('refundsMinor'), netMinor: sum('netMinor') },
+      totals: {
+        salesCount: sum('salesCount'),
+        grossMinor: sum('grossMinor'),
+        discountMinor: sum('discountMinor'),
+        taxMinor: sum('taxMinor'),
+        refundsMinor: sum('refundsMinor'),
+        netMinor: sum('netMinor'),
+        importedMinor: sum('importedMinor'),
+      },
       tenders: Object.fromEntries(tenders.map((t) => [t.method, n(t.amount)])),
       topProducts: top.map((t) => ({ variantId: t.variant_id, description: t.description, quantity: n(t.quantity), revenueMinor: n(t.revenue) })),
     };
@@ -85,7 +119,9 @@ export class ReportsController {
     const money = (minor: number) => (minor / 100).toFixed(2);
     const lines = [
       'date,sales,gross,discounts,tax,refunds,net',
-      ...report.days.map((d) => [d.date, d.salesCount, money(d.grossMinor), money(d.discountMinor), money(d.taxMinor), money(d.refundsMinor), money(d.netMinor)].join(',')),
+      ...report.days.map((d) =>
+        [d.date, d.salesCount, money(d.grossMinor), money(d.discountMinor), money(d.taxMinor), money(d.refundsMinor), money(d.netMinor)].join(','),
+      ),
     ];
     return `${lines.join('\n')}\n`;
   }
@@ -104,7 +140,14 @@ export class ReportsController {
       left join product_variants v on v.id = sl.variant_id
       where l.archived_at is null ${q.locationId ? sql`and l.id = ${q.locationId}` : sql``}
       group by l.id, l.name order by l.name`);
-    return rows.map((r) => ({ locationId: r.location_id, location: r.location, units: n(r.units), valueMinor: n(r.value), uncostedUnits: n(r.uncosted_units), itemsInStock: n(r.skus) }));
+    return rows.map((r) => ({
+      locationId: r.location_id,
+      location: r.location,
+      units: n(r.units),
+      valueMinor: n(r.value),
+      uncostedUnits: n(r.uncosted_units),
+      itemsInStock: n(r.skus),
+    }));
   }
 
   /** Hours worked per person (and scheduled, if Scheduling is on), with sales per labor hour. */

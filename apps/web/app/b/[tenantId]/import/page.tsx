@@ -7,17 +7,34 @@ import { startImport, undoImport } from '../import-actions';
 
 interface BatchRow {
   id: string;
-  kind: 'products' | 'customers' | 'suppliers';
+  kind: keyof typeof KIND;
   source: 'qbpos' | 'ample' | 'other';
   fileName: string;
   status: 'preview' | 'committed' | 'undone';
-  stats: { created?: number; updated?: number; failed?: number; stockSet?: number };
+  stats: { created?: number; updated?: number; failed?: number; stockSet?: number; receipts?: number };
   createdAt: string;
   committedAt: string | null;
   by: string | null;
 }
 
-const KIND = { products: 'Products & stock', customers: 'Customers', suppliers: 'Suppliers' } as const;
+const KIND = {
+  products: 'Products & stock',
+  customers: 'Customers',
+  suppliers: 'Suppliers',
+  gift_cards: 'Gift card balances',
+  loyalty: 'Loyalty points',
+  sales: 'Sales history',
+} as const;
+
+/** What an import did, in words. */
+function result(b: Pick<BatchRow, 'kind' | 'stats'>) {
+  const { created = 0, updated = 0, failed = 0, stockSet = 0, receipts } = b.stats;
+  const skipped = failed ? `, ${failed} rows skipped` : '';
+  if (b.kind === 'sales') return `${created.toLocaleString('en-US')} lines from ${(receipts ?? 0).toLocaleString('en-US')} receipts${skipped}`;
+  if (b.kind === 'loyalty') return `Points set for ${updated.toLocaleString('en-US')} customers${skipped}`;
+  if (b.kind === 'gift_cards') return `${created} cards added, ${updated} balances updated${skipped}`;
+  return `${created} added, ${updated} updated${stockSet ? `, stock set for ${stockSet}` : ''}${skipped}`;
+}
 const SOURCE = { qbpos: 'QuickBooks POS', ample: 'Ample POS export', other: 'Other system' } as const;
 const STATUS = {
   preview: ['Not imported', 'bg-stone-100 text-stone-600'],
@@ -42,19 +59,15 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
       <header>
         <h1 className="text-2xl font-semibold">Import & export</h1>
         <p className="mt-1 max-w-3xl text-stone-600">
-          Moving from QuickBooks POS or another system? Bring your products, stock, customers and suppliers in from a CSV file. You’ll see exactly what will change
-          before anything is saved, and you can undo an import afterwards.
+          Moving from QuickBooks POS or another system? Bring your products, stock, customers, suppliers, gift card balances, loyalty points and past sales in
+          from CSV files. You’ll see exactly what will change before anything is saved, and you can undo an import afterwards.
         </p>
       </header>
 
       {finished && (
         <div className="rounded-xl border border-teal-200 bg-brand-soft px-5 py-4 text-sm">
           <p className="font-medium text-brand">Imported {finished.fileName}</p>
-          <p className="mt-1 text-stone-700">
-            {finished.stats.created ?? 0} added, {finished.stats.updated ?? 0} updated
-            {finished.stats.stockSet ? `, stock set for ${finished.stats.stockSet}` : ''}
-            {finished.stats.failed ? `, ${finished.stats.failed} rows skipped` : ''}.
-          </p>
+          <p className="mt-1 text-stone-700">{result(finished)}.</p>
         </div>
       )}
 
@@ -67,6 +80,9 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
               <option value="products">Products & stock (item list)</option>
               <option value="customers">Customers</option>
               <option value="suppliers">Suppliers (vendors)</option>
+              {on.has('gift-cards') && <option value="gift_cards">Gift card balances</option>}
+              {on.has('loyalty') && <option value="loyalty">Loyalty points</option>}
+              <option value="sales">Sales history (past receipts)</option>
             </select>
           </label>
           <label className="block text-sm">
@@ -78,9 +94,9 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
             </select>
           </label>
           <label className="block text-sm">
-            Set stock at (products only)
+            Location (stock for products, the store for sales history)
             <select name="locationId" className="input mt-1" defaultValue={locations[0]?.id ?? ''}>
-              <option value="">Don’t set stock</option>
+              <option value="">None: don’t set stock</option>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
@@ -90,7 +106,13 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
           </label>
           <label className="block text-sm">
             CSV file
-            <input name="file" type="file" accept=".csv,.txt,.tsv,text/csv" required className="input mt-1 file:mr-3 file:rounded-md file:border-0 file:bg-brand-soft file:px-3 file:py-1 file:text-brand" />
+            <input
+              name="file"
+              type="file"
+              accept=".csv,.txt,.tsv,text/csv"
+              required
+              className="input mt-1 file:mr-3 file:rounded-md file:border-0 file:bg-brand-soft file:px-3 file:py-1 file:text-brand"
+            />
           </label>
           <button className="btn justify-self-start">Upload and preview</button>
           <p className="text-xs text-stone-500">Up to 20,000 rows. Nothing is saved until you check the preview and choose Import.</p>
@@ -100,19 +122,28 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
           <h2 className="text-lg font-semibold text-stone-900">Exporting from QuickBooks POS</h2>
           <ol className="list-decimal space-y-2 pl-5">
             <li>
-              In QuickBooks POS, open the <strong>Item List</strong> (Inventory → Item List). Show the columns you want to bring over, such as Item Number, Item Name,
-              Attribute, Size, Department, Regular Price, Average Unit Cost, UPC, Alternate Lookup and On-hand quantity.
+              In QuickBooks POS, open the <strong>Item List</strong> (Inventory → Item List). Show the columns you want to bring over, such as Item Number, Item
+              Name, Attribute, Size, Department, Regular Price, Average Unit Cost, UPC, Alternate Lookup and On-hand quantity.
             </li>
             <li>
               Export the list to Excel (right-click the list, or use File → Utilities → Export, depending on your version), then in Excel choose{' '}
               <strong>File → Save As → CSV (Comma delimited)</strong>.
             </li>
             <li>Do the same for the Customer List and the Vendor List if you want those too.</li>
-            <li>Import products first, then customers and suppliers.</li>
+            <li>
+              For gift cards, export the <strong>Gift Card</strong> list with the card number and balance. For loyalty, export the Customer List with the points
+              (rewards) balance column.
+            </li>
+            <li>
+              For sales history, run the <strong>Sales History</strong> report by item (Reports → Sales → Sales History, detail) for the dates you want and
+              export it. Keep the receipt number, date, item number, item name, quantity, extended price, tax and customer columns.
+            </li>
+            <li>Import products first, then customers and suppliers, then gift cards, loyalty points and sales history.</li>
           </ol>
           <p className="text-xs text-stone-500">
-            Items with an attribute or size (matrix items) become one product with variants. Items are matched by item number, then barcode, so you can import an
-            updated file again later.
+            Items with an attribute or size (matrix items) become one product with variants. Items are matched by item number, then barcode, so you can import
+            an updated file again later. Gift cards and points are set to the balance in the file. Past sales show in reports and on customers, without changing
+            stock or your till.
           </p>
         </div>
       </section>
@@ -144,11 +175,7 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
                     {KIND[b.kind]}
                     <div className="text-xs text-stone-500">{SOURCE[b.source]}</div>
                   </td>
-                  <td className="px-5 py-3 text-stone-600">
-                    {b.status === 'preview'
-                      ? '—'
-                      : `${b.stats.created ?? 0} added, ${b.stats.updated ?? 0} updated${b.stats.failed ? `, ${b.stats.failed} skipped` : ''}`}
-                  </td>
+                  <td className="px-5 py-3 text-stone-600">{b.status === 'preview' ? '—' : result(b)}</td>
                   <td className="px-5 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[b.status][1]}`}>{STATUS[b.status][0]}</span>
                   </td>
@@ -181,8 +208,8 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">Export</h2>
         <p className="text-sm text-stone-600">
-          Download your data as CSV files that open in Excel. They use the same columns the import reads, so you can edit a file and import it back with “Ample POS
-          export”.
+          Download your data as CSV files that open in Excel. They use the same columns the import reads, so you can edit a file and import it back with “Ample
+          POS export”.
         </p>
         <div className="flex flex-wrap gap-2">
           {on.has('catalog') && (

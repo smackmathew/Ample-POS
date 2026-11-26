@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseCsv, toCsv, unguard } from './csv';
-import { autoMap, normalize, parseMoney, type ProductRow } from './presets';
+import { autoMap, normalize, parseDate, parseMoney, type ProductRow } from './presets';
 
 const QB_ITEMS = [
   'Item Number,Item Name,Item Description,Attribute,Size,Department Name,Regular Price,Average Unit Cost,UPC,Alternate Lookup,Qty 1,Vendor Name',
@@ -95,5 +95,34 @@ describe('QuickBooks POS item export', () => {
     expect(parseMoney('$1,234.5')).toBe(123450);
     expect(parseMoney(' ')).toBeNull();
     expect(parseMoney('abc')).toBeNaN();
+  });
+
+  it('reads gift cards, loyalty points and sales history', () => {
+    const [gh, ...gr] = parseCsv('Gift Card #,Balance\nabcd-1234-efgh,$25.00\nSHORT,5\nABCD12345678,');
+    const gifts = normalize('gift_cards', gh!, gr, autoMap('gift_cards', 'qbpos', gh!));
+    expect(gifts[0]!.data).toEqual({ code: 'ABCD1234EFGH', balanceMinor: 2500 });
+    expect(gifts[1]!.data).toBeNull();
+    expect(gifts[2]!.data).toBeNull();
+
+    const [lh, ...lr] = parseCsv('First Name,Last Name,EMail,Phone 1,Points\nAna,Lopez,ANA@example.com,,120\nBen,,,,-4');
+    const points = normalize('loyalty', lh!, lr, autoMap('loyalty', 'qbpos', lh!));
+    expect(points[0]!.data).toMatchObject({ email: 'ana@example.com', name: 'Ana Lopez', points: 120 });
+    expect(points[1]!.data).toBeNull();
+
+    const [sh, ...sr] = parseCsv(
+      'Receipt #,Date,Item Number,Item Name,Qty,Ext Price,Tax\n2001,3/14/2024,1001,Rain Jacket,2,258.00,20.64\n2002,2024-03-15,,Mug,1,(4.00),\n2003,,,Mug,1,4.00,',
+    );
+    const sales = normalize('sales', sh!, sr, autoMap('sales', 'qbpos', sh!));
+    expect(sales[0]!.data).toMatchObject({ receipt: '2001', soldOn: '2024-03-14', sku: '1001', quantity: 2, totalMinor: 25800, taxMinor: 2064 });
+    expect(sales[1]!.data).toMatchObject({ soldOn: '2024-03-15', totalMinor: -400, taxMinor: 0 });
+    expect(sales[2]!.data).toBeNull();
+  });
+
+  it('reads dates', () => {
+    expect(parseDate('2024-03-05')).toBe('2024-03-05');
+    expect(parseDate('3/5/24')).toBe('2024-03-05');
+    expect(parseDate('12/31/2023 4:15 PM')).toBe('2023-12-31');
+    expect(parseDate('2/30/2024')).toBeNull();
+    expect(parseDate('soon')).toBeNull();
   });
 });
