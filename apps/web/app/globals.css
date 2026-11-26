@@ -1,9 +1,32 @@
 @import 'tailwindcss';
 
+/*
+ * Colours from the Ample POS logo: navy #0B2E50 and green #21B561.
+ * - navy: primary buttons and headings
+ * - brand: the logo green darkened to #13803F so text and links on white pass AA (5:1)
+ * - brand-bright: the logo green itself, for accents only (never text on white)
+ * The teal scale is remapped to the same green, so older teal-* classes follow along.
+ */
 @theme {
-  --color-brand: #0f766e;
-  --color-brand-strong: #115e59;
-  --color-brand-soft: #f0fdfa;
+  --color-navy: #0b2e50;
+  --color-navy-strong: #072240;
+  --color-navy-soft: #eef3f8;
+  --color-brand: #13803f;
+  --color-brand-strong: #0f6e37;
+  --color-brand-soft: #eaf7ef;
+  --color-brand-bright: #21b561;
+
+  --color-teal-50: #eaf7ef;
+  --color-teal-100: #d3f0de;
+  --color-teal-200: #a9e1bf;
+  --color-teal-300: #74cd98;
+  --color-teal-400: #45bd77;
+  --color-teal-500: #21b561;
+  --color-teal-600: #1a9a52;
+  --color-teal-700: #13803f;
+  --color-teal-800: #0f6e37;
+  --color-teal-900: #0b5a2d;
+  --color-teal-950: #06381c;
 }
 
 body {
@@ -17,7 +40,7 @@ body {
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-medium text-white shadow-sm shadow-teal-900/10 transition hover:bg-brand-strong disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-navy px-3.5 py-2 text-sm font-medium text-white shadow-sm shadow-navy/15 transition hover:bg-navy-strong disabled:opacity-50;
   }
 
   .btn-secondary {
@@ -31,6 +54,6 @@ body {
 
 @layer base {
   h1 {
-    @apply tracking-tight;
+    @apply tracking-tight text-navy;
   }
 }
