@@ -7,7 +7,7 @@ export default function ForgotPage() {
   return (
     <main className="mx-auto mt-16 max-w-sm px-4">
       <div className="mb-8">
-        <Logo height={36} />
+        <Logo height={52} />
       </div>
       <h1 className="text-2xl font-semibold">Reset your password</h1>
       <p className="mt-2 text-sm text-stone-600">Enter your account’s email and we’ll send you a link to choose a new password.</p>

@@ -9,7 +9,7 @@ export interface ShellSection {
 }
 
 /** The Ample POS logo (public/logo.png, 4.9:1). */
-export function Logo({ href = '/', height = 28 }: { href?: string; height?: number }) {
+export function Logo({ href = '/', height = 32 }: { href?: string; height?: number }) {
   return (
     <Link href={href} className="inline-flex shrink-0 items-center" aria-label="Ample POS home">
       {/* eslint-disable-next-line @next/next/no-img-element */}

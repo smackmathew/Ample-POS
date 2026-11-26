@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     return (
       <main className="mx-auto mt-16 max-w-sm px-4">
         <div className="mb-8">
-          <Logo height={36} />
+          <Logo height={52} />
         </div>
         <h1 className="text-2xl font-semibold">Sign in to Ample POS</h1>
         <p className="mt-2 text-sm text-stone-600">
@@ -36,7 +36,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto mt-16 max-w-sm px-4">
       <div className="mb-8">
-        <Logo height={36} />
+        <Logo height={52} />
       </div>
       <h1 className="text-2xl font-semibold">Sign in to Ample POS</h1>
       <ActionForm action={signIn} className="card mt-6 grid gap-3">

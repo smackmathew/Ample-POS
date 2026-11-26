@@ -8,7 +8,7 @@ export default async function ResetPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto mt-16 max-w-sm px-4">
       <div className="mb-8">
-        <Logo height={36} />
+        <Logo height={52} />
       </div>
       <h1 className="text-2xl font-semibold">Choose a new password</h1>
       {token ? (
