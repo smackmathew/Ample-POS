@@ -24,6 +24,7 @@ import {
   type SaleHistoryRow,
   type SupplierRow,
 } from './presets';
+import { isXlsx, readXlsx, XlsxError } from './xlsx';
 
 export const MAX_ROWS = 20_000;
 const SOURCE_NAME: Record<ImportSource, string> = { qbpos: 'QuickBooks POS', ample: 'an Ample POS export', other: 'a spreadsheet' };
@@ -62,9 +63,9 @@ export class ImportsService {
     private readonly loyalty: LoyaltyService,
   ) {}
 
-  async start(input: { kind: ImportKind; source: ImportSource; fileName: string; csv: string; locationId?: string | null }) {
+  async start(input: { kind: ImportKind; source: ImportSource; fileName: string; csv?: string; xlsx?: string; locationId?: string | null }) {
     await this.requireTool(TOOL_FOR[input.kind]);
-    const [headers, ...rows] = parseCsv(input.csv);
+    const [headers, ...rows] = input.xlsx ? this.readWorkbook(input.xlsx) : parseCsv(input.csv ?? '');
     if (!headers?.length) throw new BadRequestException('The file is empty');
     if (!rows.length) throw new BadRequestException('The file has a header row but no data');
     if (rows.length > MAX_ROWS) throw new BadRequestException(`Up to ${MAX_ROWS.toLocaleString('en-US')} rows per file; split it and import each part`);
@@ -86,6 +87,20 @@ export class ImportsService {
       })
       .returning();
     return this.preview(batch!.id);
+  }
+
+  /** An Excel workbook's first sheet, as rows of text. */
+  private readWorkbook(base64: string): string[][] {
+    const bytes = Buffer.from(base64, 'base64');
+    if (!isXlsx(bytes)) {
+      throw new BadRequestException('That isn’t an Excel workbook (.xlsx). Older .xls files: open them in Excel and save as .xlsx or CSV.');
+    }
+    try {
+      return readXlsx(bytes);
+    } catch (err) {
+      if (err instanceof XlsxError) throw new BadRequestException(err.message);
+      throw new BadRequestException('We couldn’t read that Excel file. Save it again from Excel, or as CSV.');
+    }
   }
 
   async list() {
@@ -168,7 +183,8 @@ export class ImportsService {
     const stats = await run[batch.kind]();
     await this.db.tx
       .update(schema.importBatches)
-      .set({ status: 'committed', committedAt: new Date(), rows: null, stats: stats.counts, operationId: stats.operationId ?? null })
+      // The rows are kept for the reconciliation report (what the file said against what Ample POS has).
+      .set({ status: 'committed', committedAt: new Date(), stats: stats.counts, operationId: stats.operationId ?? null })
       .where(eq(schema.importBatches.id, id));
     await this.events.audit('import.committed', { type: 'import', id }, { kind: batch.kind, source: batch.source, fileName: batch.fileName, ...stats.counts });
     return { ...stats.counts, failures: stats.failures.slice(0, 200) };
@@ -361,7 +377,7 @@ export class ImportsService {
     });
   }
 
-  private async existingVariants(rows: ProductRow[]) {
+  async existingVariants(rows: ProductRow[]) {
     const v = schema.productVariants;
     const skus = [...new Set(rows.flatMap((r) => (r.sku ? [r.sku.toLowerCase()] : [])))];
     const barcodes = [...new Set(rows.flatMap((r) => r.barcodes))];
@@ -385,7 +401,7 @@ export class ImportsService {
     return { bySku, byBarcode };
   }
 
-  private async existingCustomers(rows: CustomerRow[]) {
+  async existingCustomers(rows: CustomerRow[]) {
     const c = schema.customers;
     const emails = [...new Set(rows.flatMap((r) => (r.email ? [r.email] : [])))];
     const phones = [...new Set(rows.flatMap((r) => (r.phone ? [r.phone] : [])))];
@@ -406,7 +422,7 @@ export class ImportsService {
     return { byEmail, byPhone };
   }
 
-  private async existingSuppliers(rows: SupplierRow[]) {
+  async existingSuppliers(rows: SupplierRow[]) {
     const s = schema.suppliers;
     const names = [...new Set(rows.map((r) => r.name.toLowerCase()))];
     const out = new Map<string, typeof s.$inferSelect>();
@@ -670,7 +686,7 @@ export class ImportsService {
     return { counts, failures };
   }
 
-  private async existingGiftCards(codes: string[]) {
+  async existingGiftCards(codes: string[]) {
     const out = new Map<string, typeof schema.giftCards.$inferSelect>();
     const unique = [...new Set(codes)];
     for (let i = 0; i < unique.length; i += 1000) {
@@ -684,7 +700,7 @@ export class ImportsService {
   }
 
   /** Finds a customer by email, then phone, then a name that only one customer has. */
-  private async customerFinder(rows: { email: string | null; phone: string | null; name: string | null }[]) {
+  async customerFinder(rows: { email: string | null; phone: string | null; name: string | null }[]) {
     const { byEmail, byPhone } = await this.existingCustomers(rows.map((r) => ({ name: r.name ?? '', email: r.email, phone: r.phone, note: null })));
     const names = [...new Set(rows.flatMap((r) => (r.name ? [r.name.toLowerCase()] : [])))];
     const byName = new Map<string, { id: string; name: string } | null>();

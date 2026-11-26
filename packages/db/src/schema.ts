@@ -949,3 +949,13 @@ export const platformSupportSessions = pgTable('platform_support_sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   endedAt: timestamp('ended_at', { withTimezone: true }),
 });
+
+// The owner's sign-off on a migration's reconciliation report (migration 0031).
+export const migrationSignoffs = pgTable('migration_signoffs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  signedBy: uuid('signed_by').notNull(),
+  signedAt: timestamp('signed_at', { withTimezone: true }).notNull().defaultNow(),
+  note: text('note'),
+  report: jsonb('report').$type<Record<string, unknown>>().notNull(),
+});

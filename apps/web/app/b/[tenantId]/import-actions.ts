@@ -11,7 +11,9 @@ export async function startImport(tenantId: string, _: ActionState, form: FormDa
   const file = form.get('file');
   if (!(file instanceof File) || file.size === 0) return { error: 'Choose a file' };
   if (file.size > MAX_BYTES) return { error: 'The file is over 10 MB; split it into smaller files' };
-  if (!/\.(csv|txt|tsv)$/i.test(file.name)) return { error: 'Choose a CSV file. In Excel, use File → Save As → CSV (Comma delimited).' };
+  const excel = /\.xlsx$/i.test(file.name);
+  if (/\.xls$/i.test(file.name)) return { error: 'That’s an older Excel file (.xls). Open it in Excel and save it as .xlsx, or as CSV.' };
+  if (!excel && !/\.(csv|txt|tsv)$/i.test(file.name)) return { error: 'Choose an Excel (.xlsx) or CSV file.' };
   let id: string | undefined;
   const result = await attempt(async () => {
     const preview = await api<{ batch: { id: string } }>('/imports', {
@@ -21,7 +23,7 @@ export async function startImport(tenantId: string, _: ActionState, form: FormDa
         kind: form.get('kind'),
         source: form.get('source'),
         fileName: file.name,
-        csv: await file.text(),
+        ...(excel ? { xlsx: Buffer.from(await file.arrayBuffer()).toString('base64') } : { csv: await file.text() }),
         locationId: (form.get('locationId') as string) || null,
       },
     });
@@ -59,5 +61,14 @@ export async function undoImport(tenantId: string, batchId: string, _: ActionSta
     const res = await api<{ kept: number }>(`/imports/${batchId}/undo`, { tenantId, method: 'POST' });
     revalidatePath(`/b/${tenantId}/import`);
     return { ok: res.kept ? `Undone. ${res.kept} customers who have bought something since were kept.` : 'Undone' };
+  });
+}
+
+/** The owner accepts the reconciliation report as it stands. */
+export async function signOffMigration(tenantId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api('/migration/sign-off', { tenantId, method: 'POST', body: { note: String(form.get('note') ?? '') } });
+    revalidatePath(`/b/${tenantId}/import/reconciliation`);
+    return { ok: 'Signed off. The report is kept with your name and today’s date.' };
   });
 }
