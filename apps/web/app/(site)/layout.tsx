@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { Logo } from '@/components/app-shell';
 import { signedIn } from '@/lib/site';
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
@@ -8,9 +9,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
     <div className="flex min-h-screen flex-col bg-white">
       <header className="border-b border-stone-200 bg-white/90 backdrop-blur">
         <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
-            Ample <span className="text-brand">POS</span>
-          </Link>
+          <Logo height={32} />
           <div className="flex gap-5 text-sm text-stone-600">
             <Link href="/features" className="hover:text-stone-900">
               Features

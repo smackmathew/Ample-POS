@@ -9,10 +9,15 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.amplepos.app",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "icon": "./assets/icon.png"
     },
     "android": {
-      "package": "com.amplepos.app"
+      "package": "com.amplepos.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "plugins": [
       "expo-router",
@@ -45,6 +50,10 @@
     ],
     "extra": {
       "defaultApiUrl": "http://localhost:4000"
+    },
+    "icon": "./assets/icon.png",
+    "web": {
+      "favicon": "./assets/splash-icon.png"
     }
   }
 }

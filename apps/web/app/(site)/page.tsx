@@ -35,9 +35,7 @@ export default async function Home() {
                 See pricing
               </Link>
             </div>
-            <p className="mt-4 text-sm text-stone-500">
-              No card needed to start. Plans from {price(starter.baseMinor)}/mo after the trial.
-            </p>
+            <p className="mt-4 text-sm text-stone-500">No card needed to start. Plans from {price(starter.baseMinor)}/mo after the trial.</p>
           </div>
           <RegisterPreview />
         </div>
