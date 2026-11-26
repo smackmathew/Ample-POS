@@ -1,8 +1,21 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  HttpCode,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { schema, type Transaction } from '@pos/db';
 import { enabledDependents, getModule, isModuleId, missingDependencies, MODULES, PLAN_IDS, WEBSITE_ADDON_IDS, WEBSITE_TOOL, type ModuleId } from '@pos/modules';
 import { planSettings, websiteAddonSettings } from '../core/plan-settings';
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { LIVE_STATUSES } from '../billing/provider';
 import { standing, type Standing } from '../billing/standing';
@@ -22,16 +35,35 @@ const toolBody = z
   .object({ enabled: z.boolean().optional(), comped: z.boolean().optional(), blocked: z.boolean().optional() })
   .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
 const suspendBody = z.object({ reason: z.string().trim().min(1, 'Say why, so the business and other admins know').max(300) });
-const pageQuery = z.object({ before: z.coerce.number().int().optional(), limit: z.coerce.number().int().min(1).max(200).default(50), tenantId: z.string().uuid().optional() });
+const pageQuery = z.object({
+  before: z.coerce.number().int().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  tenantId: z.string().uuid().optional(),
+});
 const transactionsQuery = z.object({ before: z.string().datetime().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) });
 const price = z.number().int().min(0).max(10_000_000).nullable().optional();
 const planPriceBody = z
-  .object({ baseMinor: price, extraLocationMinor: price, websiteMaintenanceMinor: price, registersPerLocation: z.number().int().min(1).max(1000).nullable().optional() })
+  .object({
+    baseMinor: price,
+    extraLocationMinor: price,
+    websiteMaintenanceMinor: price,
+    registersPerLocation: z.number().int().min(1).max(1000).nullable().optional(),
+  })
   .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
 const addonPriceBody = z.object({ setupMinor: z.number().int().min(0).max(100_000_000).nullable() });
 const companyPlanBody = z
   .object({ plan: z.enum(PLAN_IDS).optional(), websiteAddon: z.enum(WEBSITE_ADDON_IDS).nullable().optional() })
   .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
+const reasonBody = z.object({ reason: z.string().trim().min(3, 'Say why you’re looking, for the business’s audit log').max(300) });
+const nameBody = z.object({ name: z.string().trim().min(1).max(100) });
+const trialBody = z.object({ trialEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-31') });
+const ownerBody = z.object({
+  userId: z.string().uuid(),
+  /** What current owners become: a role key such as 'manager', or null to keep them as owners too. */
+  previousOwnersBecome: z.string().trim().min(1).max(60).nullable().default('manager'),
+});
+/** How long a support view lasts before it has to be opened again. */
+const SUPPORT_MINUTES = 60;
 const platformToolBody = z
   .object({ available: z.boolean().optional(), monthlyPriceMinor: z.number().int().min(0).max(10_000_000).nullable().optional() })
   .refine((b) => Object.keys(b).length > 0, 'Change at least one setting');
@@ -47,7 +79,13 @@ export interface Issue {
   since: string;
 }
 
-type BillingRow = { status: string | null; trial_ends_at: Date | string; current_period_end: Date | string | null; cancel_at_period_end: boolean; items: { moduleId: string; quantity: number; unitMinor?: number }[] };
+type BillingRow = {
+  status: string | null;
+  trial_ends_at: Date | string;
+  current_period_end: Date | string | null;
+  cancel_at_period_end: boolean;
+  items: { moduleId: string; quantity: number; unitMinor?: number }[];
+};
 
 function standingOf(b: BillingRow | null | undefined): Standing | null {
   if (!b) return null;
@@ -128,7 +166,10 @@ export class PlatformAdminController {
         days: q.days,
         merchants: Object.fromEntries(merchants.map((m) => [m.mode, n(m.count)])),
         plans: Object.fromEntries(
-          (await tx.execute<{ plan: string; count: string }>(sql`select plan, count(*) as count from tenant_billing group by plan`)).map((p) => [p.plan, n(p.count)]),
+          (await tx.execute<{ plan: string; count: string }>(sql`select plan, count(*) as count from tenant_billing group by plan`)).map((p) => [
+            p.plan,
+            n(p.count),
+          ]),
         ),
         websites: n((await tx.execute<{ count: string }>(sql`select count(*) as count from tenant_billing where website_addon is not null`))[0]?.count),
         companies: {
@@ -154,7 +195,24 @@ export class PlatformAdminController {
     return this.platform.run(async (tx) => {
       const like = q.search ? `%${q.search.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
       const rows = await tx.execute<
-        { id: string; name: string; slug: string; created_at: Date; suspended_at: Date | null; suspended_reason: string | null; owner_email: string | null; tools: string; merchant: string | null; plan: string | null; website_addon: string | null; locations: string; members: string; sales30: string; gross30: string; last_activity: Date | null } & BillingRow
+        {
+          id: string;
+          name: string;
+          slug: string;
+          created_at: Date;
+          suspended_at: Date | null;
+          suspended_reason: string | null;
+          owner_email: string | null;
+          tools: string;
+          merchant: string | null;
+          plan: string | null;
+          website_addon: string | null;
+          locations: string;
+          members: string;
+          sales30: string;
+          gross30: string;
+          last_activity: Date | null;
+        } & BillingRow
       >(sql`
         select t.id, t.name, t.slug, t.created_at, t.suspended_at, t.suspended_reason,
                b.status, b.trial_ends_at, b.current_period_end, b.cancel_at_period_end, b.items, b.plan, b.website_addon,
@@ -214,7 +272,12 @@ export class PlatformAdminController {
       await this.lockTenant(tx, id);
       const rows = await tx.select().from(schema.tenantModules).where(eq(schema.tenantModules.tenantId, id));
       const current = rows.find((r) => r.moduleId === moduleId);
-      const enabled = new Set(rows.filter((r) => r.enabled).map((r) => r.moduleId).filter(isModuleId));
+      const enabled = new Set(
+        rows
+          .filter((r) => r.enabled)
+          .map((r) => r.moduleId)
+          .filter(isModuleId),
+      );
       const next = {
         enabled: body.blocked ? false : (body.enabled ?? current?.enabled ?? false),
         comped: body.comped ?? current?.comped ?? false,
@@ -222,16 +285,21 @@ export class PlatformAdminController {
       };
       if (next.enabled && !(current?.enabled ?? false)) {
         const missing = missingDependencies(moduleId, enabled);
-        if (missing.length) throw new ConflictException({ code: 'missing_dependencies', message: `Turn on ${missing.map((m) => getModule(m).name).join(', ')} first` });
+        if (missing.length)
+          throw new ConflictException({ code: 'missing_dependencies', message: `Turn on ${missing.map((m) => getModule(m).name).join(', ')} first` });
       }
       if (!next.enabled && (current?.enabled ?? false)) {
         const dependents = enabledDependents(moduleId, enabled);
-        if (dependents.length) throw new ConflictException({ code: 'has_dependents', message: `Turn off ${dependents.map((m) => getModule(m).name).join(', ')} first` });
+        if (dependents.length)
+          throw new ConflictException({ code: 'has_dependents', message: `Turn off ${dependents.map((m) => getModule(m).name).join(', ')} first` });
       }
       await tx
         .insert(schema.tenantModules)
         .values({ tenantId: id, moduleId, ...next, updatedBy: admin.userId })
-        .onConflictDoUpdate({ target: [schema.tenantModules.tenantId, schema.tenantModules.moduleId], set: { ...next, updatedAt: new Date(), updatedBy: admin.userId } });
+        .onConflictDoUpdate({
+          target: [schema.tenantModules.tenantId, schema.tenantModules.moduleId],
+          set: { ...next, updatedAt: new Date(), updatedBy: admin.userId },
+        });
       const changes = { from: { enabled: current?.enabled ?? false, comped: current?.comped ?? false, blocked: current?.blocked ?? false }, to: next };
       // The business sees it in its own audit log, and billing follows the change.
       const topic = next.enabled !== changes.from.enabled ? (next.enabled ? 'module.enabled' : 'module.disabled') : 'billing.items_changed';
@@ -273,7 +341,10 @@ export class PlatformAdminController {
     const admin = await this.access.require();
     return this.platform.run(async (tx) => {
       await this.lockTenant(tx, id);
-      const [before] = await tx.select({ plan: schema.tenantBilling.plan, websiteAddon: schema.tenantBilling.websiteAddon }).from(schema.tenantBilling).where(eq(schema.tenantBilling.tenantId, id));
+      const [before] = await tx
+        .select({ plan: schema.tenantBilling.plan, websiteAddon: schema.tenantBilling.websiteAddon })
+        .from(schema.tenantBilling)
+        .where(eq(schema.tenantBilling.tenantId, id));
       if (!before) throw new NotFoundException('This business has no billing record');
       await tx
         .update(schema.tenantBilling)
@@ -284,7 +355,10 @@ export class PlatformAdminController {
             ? {
                 websiteAddon: body.websiteAddon,
                 ...(body.websiteAddon
-                  ? { websiteSetupChargedAt: new Date(), websiteSetupPaidMinor: sql`greatest(${schema.tenantBilling.websiteSetupPaidMinor}, ${(await websiteAddonSettings(tx)).get(body.websiteAddon)!.setupMinor})` }
+                  ? {
+                      websiteSetupChargedAt: new Date(),
+                      websiteSetupPaidMinor: sql`greatest(${schema.tenantBilling.websiteSetupPaidMinor}, ${(await websiteAddonSettings(tx)).get(body.websiteAddon)!.setupMinor})`,
+                    }
                   : {}),
               }
             : {}),
@@ -302,6 +376,143 @@ export class PlatformAdminController {
     });
   }
 
+  /**
+   * Opens a business read-only, as if you were its owner, for an hour. The
+   * business sees the visit (and your reason) in its audit log.
+   */
+  @Post('companies/:id/support')
+  @HttpCode(200)
+  async startSupport(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(reasonBody)) body: z.infer<typeof reasonBody>) {
+    const admin = await this.access.require();
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const s = schema.platformSupportSessions;
+      await tx
+        .update(s)
+        .set({ endedAt: new Date() })
+        .where(and(eq(s.tenantId, id), eq(s.adminUserId, admin.userId), isNull(s.endedAt)));
+      const [session] = await tx
+        .insert(s)
+        .values({ tenantId: id, adminUserId: admin.userId, reason: body.reason, expiresAt: new Date(Date.now() + SUPPORT_MINUTES * 60_000) })
+        .returning();
+      await tx.insert(schema.auditLog).values({
+        tenantId: id,
+        actorUserId: admin.userId,
+        action: 'support.view_started',
+        targetType: 'tenant',
+        targetId: id,
+        data: { by: 'Ample POS support', email: admin.email, reason: body.reason, minutes: SUPPORT_MINUTES },
+      });
+      await this.log(tx, admin, 'company.support_view_started', id, { reason: body.reason });
+      return { sessionId: session!.id, expiresAt: session!.expiresAt };
+    });
+  }
+
+  @Post('companies/:id/support/end')
+  @HttpCode(200)
+  async endSupport(@Param('id', ParseUUIDPipe) id: string) {
+    const admin = await this.access.require();
+    return this.platform.run(async (tx) => {
+      const s = schema.platformSupportSessions;
+      const ended = await tx
+        .update(s)
+        .set({ endedAt: new Date() })
+        .where(and(eq(s.tenantId, id), eq(s.adminUserId, admin.userId), isNull(s.endedAt), gt(s.expiresAt, sql`now()`)))
+        .returning({ id: s.id });
+      if (ended.length) {
+        await tx.insert(schema.auditLog).values({
+          tenantId: id,
+          actorUserId: admin.userId,
+          action: 'support.view_ended',
+          targetType: 'tenant',
+          targetId: id,
+          data: { by: 'Ample POS support', email: admin.email },
+        });
+      }
+      return { ended: ended.length > 0 };
+    });
+  }
+
+  @Put('companies/:id/name')
+  async rename(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(nameBody)) body: z.infer<typeof nameBody>) {
+    const admin = await this.access.require();
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const [before] = await tx.select({ name: schema.tenants.name }).from(schema.tenants).where(eq(schema.tenants.id, id));
+      await tx.update(schema.tenants).set({ name: body.name }).where(eq(schema.tenants.id, id));
+      await this.tenantEvent(tx, id, admin, 'tenant.updated', { type: 'tenant', id }, { name: body.name, previousName: before!.name });
+      await this.log(tx, admin, 'company.renamed', id, { from: before!.name, to: body.name });
+      return this.companyDetail(tx, id);
+    });
+  }
+
+  /** Moves the end of the free trial. Only matters until the business subscribes. */
+  @Put('companies/:id/trial')
+  async setTrial(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(trialBody)) body: z.infer<typeof trialBody>) {
+    const admin = await this.access.require();
+    const end = new Date(`${body.trialEndsAt}T23:59:59Z`);
+    if (Number.isNaN(end.getTime())) throw new BadRequestException('That isn’t a date');
+    if (end.getTime() > Date.now() + 366 * 86_400_000) throw new BadRequestException('A trial can be at most a year from today');
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const [before] = await tx
+        .select({ trialEndsAt: schema.tenantBilling.trialEndsAt })
+        .from(schema.tenantBilling)
+        .where(eq(schema.tenantBilling.tenantId, id));
+      if (!before) throw new NotFoundException('This business has no billing record');
+      await tx.update(schema.tenantBilling).set({ trialEndsAt: end }).where(eq(schema.tenantBilling.tenantId, id));
+      await tx.insert(schema.auditLog).values({
+        tenantId: id,
+        actorUserId: admin.userId,
+        action: 'billing.trial_changed',
+        targetType: 'tenant',
+        targetId: id,
+        data: { by: 'Ample POS support', from: before.trialEndsAt, to: end },
+      });
+      await this.log(tx, admin, 'company.trial_changed', id, { from: before.trialEndsAt, to: end });
+      return this.companyDetail(tx, id);
+    });
+  }
+
+  /** Makes a member the owner (e.g. the business was sold, or the owner left), optionally stepping the current owners down. */
+  @Post('companies/:id/owner')
+  @HttpCode(200)
+  async setOwner(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(ownerBody)) body: z.infer<typeof ownerBody>) {
+    const admin = await this.access.require();
+    return this.platform.run(async (tx) => {
+      await this.lockTenant(tx, id);
+      const roles = await tx
+        .select({ id: schema.roles.id, key: schema.roles.key, name: schema.roles.name })
+        .from(schema.roles)
+        .where(eq(schema.roles.tenantId, id));
+      const owner = roles.find((r) => r.key === 'owner');
+      if (!owner) throw new ConflictException('This business has no owner role');
+      const m = schema.memberships;
+      const [target] = await tx
+        .select({ id: m.id, roleId: m.roleId })
+        .from(m)
+        .where(and(eq(m.tenantId, id), eq(m.userId, body.userId), eq(m.status, 'active')));
+      if (!target) throw new BadRequestException('That person isn’t an active member of this business. Invite them first.');
+      let stepDown: (typeof roles)[number] | null = null;
+      if (body.previousOwnersBecome !== null) {
+        stepDown = roles.find((r) => r.key === body.previousOwnersBecome || r.id === body.previousOwnersBecome) ?? null;
+        if (!stepDown || stepDown.key === 'owner') throw new BadRequestException('Choose a role other than owner for the current owners');
+      }
+      await tx.update(m).set({ roleId: owner.id }).where(eq(m.id, target.id));
+      const steppedDown = stepDown
+        ? await tx
+            .update(m)
+            .set({ roleId: stepDown.id })
+            .where(and(eq(m.tenantId, id), eq(m.roleId, owner.id), ne(m.id, target.id)))
+            .returning({ userId: m.userId })
+        : [];
+      const data = { userId: body.userId, steppedDown: steppedDown.map((s) => s.userId), steppedDownTo: stepDown?.key ?? null };
+      await this.tenantEvent(tx, id, admin, 'member.updated', { type: 'membership', id: target.id }, { ...data, role: 'owner' });
+      await this.log(tx, admin, 'company.owner_changed', id, data);
+      return this.companyDetail(tx, id);
+    });
+  }
+
   /** Plans and online store prices, as the pricing page and bills use them. */
   @Get('plans')
   async plans() {
@@ -315,9 +526,15 @@ export class PlatformAdminController {
     if (!(PLAN_IDS as readonly string[]).includes(planId)) throw new NotFoundException('Unknown plan');
     return this.platform.run(async (tx) => {
       const set = { ...body, updatedAt: new Date(), updatedBy: admin.userId };
-      await tx.insert(schema.platformPlans).values({ planId, ...set }).onConflictDoUpdate({ target: schema.platformPlans.planId, set });
+      await tx
+        .insert(schema.platformPlans)
+        .values({ planId, ...set })
+        .onConflictDoUpdate({ target: schema.platformPlans.planId, set });
       // Every business on the plan re-syncs its subscription at the new prices.
-      const on = await tx.select({ tenantId: schema.tenantBilling.tenantId }).from(schema.tenantBilling).where(eq(schema.tenantBilling.plan, planId as (typeof PLAN_IDS)[number]));
+      const on = await tx
+        .select({ tenantId: schema.tenantBilling.tenantId })
+        .from(schema.tenantBilling)
+        .where(eq(schema.tenantBilling.plan, planId as (typeof PLAN_IDS)[number]));
       for (const t of on) await tx.insert(schema.outbox).values({ tenantId: t.tenantId, topic: 'billing.items_changed', payload: { planId } });
       await this.log(tx, admin, 'plan.prices_changed', null, { planId, ...body });
       return this.planCatalog(tx);
@@ -330,7 +547,10 @@ export class PlatformAdminController {
     if (!(WEBSITE_ADDON_IDS as readonly string[]).includes(addonId)) throw new NotFoundException('Unknown add-on');
     return this.platform.run(async (tx) => {
       const set = { setupMinor: body.setupMinor, updatedAt: new Date(), updatedBy: admin.userId };
-      await tx.insert(schema.platformWebsiteAddons).values({ addonId, ...set }).onConflictDoUpdate({ target: schema.platformWebsiteAddons.addonId, set });
+      await tx
+        .insert(schema.platformWebsiteAddons)
+        .values({ addonId, ...set })
+        .onConflictDoUpdate({ target: schema.platformWebsiteAddons.addonId, set });
       await this.log(tx, admin, 'website_addon.price_changed', null, { addonId, ...body });
       return this.planCatalog(tx);
     });
@@ -438,7 +658,15 @@ export class PlatformAdminController {
     return this.platform.run(async (tx) => {
       const p = schema.platformAudit;
       return tx
-        .select({ id: p.id, action: p.action, tenantId: p.tenantId, tenantName: schema.tenants.name, data: p.data, actorEmail: schema.users.email, createdAt: p.createdAt })
+        .select({
+          id: p.id,
+          action: p.action,
+          tenantId: p.tenantId,
+          tenantName: schema.tenants.name,
+          data: p.data,
+          actorEmail: schema.users.email,
+          createdAt: p.createdAt,
+        })
         .from(p)
         .leftJoin(schema.tenants, eq(schema.tenants.id, p.tenantId))
         .leftJoin(schema.users, eq(schema.users.id, p.actorUserId))
@@ -481,7 +709,10 @@ export class PlatformAdminController {
       await this.log(tx, admin, 'platform_tool.changed', null, {
         moduleId,
         from: { available: before?.available ?? true, monthlyPriceMinor: before?.monthlyPriceMinor ?? null },
-        to: { available: body.available ?? before?.available ?? true, monthlyPriceMinor: body.monthlyPriceMinor !== undefined ? body.monthlyPriceMinor : (before?.monthlyPriceMinor ?? null) },
+        to: {
+          available: body.available ?? before?.available ?? true,
+          monthlyPriceMinor: body.monthlyPriceMinor !== undefined ? body.monthlyPriceMinor : (before?.monthlyPriceMinor ?? null),
+        },
       });
       return this.toolCatalog(tx);
     });
@@ -494,7 +725,14 @@ export class PlatformAdminController {
     if (!t) throw new NotFoundException('Business not found');
   }
 
-  private async tenantEvent(tx: Transaction, tenantId: string, admin: PlatformAdmin, action: string, target: { type: string; id: string }, data: Record<string, unknown>) {
+  private async tenantEvent(
+    tx: Transaction,
+    tenantId: string,
+    admin: PlatformAdmin,
+    action: string,
+    target: { type: string; id: string },
+    data: Record<string, unknown>,
+  ) {
     const payload = { ...data, by: 'Ample POS support' };
     await tx.insert(schema.auditLog).values({ tenantId, actorUserId: admin.userId, action, targetType: target.type, targetId: target.id, data: payload });
     await tx.insert(schema.outbox).values({ tenantId, topic: action, payload: { [`${target.type}Id`]: target.id, ...payload } });
@@ -507,7 +745,10 @@ export class PlatformAdminController {
   private async planCatalog(tx: Transaction) {
     const [plans, addons] = await Promise.all([planSettings(tx), websiteAddonSettings(tx)]);
     const counts = new Map(
-      (await tx.execute<{ plan: string; count: string }>(sql`select plan, count(*) as count from tenant_billing group by plan`)).map((r) => [r.plan, n(r.count)]),
+      (await tx.execute<{ plan: string; count: string }>(sql`select plan, count(*) as count from tenant_billing group by plan`)).map((r) => [
+        r.plan,
+        n(r.count),
+      ]),
     );
     return {
       plans: [...plans.values()].map((p) => ({ ...p, companies: counts.get(p.id) ?? 0 })),
@@ -561,8 +802,18 @@ export class PlatformAdminController {
       .where(eq(ma.tenantId, id));
     const own = new Map((await tx.select().from(schema.tenantModules).where(eq(schema.tenantModules.tenantId, id))).map((r) => [r.moduleId, r]));
     const catalog = new Map((await this.toolCatalog(tx)).map((t) => [t.id, t]));
-    const members = await tx.execute<{ id: string; name: string | null; email: string | null; role: string; status: string; last_seen_at: Date; joined_at: Date }>(sql`
-      select u.id, u.display_name as name, u.email, r.name as role, m.status, u.last_seen_at, m.created_at as joined_at
+    const members = await tx.execute<{
+      id: string;
+      membership_id: string;
+      name: string | null;
+      email: string | null;
+      role: string;
+      role_key: string;
+      status: string;
+      last_seen_at: Date;
+      joined_at: Date;
+    }>(sql`
+      select u.id, m.id as membership_id, u.display_name as name, u.email, r.name as role, r.key as role_key, m.status, u.last_seen_at, m.created_at as joined_at
       from memberships m join users u on u.id = m.user_id join roles r on r.id = m.role_id
       where m.tenant_id = ${id} order by m.created_at`);
     const locations = await tx
@@ -580,7 +831,13 @@ export class PlatformAdminController {
       select method, coalesce(sum(amount_minor), 0) as amount from payments
       where tenant_id = ${id} and status = 'succeeded' and created_at >= now() - interval '30 days' group by method`);
     const billingRow = billing
-      ? { status: billing.status, trial_ends_at: billing.trialEndsAt, current_period_end: billing.currentPeriodEnd, cancel_at_period_end: billing.cancelAtPeriodEnd, items: billing.items }
+      ? {
+          status: billing.status,
+          trial_ends_at: billing.trialEndsAt,
+          current_period_end: billing.currentPeriodEnd,
+          cancel_at_period_end: billing.cancelAtPeriodEnd,
+          items: billing.items,
+        }
       : null;
     return {
       id: tenant.id,
@@ -620,7 +877,40 @@ export class PlatformAdminController {
           monthlyPriceMinor: platform.monthlyPriceMinor,
         };
       }),
-      members: members.map((m) => ({ id: m.id, name: m.name, email: m.email, role: m.role, status: m.status, lastSeenAt: m.last_seen_at, joinedAt: m.joined_at })),
+      members: members.map((m) => ({
+        id: m.id,
+        membershipId: m.membership_id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        roleKey: m.role_key,
+        status: m.status,
+        lastSeenAt: m.last_seen_at,
+        joinedAt: m.joined_at,
+      })),
+      roles: await tx.select({ id: schema.roles.id, key: schema.roles.key, name: schema.roles.name }).from(schema.roles).where(eq(schema.roles.tenantId, id)),
+      supportSessions: (
+        await tx.execute<{
+          id: string;
+          email: string | null;
+          reason: string;
+          started_at: Date;
+          expires_at: Date;
+          ended_at: Date | null;
+          admin_user_id: string;
+        }>(sql`
+          select s.id, u.email, s.reason, s.started_at, s.expires_at, s.ended_at, s.admin_user_id
+          from platform_support_sessions s join users u on u.id = s.admin_user_id
+          where s.tenant_id = ${id} order by s.started_at desc limit 10`)
+      ).map((s) => ({
+        id: s.id,
+        adminUserId: s.admin_user_id,
+        email: s.email,
+        reason: s.reason,
+        startedAt: s.started_at,
+        expiresAt: s.expires_at,
+        live: !s.ended_at && new Date(s.expires_at) > new Date(),
+      })),
       locations,
       stats: {
         sales30: n(stats?.sales30),
@@ -641,7 +931,15 @@ export class PlatformAdminController {
    * jobs that keep failing, and store connections in error.
    */
   private async findIssues(tx: Transaction): Promise<Issue[]> {
-    const rows = await tx.execute<{ key: string; tenant_id: string; tenant_name: string; severity: Severity; title: string; detail: string | null; since: Date }>(sql`
+    const rows = await tx.execute<{
+      key: string;
+      tenant_id: string;
+      tenant_name: string;
+      severity: Severity;
+      title: string;
+      detail: string | null;
+      since: Date;
+    }>(sql`
       select * from (
         select 'billing:' || b.tenant_id as key, b.tenant_id, t.name as tenant_name, 'high' as severity,
                'Subscription payment failing' as title, 'Stripe status: ' || b.status as detail, b.updated_at as since
@@ -691,6 +989,14 @@ export class PlatformAdminController {
          where r.status = 'open' and r.opened_at < now() - interval '24 hours'
       ) i
       order by case severity when 'high' then 0 when 'medium' then 1 else 2 end, since`);
-    return rows.map((r) => ({ key: r.key, tenantId: r.tenant_id, tenantName: r.tenant_name, severity: r.severity, title: r.title, detail: r.detail, since: new Date(r.since).toISOString() }));
+    return rows.map((r) => ({
+      key: r.key,
+      tenantId: r.tenant_id,
+      tenantName: r.tenant_name,
+      severity: r.severity,
+      title: r.title,
+      detail: r.detail,
+      since: new Date(r.since).toISOString(),
+    }));
   }
 }

@@ -1,8 +1,23 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpException, Inject, Logger, NotFoundException, Post, Req, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  HttpException,
+  Inject,
+  Logger,
+  NotFoundException,
+  Post,
+  Req,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import { z } from 'zod';
-import { AuthService, newToken, SESSION_DAYS, splitToken, sha256 } from '../core/auth.service';
+import { ACCOUNT_DISABLED, AuthService, newToken, SESSION_DAYS, splitToken, sha256 } from '../core/auth.service';
 import { APP_CONFIG, type AppConfig } from '../core/config';
 import { Db } from '../core/database';
 import { NoTenant, Public } from '../core/decorators';
@@ -76,7 +91,10 @@ export class AuthController {
       sql`select app_register_account(${body.email}, ${await hashPassword(body.password)}, ${body.name}) as id`,
     );
     if (!row?.id) {
-      throw new HttpException({ statusCode: 409, code: 'email_taken', message: 'An account with this email already exists. Sign in, or reset your password.' }, 409);
+      throw new HttpException(
+        { statusCode: 409, code: 'email_taken', message: 'An account with this email already exists. Sign in, or reset your password.' },
+        409,
+      );
     }
     const token = await this.startSession(row.id, req);
     await this.verification.send(row.id);
@@ -98,7 +116,14 @@ export class AuthController {
     const ok = await verifyPassword(body.password, account?.password_hash ?? DUMMY_HASH);
     if (account?.locked_until && new Date(account.locked_until) > new Date()) {
       const minutes = Math.ceil((new Date(account.locked_until).getTime() - Date.now()) / 60_000);
-      throw new HttpException({ statusCode: 429, code: 'account_locked', message: `Too many wrong passwords. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or reset your password.` }, 429);
+      throw new HttpException(
+        {
+          statusCode: 429,
+          code: 'account_locked',
+          message: `Too many wrong passwords. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or reset your password.`,
+        },
+        429,
+      );
     }
     if (!account || !ok) {
       this.limiter.hit(`login-ip:${req.ip}`, WINDOW);
@@ -160,7 +185,10 @@ export class AuthController {
     const [row] = await tx.execute<{ hash: string | null }>(sql`select app_password_hash(${user!.userId}::uuid) as hash`);
     if (!row?.hash || !(await verifyPassword(body.currentPassword, row.hash))) {
       this.limiter.hit(`change:${user!.userId}`, WINDOW);
-      throw new BadRequestException({ message: 'Your current password is incorrect', issues: [{ path: 'currentPassword', message: 'Your current password is incorrect' }] });
+      throw new BadRequestException({
+        message: 'Your current password is incorrect',
+        issues: [{ path: 'currentPassword', message: 'Your current password is incorrect' }],
+      });
     }
     const [me] = await tx.execute<{ email: string }>(sql`select email from users where id = ${user!.userId}`);
     const problem = passwordProblem(body.newPassword, me?.email ?? '');
@@ -231,7 +259,11 @@ export class AuthController {
     const result = await this.verification.send(user!.userId);
     // Say so plainly instead of "check your inbox" when nothing went out.
     if (result.error) {
-      throw new ServiceUnavailableException({ statusCode: 503, code: 'email_failed', message: `We couldn’t send the email (${result.error}). Please contact support.` });
+      throw new ServiceUnavailableException({
+        statusCode: 503,
+        code: 'email_failed',
+        message: `We couldn’t send the email (${result.error}). Please contact support.`,
+      });
     }
     return { sent: result.sent };
   }
@@ -280,9 +312,7 @@ export class AuthController {
       this.limiter.check(`email-change:${userId}`, 3, 'A confirmation email was just sent. Check that inbox, or try again in a few minutes.');
       this.limiter.hit(`email-change:${userId}`, WINDOW);
       const { secret, secretHash } = newToken();
-      const [change] = await this.db.pool.execute<{ id: string }>(
-        sql`select app_request_email_change(${userId}::uuid, ${body.newEmail}, ${secretHash}) as id`,
-      );
+      const [change] = await this.db.pool.execute<{ id: string }>(sql`select app_request_email_change(${userId}::uuid, ${body.newEmail}, ${secretHash}) as id`);
       await this.mailer.send(
         body.newEmail,
         'Confirm your new email for Ample POS',
@@ -319,7 +349,10 @@ export class AuthController {
     }
     if (!row) {
       this.limiter.hit(`verify-ip:${req.ip}`, WINDOW);
-      throw new BadRequestException({ code: 'change_invalid', message: 'This link has expired or was already used. Request the change again from your account page.' });
+      throw new BadRequestException({
+        code: 'change_invalid',
+        message: 'This link has expired or was already used. Request the change again from your account page.',
+      });
     }
     await this.mailer
       .send(
@@ -338,6 +371,8 @@ export class AuthController {
   }
 
   private async startSession(userId: string, req: Request): Promise<string> {
+    const [off] = await this.db.pool.execute<{ disabled: boolean }>(sql`select app_user_disabled(${userId}::uuid) as disabled`);
+    if (off?.disabled) throw new ForbiddenException({ code: 'account_disabled', message: ACCOUNT_DISABLED });
     const { secret, secretHash } = newToken();
     const [row] = await this.db.pool.execute<{ id: string }>(
       sql`select app_start_session(${userId}::uuid, ${secretHash}, ${req.headers['user-agent'] ?? null}, ${SESSION_DAYS}) as id`,

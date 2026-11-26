@@ -7,6 +7,7 @@ import type { PlatformAccess } from '@/lib/platform';
 const NAV = [
   ['/platform', 'Overview'],
   ['/platform/companies', 'Companies'],
+  ['/platform/people', 'People'],
   ['/platform/issues', 'Issues'],
   ['/platform/activity', 'Activity'],
   ['/platform/tools', 'Plans & prices'],

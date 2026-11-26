@@ -12,7 +12,13 @@ import { standing } from '../billing/standing';
 import { enabledModuleIds } from './modules.controller';
 
 const updateTenantBody = z.object({ name: z.string().trim().min(1).max(100) });
-const optionalText = (max: number) => z.string().trim().max(max).optional().transform((v) => v || undefined);
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((v) => v || undefined);
 const receiptSettingsBody = z.object({ footer: optionalText(300), phone: optionalText(40), website: optionalText(200) });
 
 const PLATFORM_NAV = [
@@ -47,8 +53,24 @@ export class TenantController {
         permissions: membership.permissions,
       },
       enabledModules: [...(await enabledModuleIds(this.db))],
+      // Ample POS staff viewing read-only (the support view), and until when.
+      support: membership.supportSessionId
+        ? ((
+            await this.db.tx
+              .select({ expiresAt: schema.platformSupportSessions.expiresAt, reason: schema.platformSupportSessions.reason })
+              .from(schema.platformSupportSessions)
+              .where(eq(schema.platformSupportSessions.id, membership.supportSessionId))
+          )[0] ?? null)
+        : null,
       // Every member sees whether paid tools are read-only; only billing.manage sees the details.
-      billing: billing ? { standing: standing(billing), trialEndsAt: billing.trialEndsAt, cancelAtPeriodEnd: billing.cancelAtPeriodEnd, currentPeriodEnd: billing.currentPeriodEnd } : null,
+      billing: billing
+        ? {
+            standing: standing(billing),
+            trialEndsAt: billing.trialEndsAt,
+            cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
+            currentPeriodEnd: billing.currentPeriodEnd,
+          }
+        : null,
     };
   }
 
@@ -56,11 +78,7 @@ export class TenantController {
   @Patch('tenant')
   async update(@Body(new ZodPipe(updateTenantBody)) body: z.infer<typeof updateTenantBody>) {
     const { tenantId } = currentTenant();
-    const [tenant] = await this.db.tx
-      .update(schema.tenants)
-      .set({ name: body.name })
-      .where(eq(schema.tenants.id, tenantId))
-      .returning();
+    const [tenant] = await this.db.tx.update(schema.tenants).set({ name: body.name }).where(eq(schema.tenants.id, tenantId)).returning();
     await this.events.record('tenant.updated', { type: 'tenant', id: tenantId }, { name: body.name });
     return tenant;
   }

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AccountLinks, AppShell } from '@/components/app-shell';
 import { api, ApiError } from '@/lib/api';
+import { endSupportView } from '@/app/platform/actions';
 import { can, type CurrentTenant, type Me, type NavSection, type TenantBilling } from '@/lib/types';
 
 export default async function TenantLayout({ children, params }: { children: ReactNode; params: Promise<{ tenantId: string }> }) {
@@ -46,7 +47,7 @@ export default async function TenantLayout({ children, params }: { children: Rea
   return (
     <AppShell
       title={current.tenant.name}
-      subtitle={current.membership.role.key === 'owner' ? 'Owner' : 'Team member'}
+      subtitle={current.support ? 'Support view' : current.membership.role.key === 'owner' ? 'Owner' : 'Team member'}
       badge={current.billing?.standing === 'trial' ? 'Free trial' : undefined}
       sections={sections}
       footer={
@@ -60,7 +61,22 @@ export default async function TenantLayout({ children, params }: { children: Rea
         />
       }
     >
-      <BillingBanner billing={current.billing} href={can(current.membership.permissions, 'billing.manage') ? `${base}/billing` : null} />
+      {current.support && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-5 py-3 text-sm">
+          <p>
+            <strong className="text-violet-900">Ample POS support view: read-only.</strong>{' '}
+            <span className="text-stone-700">
+              You see what the owner sees, but nothing can be changed. Ends{' '}
+              {new Date(current.support.expiresAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' })}.
+              Reason: {current.support.reason}
+            </span>
+          </p>
+          <form action={endSupportView.bind(null, tenantId)}>
+            <button className="btn-secondary">End support view</button>
+          </form>
+        </div>
+      )}
+      {!current.support && <BillingBanner billing={current.billing} href={can(current.membership.permissions, 'billing.manage') ? `${base}/billing` : null} />}
       {children}
     </AppShell>
   );

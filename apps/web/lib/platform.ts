@@ -35,7 +35,16 @@ export interface Overview {
 }
 
 export interface PlanCatalog {
-  plans: { id: 'starter' | 'growth' | 'pro'; name: string; tagline: string; baseMinor: number; extraLocationMinor: number; registersPerLocation: number; websiteMaintenanceMinor: number; companies: number }[];
+  plans: {
+    id: 'starter' | 'growth' | 'pro';
+    name: string;
+    tagline: string;
+    baseMinor: number;
+    extraLocationMinor: number;
+    registersPerLocation: number;
+    websiteMaintenanceMinor: number;
+    companies: number;
+  }[];
   websiteAddons: { id: 'sync' | 'simple' | 'complex'; name: string; description: string; setupMinor: number }[];
 }
 
@@ -111,9 +120,29 @@ export interface Company {
     statusSyncedAt: string | null;
     updatedAt: string;
   } | null;
-  members: { id: string; name: string | null; email: string | null; role: string; status: string; lastSeenAt: string; joinedAt: string }[];
+  members: {
+    id: string;
+    membershipId: string;
+    name: string | null;
+    email: string | null;
+    role: string;
+    roleKey: string;
+    status: string;
+    lastSeenAt: string;
+    joinedAt: string;
+  }[];
+  roles: { id: string; key: string; name: string }[];
+  supportSessions: { id: string; adminUserId: string; email: string | null; reason: string; startedAt: string; expiresAt: string; live: boolean }[];
   locations: { id: string; name: string; timezone: string; archivedAt: string | null }[];
-  stats: { sales30: number; gross30Minor: number; refunds30Minor: number; devices: number; customers: number; products: number; tenders30: Record<string, number> };
+  stats: {
+    sales30: number;
+    gross30Minor: number;
+    refunds30Minor: number;
+    devices: number;
+    customers: number;
+    products: number;
+    tenders30: Record<string, number>;
+  };
   issues: Issue[];
 }
 
@@ -191,13 +220,37 @@ export const METHOD: Record<string, string> = { cash: 'Cash', card: 'Card', gift
 
 /** Platform times in UTC, so every admin reads the same time. */
 export function utc(iso: string | Date, withTime = true): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'UTC',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
-  }).format(new Date(iso)) + (withTime ? ' UTC' : '');
+  return (
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    }).format(new Date(iso)) + (withTime ? ' UTC' : '')
+  );
 }
 
 export const usd = (minor: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100);
+
+export interface Person {
+  id: string;
+  email: string | null;
+  name: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  disabledAt: string | null;
+  disabledReason: string | null;
+  businesses: string[];
+  platformAdmin: boolean;
+  hasPassword: boolean;
+  emailVerified: boolean;
+  twoFactor: boolean;
+  locked: boolean;
+  liveSessions: number;
+}
+
+export interface PersonDetail extends Person {
+  memberships: { tenantId: string; name: string; role: string; roleKey: string; status: string; joinedAt: string; suspended: boolean }[];
+  history: { action: string; data: Record<string, unknown>; createdAt: string; by: string | null }[];
+}

@@ -1,10 +1,15 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { api, attempt, type ActionState } from '@/lib/api';
 import { parseMoney } from '@/lib/money';
 
-export async function setCompanyTool(companyId: string, moduleId: string, change: { enabled?: boolean; comped?: boolean; blocked?: boolean }): Promise<ActionState> {
+export async function setCompanyTool(
+  companyId: string,
+  moduleId: string,
+  change: { enabled?: boolean; comped?: boolean; blocked?: boolean },
+): Promise<ActionState> {
   return attempt(async () => {
     await api(`/platform/companies/${companyId}/tools/${moduleId}`, { method: 'PUT', body: change });
     revalidatePath(`/platform/companies/${companyId}`);
@@ -118,7 +123,86 @@ export async function sendTestEmail(_: ActionState, form: FormData): Promise<Act
 
 export async function confirmEmailByHand(_: ActionState, form: FormData): Promise<ActionState> {
   return attempt(async () => {
-    const res = await api<{ alreadyConfirmed: boolean }>('/platform/email/confirm', { method: 'POST', body: { email: String(form.get('email') ?? '').trim() } });
+    const res = await api<{ alreadyConfirmed: boolean }>('/platform/email/confirm', {
+      method: 'POST',
+      body: { email: String(form.get('email') ?? '').trim() },
+    });
     return { ok: res.alreadyConfirmed ? 'That email was already confirmed.' : 'Confirmed. They can create their business now (refresh their page).' };
+  });
+}
+
+// Support view, business edits and people ------------------------------------------------
+
+/** Opens the business read-only, as its owner, and goes there. */
+export async function startSupportView(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  const result = await attempt(async () => {
+    await api(`/platform/companies/${companyId}/support`, { method: 'POST', body: { reason: String(form.get('reason') ?? '') } });
+  });
+  if (result?.error) return result;
+  redirect(`/b/${companyId}`);
+}
+
+/** Ends the support view and goes back to the company in the dashboard. */
+export async function endSupportView(companyId: string): Promise<void> {
+  await api(`/platform/companies/${companyId}/support/end`, { method: 'POST' });
+  redirect(`/platform/companies/${companyId}`);
+}
+
+export async function renameCompany(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/platform/companies/${companyId}/name`, { method: 'PUT', body: { name: String(form.get('name') ?? '') } });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: 'Renamed' };
+  });
+}
+
+export async function setCompanyTrial(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/platform/companies/${companyId}/trial`, { method: 'PUT', body: { trialEndsAt: String(form.get('trialEndsAt') ?? '') } });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: 'Trial end moved' };
+  });
+}
+
+export async function setCompanyOwner(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    const become = String(form.get('previousOwnersBecome') ?? '');
+    await api(`/platform/companies/${companyId}/owner`, {
+      method: 'POST',
+      body: { userId: String(form.get('userId') ?? ''), previousOwnersBecome: become === 'keep' ? null : become },
+    });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: 'Owner changed' };
+  });
+}
+
+export async function personAction(userId: string, action: 'confirm-email' | 'two-factor/reset' | 'enable', _: ActionState): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/platform/users/${userId}/${action}`, { method: 'POST' });
+    revalidatePath(`/platform/people/${userId}`);
+    return {
+      ok:
+        action === 'confirm-email'
+          ? 'Email confirmed'
+          : action === 'enable'
+            ? 'Account turned back on'
+            : 'Two-step sign-in turned off; they’ve been signed out everywhere',
+    };
+  });
+}
+
+export async function disablePerson(userId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/platform/users/${userId}/disable`, { method: 'POST', body: { reason: String(form.get('reason') ?? '') } });
+    revalidatePath(`/platform/people/${userId}`);
+    return { ok: 'Account turned off and signed out everywhere' };
+  });
+}
+
+export async function personResetLink(userId: string, _: ActionState): Promise<ActionState> {
+  return attempt(async () => {
+    const res = await api<{ link: string; emailed: boolean }>(`/platform/users/${userId}/password-reset`, { method: 'POST' });
+    revalidatePath(`/platform/people/${userId}`);
+    return { ok: res.emailed ? 'Emailed to them. You can also pass this link on:' : 'Email isn’t set up, so pass this link on yourself:', secret: res.link };
   });
 }

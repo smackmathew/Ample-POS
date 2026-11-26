@@ -10,6 +10,8 @@ export interface CurrentTenant {
   membership: { id: string; role: { id: string; key: string }; permissions: string[] };
   enabledModules: string[];
   billing: TenantBilling | null;
+  /** Set when Ample POS staff are viewing this business read-only. */
+  support?: { expiresAt: string; reason: string } | null;
 }
 
 export type BillingStanding = 'trial' | 'active' | 'past_due' | 'lapsed';
