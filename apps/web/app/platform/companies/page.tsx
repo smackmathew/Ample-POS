@@ -4,6 +4,7 @@ import { MERCHANT, PLAN_NAME, STANDING, usd, utc, type CompanyRow } from '@/lib/
 
 const FILTERS = [
   ['all', 'All'],
+  ['free', 'Free'],
   ['trial', 'Trial'],
   ['active', 'Subscribed'],
   ['past_due', 'Payment failing'],
@@ -86,7 +87,9 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                   {c.locations} · {c.members}
                 </td>
                 <td className="px-4 py-2 text-stone-500">{c.lastActivityAt ? utc(c.lastActivityAt, false) : '—'}</td>
-                <td className="px-4 py-2 text-right">{c.issues > 0 ? <span className="rounded bg-red-50 px-2 py-0.5 text-xs text-red-800">{c.issues}</span> : '—'}</td>
+                <td className="px-4 py-2 text-right">
+                  {c.issues > 0 ? <span className="rounded bg-red-50 px-2 py-0.5 text-xs text-red-800">{c.issues}</span> : '—'}
+                </td>
               </tr>
             ))}
             {companies.length === 0 && (

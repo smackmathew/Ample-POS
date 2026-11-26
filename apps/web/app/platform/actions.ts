@@ -164,6 +164,23 @@ export async function setCompanyTrial(companyId: string, _: ActionState, form: F
   });
 }
 
+export async function addTrialDays(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    const days = Number(form.get('days'));
+    await api(`/platform/companies/${companyId}/trial`, { method: 'PUT', body: { addDays: days } });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: `Added ${days} days` };
+  });
+}
+
+export async function setCompanyFree(companyId: string, free: boolean, _: ActionState, form: FormData): Promise<ActionState> {
+  return attempt(async () => {
+    await api(`/platform/companies/${companyId}/free`, { method: 'PUT', body: { free, reason: free ? String(form.get('reason') ?? '') : undefined } });
+    revalidatePath(`/platform/companies/${companyId}`);
+    return { ok: free ? 'This business is now free' : 'No longer free: they have a 14-day trial to subscribe' };
+  });
+}
+
 export async function setCompanyOwner(companyId: string, _: ActionState, form: FormData): Promise<ActionState> {
   return attempt(async () => {
     const become = String(form.get('previousOwnersBecome') ?? '');

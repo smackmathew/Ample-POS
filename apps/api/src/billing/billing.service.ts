@@ -50,7 +50,12 @@ export class BillingService {
     ];
     const quantity = Math.max(1, Number(locations));
     const row = await this.row();
-    const [enabled, comped, settings, plans] = await Promise.all([enabledModuleIds(this.db), compedTools(this.db.tx), toolSettings(this.db.tx), planSettings(this.db.tx)]);
+    const [enabled, comped, settings, plans] = await Promise.all([
+      enabledModuleIds(this.db),
+      compedTools(this.db.tx),
+      toolSettings(this.db.tx),
+      planSettings(this.db.tx),
+    ]);
     const plan = plans.get(row.plan)!;
     const items: BilledItem[] = [
       { moduleId: `plan:${plan.id}`, quantity: 1, unitMinor: plan.baseMinor },
@@ -69,7 +74,10 @@ export class BillingService {
   async setPlan(planId: PlanId) {
     const row = await this.row(true);
     if (row.plan === planId) return;
-    await this.db.tx.update(schema.tenantBilling).set({ plan: planId, updatedAt: new Date() }).where(eq(schema.tenantBilling.tenantId, currentTenant().tenantId));
+    await this.db.tx
+      .update(schema.tenantBilling)
+      .set({ plan: planId, updatedAt: new Date() })
+      .where(eq(schema.tenantBilling.tenantId, currentTenant().tenantId));
     await this.events.record('billing.items_changed', { type: 'plan', id: planId }, { from: row.plan, to: planId });
   }
 
@@ -91,7 +99,11 @@ export class BillingService {
     const subscribed = row.subscriptionId && row.status && OPEN_STATUSES.has(row.status) && row.provider === this.provider.name && row.customerId;
     if (addonId && owed > 0 && subscribed) {
       await this.guard(() =>
-        this.provider.chargeOnce(row.customerId!, { key: `website:setup:${addonId}`, name: `${addons.get(addonId)!.name} setup`, amountMinor: owed }, `website-setup-${tenantId}-${addonId}-${paid}`),
+        this.provider.chargeOnce(
+          row.customerId!,
+          { key: `website:setup:${addonId}`, name: `${addons.get(addonId)!.name} setup`, amountMinor: owed },
+          `website-setup-${tenantId}-${addonId}-${paid}`,
+        ),
       );
       chargedAt = new Date();
       paid = setup;
@@ -119,6 +131,7 @@ export class BillingService {
     return {
       standing: standing(row),
       trialEndsAt: row.trialEndsAt,
+      free: row.freeSince ? { since: row.freeSince } : null,
       provider: this.provider.name,
       canManageOnline: Boolean(this.provider.portalUrl) && row.provider === this.provider.name && Boolean(row.customerId),
       subscription: subscribed
@@ -155,6 +168,7 @@ export class BillingService {
   async checkout(): Promise<{ url: string } | { subscribed: true }> {
     const { tenantId } = currentTenant();
     const row = await this.row(true);
+    if (row.freeSince) throw new ConflictException({ code: 'free_account', message: 'Ample POS has made this business free, so there’s nothing to pay' });
     if (row.provider === this.provider.name && row.status && OPEN_STATUSES.has(row.status)) {
       throw new ConflictException({ code: 'already_subscribed', message: 'This business already has a subscription' });
     }
@@ -198,7 +212,9 @@ export class BillingService {
     if (!row.subscriptionId || !row.status || !OPEN_STATUSES.has(row.status) || row.provider !== this.provider.name) return false;
     const desired = await this.desiredItems();
     if (sameItems(row.items, desired)) return false;
-    const key = createHash('sha256').update(`${row.subscriptionId}:${JSON.stringify([...desired].sort((a, b) => a.moduleId.localeCompare(b.moduleId)))}:${row.updatedAt.toISOString()}`).digest('hex');
+    const key = createHash('sha256')
+      .update(`${row.subscriptionId}:${JSON.stringify([...desired].sort((a, b) => a.moduleId.localeCompare(b.moduleId)))}:${row.updatedAt.toISOString()}`)
+      .digest('hex');
     const updated = await this.guard(() => this.provider.updateItems(this.asSubscription(row), desired, `items-${key}`));
     await this.save(updated, row);
     return true;
@@ -233,7 +249,16 @@ export class BillingService {
     const customerId = await this.guard(() => this.provider.createCustomer({ tenantId, name: tenant!.name, email: me?.email ?? null }));
     await this.db.tx
       .update(schema.tenantBilling)
-      .set({ provider: this.provider.name, customerId, subscriptionId: null, status: null, items: [], currentPeriodEnd: null, cancelAtPeriodEnd: false, updatedAt: new Date() })
+      .set({
+        provider: this.provider.name,
+        customerId,
+        subscriptionId: null,
+        status: null,
+        items: [],
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        updatedAt: new Date(),
+      })
       .where(eq(schema.tenantBilling.tenantId, tenantId));
     return customerId;
   }
@@ -261,7 +286,11 @@ export class BillingService {
     const status = sub?.status ?? null;
     if (status !== prev.status) {
       // Other work (syncing items after checkout) follows from this event.
-      await this.events.record('billing.status_changed', { type: 'subscription', id: sub?.id ?? prev.subscriptionId ?? tenantId }, { from: prev.status, to: status });
+      await this.events.record(
+        'billing.status_changed',
+        { type: 'subscription', id: sub?.id ?? prev.subscriptionId ?? tenantId },
+        { from: prev.status, to: status },
+      );
     }
   }
 

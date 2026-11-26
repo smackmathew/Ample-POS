@@ -14,7 +14,7 @@ export interface CurrentTenant {
   support?: { expiresAt: string; reason: string } | null;
 }
 
-export type BillingStanding = 'trial' | 'active' | 'past_due' | 'lapsed';
+export type BillingStanding = 'free' | 'trial' | 'active' | 'past_due' | 'lapsed';
 
 export interface TenantBilling {
   standing: BillingStanding;
@@ -26,6 +26,8 @@ export interface TenantBilling {
 export interface BillingSummary {
   standing: BillingStanding;
   trialEndsAt: string;
+  /** Made free by Ample POS: nothing to pay. */
+  free: { since: string } | null;
   provider: 'simulated' | 'stripe';
   canManageOnline: boolean;
   subscription: { status: string; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; syncedAt: string | null } | null;

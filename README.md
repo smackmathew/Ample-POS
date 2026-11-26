@@ -593,8 +593,13 @@ on the *Your businesses* page.
   request. The visit and the reason go in the business's own audit log
   (`support.view_started` / `support.view_ended`). A banner in the business
   view says it's a support view, with a button to end it.
+- **Free accounts:** make a business free (your own test businesses, staff,
+  partners) with a reason. It's never billed, checkout is refused, and paid
+  tools never go read-only (billing standing `free`). Ending it gives a
+  14-day trial so nobody is locked out at once. Filter companies by *Free*.
 - **Business details:** rename a business, move the end of its free trial
-  (until it subscribes; up to a year out), and change its owner (an existing
+  (pick a date, or add 7/14/30/90 days, counted from today if it already
+  ended; until it subscribes; up to a year out), and change its owner (an existing
   member; current owners step down to a role you choose, or stay owners).
 - **People** (`/platform/users`): find anyone by name, email or business, or
   filter to unconfirmed emails, locked-out or turned-off accounts. For someone:

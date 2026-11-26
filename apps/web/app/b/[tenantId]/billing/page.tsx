@@ -22,9 +22,7 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
   const { checkout } = await searchParams;
   // Back from Stripe Checkout: read the new subscription now rather than waiting for the webhook.
   const b =
-    checkout === 'success'
-      ? await api<BillingSummary>('/billing/refresh', { tenantId, method: 'POST' })
-      : await api<BillingSummary>('/billing', { tenantId });
+    checkout === 'success' ? await api<BillingSummary>('/billing/refresh', { tenantId, method: 'POST' }) : await api<BillingSummary>('/billing', { tenantId });
   const money = (minor: number) => formatMoney(minor, b.currency.toUpperCase());
   const sub = b.subscription;
 
@@ -33,12 +31,21 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
       <h1 className="text-2xl font-semibold">Billing</h1>
 
       {checkout === 'success' && !sub && (
-        <p className="rounded border border-stone-200 bg-white p-3 text-sm">Thanks! Stripe is still confirming your subscription; this page will update in a moment.</p>
+        <p className="rounded border border-stone-200 bg-white p-3 text-sm">
+          Thanks! Stripe is still confirming your subscription; this page will update in a moment.
+        </p>
       )}
       {checkout === 'canceled' && <p className="rounded border border-stone-200 bg-white p-3 text-sm">Checkout was canceled. Nothing was charged.</p>}
 
       <section className="card space-y-3">
-        {sub ? (
+        {b.free ? (
+          <>
+            <h2 className="text-lg font-semibold">Free account</h2>
+            <p className="text-sm text-stone-600">
+              Ample POS has made this business free since {day(b.free.since)}. There’s nothing to pay, and every tool you turn on stays fully usable.
+            </p>
+          </>
+        ) : sub ? (
           <>
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-lg font-semibold">{STATUS[sub.status] ?? sub.status}</h2>
@@ -48,9 +55,7 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
                 </span>
               )}
             </div>
-            {b.standing === 'past_due' && (
-              <p className="text-sm text-red-700">Your last payment didn’t go through. Update your card to avoid interruption.</p>
-            )}
+            {b.standing === 'past_due' && <p className="text-sm text-red-700">Your last payment didn’t go through. Update your card to avoid interruption.</p>}
             {sub.cancelAtPeriodEnd && (
               <p className="text-sm text-stone-600">Your subscription is canceled and won’t renew. Paid tools become read-only after it ends.</p>
             )}
@@ -220,7 +225,8 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
           </table>
         </div>
         <p className="mt-3 px-1 text-xs leading-relaxed text-stone-500">
-          Your plan covers your first location; each extra active location and each paid add-on tool (per location) is added. Changing plans or tools, or adding and archiving locations, updates your bill
+          Your plan covers your first location; each extra active location and each paid add-on tool (per location) is added. Changing plans or tools, or adding
+          and archiving locations, updates your bill
           {sub ? ' automatically, with the difference prorated on your next invoice.' : '.'} Prices in US dollars, before any sales tax.
         </p>
       </section>

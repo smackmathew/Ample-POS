@@ -608,6 +608,9 @@ export const tenantBilling = pgTable('tenant_billing', {
   websiteSetupChargedAt: timestamp('website_setup_charged_at', { withTimezone: true }),
   syncedAt: timestamp('synced_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Made free by Ample POS (migration 0030): never billed, never read-only. */
+  freeSince: timestamp('free_since', { withTimezone: true }),
+  freeReason: text('free_reason'),
 });
 
 // Customers ---------------------------------------------------------------------
