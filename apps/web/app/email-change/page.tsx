@@ -18,7 +18,7 @@ export default async function EmailChangePage({ searchParams }: { searchParams: 
   return (
     <main className="mx-auto mt-16 max-w-sm px-4">
       <div className="mb-8">
-        <Logo height={36} />
+        <Logo height={52} />
       </div>
       <h1 className="text-2xl font-semibold">{email ? 'Email changed' : 'Couldn’t change your email'}</h1>
       <p className="mt-2 text-sm text-stone-600">

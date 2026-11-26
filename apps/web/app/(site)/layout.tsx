@@ -9,7 +9,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
     <div className="flex min-h-screen flex-col bg-white">
       <header className="border-b border-stone-200 bg-white/90 backdrop-blur">
         <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4">
-          <Logo height={32} />
+          <Logo height={40} />
           <div className="flex gap-5 text-sm text-stone-600">
             <Link href="/features" className="hover:text-stone-900">
               Features

@@ -56,7 +56,7 @@ export default function SignIn() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
-        <Image source={require('../assets/logo.png')} accessibilityLabel="Ample POS" resizeMode="contain" style={{ width: 220, height: 45, marginBottom: 8 }} />
+        <Image source={require('../assets/logo.png')} accessibilityLabel="Ample POS" resizeMode="contain" style={{ width: 260, height: 53, marginBottom: 8 }} />
         <Text style={styles.muted}>Sign in with your Ample POS account. New here? Create one in the web hub first.</Text>
         {challenge ? (
           <>

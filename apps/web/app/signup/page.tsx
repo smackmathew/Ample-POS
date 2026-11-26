@@ -8,7 +8,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
   return (
     <main className="mx-auto mt-16 max-w-sm px-4">
       <div className="mb-8">
-        <Logo height={36} />
+        <Logo height={52} />
       </div>
       <h1 className="text-2xl font-semibold">Create your account</h1>
       <p className="mt-2 text-sm text-stone-600">
