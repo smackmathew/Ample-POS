@@ -7,3 +7,6 @@
 .git
 .env
 .env.*
+**/bin
+**/obj
+apps/migration-assistant/publish

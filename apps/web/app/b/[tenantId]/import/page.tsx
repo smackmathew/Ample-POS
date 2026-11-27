@@ -3,7 +3,9 @@ import { ActionForm } from '@/components/action-form';
 import { api } from '@/lib/api';
 import { formatDateTime, homeTimeZone } from '@/lib/time';
 import type { CurrentTenant, Location } from '@/lib/types';
-import { startImport, undoImport } from '../import-actions';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { assistantCode, startImport, undoImport } from '../import-actions';
 
 interface BatchRow {
   id: string;
@@ -35,6 +37,9 @@ function result(b: Pick<BatchRow, 'kind' | 'stats'>) {
   if (b.kind === 'gift_cards') return `${created} cards added, ${updated} balances updated${skipped}`;
   return `${created} added, ${updated} updated${stockSet ? `, stock set for ${stockSet}` : ''}${skipped}`;
 }
+/** Built into public/downloads by the deploy (see Dockerfile); absent in local development. */
+const ASSISTANT_FILE = 'AmplePOS-Migration-Assistant.exe';
+
 const SOURCE = { qbpos: 'QuickBooks POS', ample: 'Ample POS export', other: 'Other system' } as const;
 const STATUS = {
   preview: ['Not imported', 'bg-stone-100 text-stone-600'],
@@ -53,6 +58,7 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
   const on = new Set(current.enabledModules);
   const zone = homeTimeZone(locations);
   const finished = batches.find((b) => b.id === done && b.status === 'committed');
+  const hasAssistant = existsSync(join(process.cwd(), 'public/downloads', ASSISTANT_FILE));
 
   return (
     <div className="max-w-5xl space-y-8">
@@ -70,6 +76,37 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
           <p className="mt-1 text-stone-700">{result(finished)}.</p>
         </div>
       )}
+
+      <section className="card grid gap-5 border-navy/15 md:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Moving from QuickBooks POS? Use the Migration Assistant</h2>
+          <p className="text-sm text-stone-600">
+            A small Windows app you run on the computer that has QuickBooks POS (version 18 or 19). It reads your items, departments, stock, customers, vendors
+            and sales history straight from QuickBooks POS, with no exporting, and brings them in here. You’ll see the same previews as a file import, and can
+            undo.
+          </p>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-700">
+            <li>Download the Assistant on the QuickBooks POS computer and open it. QuickBooks POS should be open, signed in as an administrator.</li>
+            <li>Make a pairing code here and type it in. The first time, QuickBooks POS asks you to allow the Assistant: choose yes.</li>
+            <li>Choose what to bring over, check the counts, and import. Then check the migration report.</li>
+          </ol>
+        </div>
+        <div className="space-y-3 self-center">
+          {hasAssistant ? (
+            <a href={`/downloads/${ASSISTANT_FILE}`} download className="btn w-full">
+              Download the Migration Assistant (Windows)
+            </a>
+          ) : (
+            <p className="rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-600">The download is built when Ample POS is deployed; it isn’t in this copy.</p>
+          )}
+          <ActionForm action={assistantCode.bind(null, tenantId)} secretLabel="Pairing code">
+            <button className="btn-secondary w-full">Make a pairing code</button>
+          </ActionForm>
+          <p className="text-xs text-stone-500">
+            The Assistant can only import data. It shows in API &amp; webhooks, where you can remove it when you’re done.
+          </p>
+        </div>
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <ActionForm action={startImport.bind(null, tenantId)} className="card grid content-start gap-4">

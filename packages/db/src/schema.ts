@@ -959,3 +959,16 @@ export const migrationSignoffs = pgTable('migration_signoffs', {
   note: text('note'),
   report: jsonb('report').$type<Record<string, unknown>>().notNull(),
 });
+
+// Pairing codes for the Migration Assistant (migration 0032).
+export const assistantPairings = pgTable('assistant_pairings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull(),
+  createdBy: uuid('created_by').notNull(),
+  codeHash: text('code_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  apiKeyId: uuid('api_key_id'),
+  computer: text('computer'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

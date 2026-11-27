@@ -652,6 +652,16 @@ a business's data in from another system, starting with **QuickBooks POS**.
   SKU and to customers by email or name where they match. It counts in
   `/reports/sales` (days, totals with `importedMinor`, top products) and shows
   on the customer page as *Before Ample POS*. Undo deletes the batch's lines.
+- **Migration Assistant** (`apps/migration-assistant`): a Windows app run on
+  the QuickBooks POS computer. It reads items, departments, stock, customers,
+  vendors and sales history through the QuickBooks POS SDK and sends them
+  through these same imports (as QuickBooks POS columns), so preview, undo and
+  the reconciliation report work the same. It pairs with a one-time code
+  (Import & export → *Make a pairing code*, `POST
+  /migration/assistant/pairing-codes`, valid 15 minutes) that it trades for an
+  import-only API key (`POST /migration/assistant/pair`). The deploy builds the
+  `.exe` (Dockerfile) and Import & export offers the download. See its README
+  for the first test on a store PC.
 - **Reconciliation** (`GET /migration/reconciliation`, Import & export → *Check
   the migration*): for each import, what the file said against what Ample POS
   has now, found the same way the import matched them. Items, units on hand,
