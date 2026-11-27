@@ -62,6 +62,7 @@ import { PrintersController } from './platform/printers.controller';
 import { ScannersController } from './platform/scanners.controller';
 import { ImportsController } from './imports/imports.controller';
 import { ImportsService } from './imports/imports.service';
+import { ImportReconciliation } from './imports/reconciliation';
 import { ApiEvents } from './core/api-events';
 import { ApiKeysController } from './developer/api-keys.controller';
 import { EventsController } from './developer/events.controller';
@@ -143,6 +144,7 @@ export class AppModule {
         Events,
         ApiEvents,
         ImportsService,
+        ImportReconciliation,
         WebhookDispatcher,
         { provide: WEBHOOK_FETCH, useFactory: () => safeWebhookFetch(config) },
         LedgerService,

@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Client, createTestApp } from './helpers';
+import { adminSql, Client, createTestApp } from './helpers';
 
 let app: INestApplication;
 
@@ -191,5 +193,116 @@ describe('importing from QuickBooks POS', () => {
     ]);
     await owner.post(`/imports/${ps.batch.id}/undo`).expect(200);
     expect((await owner.get('/reports/sales?from=2024-03-01&to=2024-03-31').expect(200)).body.totals.salesCount).toBe(0);
+  });
+
+  it('imports an Excel workbook straight from QuickBooks POS, dates included', async () => {
+    const { owner, store } = await shop();
+    const xlsx = readFileSync(join(__dirname, 'fixtures/qbpos-items.xlsx')).toString('base64');
+    const preview = (await owner.post('/imports', { kind: 'products', source: 'qbpos', fileName: 'items.xlsx', xlsx, locationId: store.id }).expect(201)).body;
+    expect(preview.batch.mapping).toMatchObject({ sku: 'Item Number', price: 'Regular Price', onHand: 'Qty 1' });
+    expect(preview.counts).toMatchObject({ rows: 4, create: 4, error: 0 });
+    await owner.post(`/imports/${preview.batch.id}/commit`).expect(200);
+    expect(JSON.stringify((await owner.get('/catalog/lookup?code=012345678905').expect(200)).body)).toContain('Navy / L');
+    expect(await onHand(owner, store.id)).toMatchObject({ '1001': 8, '1002': 3, '1004': 5 });
+
+    const sales = readFileSync(join(__dirname, 'fixtures/qbpos-sales.xlsx')).toString('base64');
+    const ps = (await owner.post('/imports', { kind: 'sales', source: 'qbpos', fileName: 'sales.xlsx', xlsx: sales, locationId: store.id }).expect(201)).body;
+    expect(ps.counts).toMatchObject({ create: 2, error: 0 });
+    expect(ps.planned.map((p: { label: string }) => p.label.slice(0, 10))).toEqual(['2024-03-14', '2024-03-15']);
+
+    // Not a workbook, or both kinds of file at once.
+    const junk = await owner
+      .post('/imports', { kind: 'products', source: 'qbpos', fileName: 'old.xls', xlsx: Buffer.from('not excel').toString('base64') })
+      .expect(400);
+    expect(junk.body.message).toContain('.xlsx');
+    await owner.post('/imports', { kind: 'products', source: 'qbpos', fileName: 'x', xlsx, csv: 'a,b' }).expect(400);
+  });
+
+  it('takes files over 100 KB (a real item list)', async () => {
+    const { owner } = await shop();
+    const lines = ['Item Number,Item Name,Item Description,Department Name,Regular Price,Average Unit Cost'];
+    for (let i = 0; i < 3000; i++)
+      lines.push(`${10000 + i},Item ${i},A fairly long description of item number ${i} for testing,Department ${i % 20},${(i % 90) + 9}.99,4.50`);
+    const csv = lines.join('\n');
+    expect(csv.length).toBeGreaterThan(250_000);
+    const preview = (await owner.post('/imports', { kind: 'products', source: 'qbpos', fileName: 'big.csv', csv }).expect(201)).body;
+    expect(preview.counts).toMatchObject({ rows: 3000, create: 3000, error: 0 });
+  });
+
+  it('reconciles what the files said against what Ample POS has, and keeps the owner’s sign-off', async () => {
+    const { owner, store } = await shop();
+    const empty = (await owner.get('/migration/reconciliation').expect(200)).body;
+    expect(empty).toMatchObject({ imports: [], signoff: null });
+    await owner.post('/migration/sign-off', {}).expect(409);
+
+    const items = (await owner.post('/imports', { kind: 'products', source: 'qbpos', fileName: 'items.csv', csv: QB_ITEMS, locationId: store.id }).expect(201))
+      .body;
+    await owner.post(`/imports/${items.batch.id}/commit`).expect(200);
+    const cards = (
+      await owner
+        .post('/imports', {
+          kind: 'gift_cards',
+          source: 'qbpos',
+          fileName: 'cards.csv',
+          csv: 'Gift Card #,Balance\nQBGC-0000-0001,25.00\nQBGC-0000-0002,10.50',
+        })
+        .expect(201)
+    ).body;
+    await owner.post(`/imports/${cards.batch.id}/commit`).expect(200);
+    const history =
+      'Receipt #,Date,Item Number,Item Name,Qty,Ext Price,Tax\n2001,3/14/2024,1001,Rain Jacket,2,258.00,20.64\n2001,3/14/2024,,Gift wrap,1,3.00,0.24\n2002,3/15/2024,,Mug,1,12.00,0.96';
+    const sales = (await owner.post('/imports', { kind: 'sales', source: 'qbpos', fileName: 'sales.csv', csv: history, locationId: store.id }).expect(201))
+      .body;
+    await owner.post(`/imports/${sales.batch.id}/commit`).expect(200);
+
+    // Straight after importing, everything matches.
+    const report = (await owner.get('/migration/reconciliation').expect(200)).body;
+    expect(report.imports.map((i: { fileName: string }) => i.fileName)).toEqual(['items.csv', 'cards.csv', 'sales.csv']);
+    expect(report.summary).toMatchObject({ imports: 3, differences: 0 });
+    expect(report.summary.matching).toBe(report.summary.checks);
+    const byKey = (i: number) =>
+      Object.fromEntries(report.imports[i].checks.map((c: { key: string; file: number; ample: number }) => [c.key, [c.file, c.ample]]));
+    // Three items (the one without a price was skipped), 11 units: 8 jackets at $54.25 cost, 3 more, and 5 mugs at $2.10 (the mug had no price, so was skipped).
+    expect(report.imports[0]).toMatchObject({ location: 'Main', rows: 4, skippedRows: 1 });
+    expect(byKey(0)).toEqual({ items: [3, 3], units: [11, 11], cost_value: [11 * 5425, 11 * 5425], retail_value: [11 * 12900, 11 * 12900] });
+    expect(byKey(1)).toEqual({ cards: [2, 2], balance: [3550, 3550] });
+    expect(byKey(2)).toEqual({
+      lines: [3, 3],
+      receipts: [2, 2],
+      total: [25800 + 2064 + 300 + 24 + 1200 + 96, 25800 + 2064 + 300 + 24 + 1200 + 96],
+      tax: [2064 + 24 + 96, 2064 + 24 + 96],
+    });
+
+    // Someone changes a price and stock moves: the report says where.
+    const sql = adminSql();
+    await sql`update product_variants set price_minor = 13900 where sku = '1001' and tenant_id = ${owner.tenantId!}`;
+    await sql.end();
+    const variant = (await owner.get('/catalog/lookup?code=1002').expect(200)).body;
+    const variantId = variant.variant?.id ?? variant.id;
+    await owner.post('/inventory/adjustments', { locationId: store.id, note: 'Damaged', lines: [{ variantId, quantityDelta: -1 }] }).expect((r) => {
+      if (r.status >= 300) throw new Error(`adjustment failed ${r.status} ${JSON.stringify(r.body)}`);
+    });
+    const after = (await owner.get('/migration/reconciliation').expect(200)).body;
+    const products = after.imports[0];
+    expect(products.checks.find((c: { key: string }) => c.key === 'units')).toMatchObject({ file: 11, ample: 10, ok: false });
+    expect(products.differences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ item: '1001 · Rain Jacket (Navy / L)', problem: 'Price', file: '129.00', ample: '139.00' }),
+        expect.objectContaining({ item: '1002 · Rain Jacket (Navy / M)', problem: 'On hand', file: '3', ample: '2' }),
+      ]),
+    );
+
+    // The owner signs off; the report is kept with the sign-off.
+    const signed = (await owner.post('/migration/sign-off', { note: 'Jacket repriced on purpose; one damaged' }).expect(200)).body;
+    expect(signed.signoff).toMatchObject({ note: 'Jacket repriced on purpose; one damaged' });
+    const csv = await owner.get('/migration/reconciliation.csv').expect(200);
+    expect(csv.headers['content-disposition']).toContain('ample-pos-reconciliation-');
+    expect(csv.text).toContain('items.csv,products,Units on hand,11,10,-1,no');
+    expect(csv.text).toContain('Gift card balances owed,35.50,35.50,0.00,yes');
+    expect(csv.text).toContain('1001 · Rain Jacket (Navy / L),Price,129.00,139.00');
+
+    const staff = await owner.invite(await Client.signIn(app), 'manager');
+    await staff.get('/migration/reconciliation').expect(403);
+    await staff.post('/migration/sign-off', {}).expect(403);
   });
 });

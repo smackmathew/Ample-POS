@@ -8,17 +8,23 @@ import { RequirePermission } from '../core/decorators';
 import { ZodPipe } from '../core/zod';
 import { toCsv } from './csv';
 import { ImportsService } from './imports.service';
+import { ImportReconciliation } from './reconciliation';
 
-const startBody = z.object({
-  kind: z.enum(IMPORT_KINDS),
-  source: z.enum(IMPORT_SOURCES),
-  fileName: z.string().trim().min(1).max(200),
-  // About 10 MB of text.
-  csv: z.string().min(1).max(10_000_000),
-  locationId: z.string().uuid().nullable().optional(),
-});
+const startBody = z
+  .object({
+    kind: z.enum(IMPORT_KINDS),
+    source: z.enum(IMPORT_SOURCES),
+    fileName: z.string().trim().min(1).max(200),
+    locationId: z.string().uuid().nullable().optional(),
+    // A CSV file's text (about 10 MB at most)...
+    csv: z.string().min(1).max(10_000_000).optional(),
+    // ...or an Excel workbook (.xlsx), base64-encoded (a 10 MB file is about 13.4 MB here).
+    xlsx: z.string().min(1).max(14_000_000).optional(),
+  })
+  .refine((b) => Boolean(b.csv) !== Boolean(b.xlsx), 'Send the file as csv or as xlsx');
 const remapBody = z.object({ mapping: z.record(z.string(), z.string().nullable()), locationId: z.string().uuid().nullable().optional() });
 const exportQuery = z.object({ locationId: z.string().uuid().optional() });
+const signOffBody = z.object({ note: z.string().trim().max(1000).optional() });
 
 /** Bringing data in from another system, and taking it out, for one business. */
 @Controller()
@@ -27,7 +33,28 @@ export class ImportsController {
   constructor(
     private readonly imports: ImportsService,
     private readonly db: Db,
+    private readonly reconciliation: ImportReconciliation,
   ) {}
+
+  /** What each import's file said against what Ample POS has now, with the latest sign-off. */
+  @Get('migration/reconciliation')
+  reconcile() {
+    return this.reconciliation.report();
+  }
+
+  @Get('migration/reconciliation.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async reconcileCsv(@Res({ passthrough: true }) res: Response) {
+    res.setHeader('Content-Disposition', `attachment; filename="ample-pos-reconciliation-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return toCsv(await this.reconciliation.csv());
+  }
+
+  /** The owner accepts the report as it stands; it's kept with their name and the date. */
+  @Post('migration/sign-off')
+  @HttpCode(200)
+  signOff(@Body(new ZodPipe(signOffBody)) body: z.infer<typeof signOffBody>) {
+    return this.reconciliation.signOff(body.note || null);
+  }
 
   /** Reads the file and shows what importing it would do. Nothing is saved to the catalog yet. */
   @Post('imports')

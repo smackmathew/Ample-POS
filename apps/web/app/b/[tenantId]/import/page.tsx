@@ -60,7 +60,7 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
         <h1 className="text-2xl font-semibold">Import & export</h1>
         <p className="mt-1 max-w-3xl text-stone-600">
           Moving from QuickBooks POS or another system? Bring your products, stock, customers, suppliers, gift card balances, loyalty points and past sales in
-          from CSV files. You’ll see exactly what will change before anything is saved, and you can undo an import afterwards.
+          from Excel or CSV files. You’ll see exactly what will change before anything is saved, and you can undo an import afterwards.
         </p>
       </header>
 
@@ -105,11 +105,11 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
             </select>
           </label>
           <label className="block text-sm">
-            CSV file
+            Excel or CSV file
             <input
               name="file"
               type="file"
-              accept=".csv,.txt,.tsv,text/csv"
+              accept=".xlsx,.csv,.txt,.tsv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               required
               className="input mt-1 file:mr-3 file:rounded-md file:border-0 file:bg-brand-soft file:px-3 file:py-1 file:text-brand"
             />
@@ -126,8 +126,8 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
               Name, Attribute, Size, Department, Regular Price, Average Unit Cost, UPC, Alternate Lookup and On-hand quantity.
             </li>
             <li>
-              Export the list to Excel (right-click the list, or use File → Utilities → Export, depending on your version), then in Excel choose{' '}
-              <strong>File → Save As → CSV (Comma delimited)</strong>.
+              Export the list to Excel (right-click the list, or use File → Utilities → Export, depending on your version) and save the workbook. Upload the{' '}
+              <strong>.xlsx</strong> file as it is: no need to convert it to CSV. Only the first sheet is read.
             </li>
             <li>Do the same for the Customer List and the Vendor List if you want those too.</li>
             <li>
@@ -149,7 +149,14 @@ export default async function ImportPage({ params, searchParams }: { params: Pro
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Past imports</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold">Past imports</h2>
+          {batches.some((b) => b.status === 'committed') && (
+            <Link href={`/b/${tenantId}/import/reconciliation`} className="text-sm font-medium text-brand hover:underline">
+              Check the migration: file totals against Ample POS →
+            </Link>
+          )}
+        </div>
         <div className="card overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-left text-stone-500">
