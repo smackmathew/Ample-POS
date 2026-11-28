@@ -725,9 +725,12 @@ role, runs the migrations and starts the app at `https://<service>.onrender.com`
   until then Resend only delivers to your own Resend account's address. The
   super admin's **Email** page shows the setup, sends a test email (showing
   Resend's own error), and can confirm someone's address by hand.
-- The free plans sleep after 15 idle minutes (the first visit then takes a
-  minute, and background jobs pause) and the free database expires after 30
-  days. Use paid plans for anything beyond trying it out.
+- The Blueprint uses Render's smallest paid plans: `0.5c-512mb` for the web
+  service ($7/month) and `0.1c-256mb` for Postgres ($6/month, 15 GB disk).
+  Free plans sleep after 15 idle minutes (background jobs pause) and the free
+  database is deleted 30 days after it's created, which takes the app down.
+  A Blueprint sync changes the plan of an existing database; Render keeps its
+  data, but a database can't go back to a legacy plan once moved.
 
 Build and run the same image locally with
 `docker build -t ample-pos . && docker run -p 3000:3000 -e ADMIN_DATABASE_URL=... -e APP_DB_PASSWORD=... ample-pos`.

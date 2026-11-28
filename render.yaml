@@ -1,13 +1,15 @@
 # Render Blueprint: one web service (API + admin hub in one container) and a
 # Postgres database. Deploy with New → Blueprint and pick this repository.
-# Free plans are for trying it out: the service sleeps after 15 idle minutes
-# (background work such as Shopify sync pauses with it) and the free database
-# expires after 30 days. Switch both to paid plans before real use.
+# Paid plans, so the service stays awake (background work such as Shopify sync
+# keeps running) and the database never expires. Free plans would sleep after
+# 15 idle minutes and delete the database 30 days after it's created.
+# Plan IDs are Render's compute plans (render.com/docs/blueprint-spec).
 services:
   - type: web
     name: ample-pos
     runtime: docker
-    plan: free
+    # 0.5 CPU, 512 MB: the smallest paid plan ($7/month).
+    plan: 0.5c-512mb
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeploy: true
@@ -42,7 +44,8 @@ services:
 
 databases:
   - name: ample-pos-db
-    plan: free
+    # 0.1 CPU, 256 MB, 15 GB disk: the smallest paid plan ($6/month). Disk can grow later, not shrink.
+    plan: 0.1c-256mb
     postgresMajorVersion: "16"
     databaseName: ample_pos
     ipAllowList: []
