@@ -10,3 +10,6 @@ next-env.d.ts
 .expo/
 dist-check/
 expo-env.d.ts
+
+# Built by the deploy (Dockerfile) from apps/migration-assistant
+apps/web/public/downloads/

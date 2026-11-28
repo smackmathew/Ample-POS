@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseCsv, toCsv, unguard } from './csv';
-import { autoMap, normalize, parseDate, parseMoney, type ProductRow } from './presets';
+import { autoMap, normalize, parseDate, parseMoney, type ProductRow, type SaleHistoryRow } from './presets';
 
 const QB_ITEMS = [
   'Item Number,Item Name,Item Description,Attribute,Size,Department Name,Regular Price,Average Unit Cost,UPC,Alternate Lookup,Qty 1,Vendor Name',
@@ -115,6 +115,17 @@ describe('QuickBooks POS item export', () => {
     const sales = normalize('sales', sh!, sr, autoMap('sales', 'qbpos', sh!));
     expect(sales[0]!.data).toMatchObject({ receipt: '2001', soldOn: '2024-03-14', sku: '1001', quantity: 2, totalMinor: 25800, taxMinor: 2064 });
     expect(sales[1]!.data).toMatchObject({ soldOn: '2024-03-15', totalMinor: -400, taxMinor: 0 });
+    const [rh, ...rr] = parseCsv('Receipt #,Date,Item Name,Qty,Ext Price,Tax\n9,2024-03-16,Mug,-1,-12.00,-0.96\n10,2024-03-16,Mug,-1,(12.00),(0.96)');
+    const returns = normalize('sales', rh!, rr, autoMap('sales', 'qbpos', rh!));
+    expect(
+      returns.map((r) => {
+        const d = r.data as SaleHistoryRow;
+        return [d.quantity, d.totalMinor, d.taxMinor];
+      }),
+    ).toEqual([
+      [-1, -1200, -96],
+      [-1, -1200, -96],
+    ]);
     expect(sales[2]!.data).toBeNull();
   });
 

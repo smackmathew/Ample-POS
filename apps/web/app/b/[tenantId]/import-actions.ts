@@ -72,3 +72,11 @@ export async function signOffMigration(tenantId: string, _: ActionState, form: F
     return { ok: 'Signed off. The report is kept with your name and today’s date.' };
   });
 }
+
+/** A one-time code to connect the Migration Assistant to this business. */
+export async function assistantCode(tenantId: string, _: ActionState): Promise<ActionState> {
+  return attempt(async () => {
+    const { code } = await api<{ code: string; expiresAt: string }>('/migration/assistant/pairing-codes', { tenantId, method: 'POST' });
+    return { ok: 'Type this code into the Migration Assistant within 15 minutes. It works once.', secret: code };
+  });
+}

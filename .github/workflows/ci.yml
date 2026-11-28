@@ -40,6 +40,17 @@ jobs:
       # Catches module resolution problems (e.g. a second React Native) that typechecking misses.
       - run: pnpm --filter @pos/mobile bundle:check
 
+  # The Windows Migration Assistant (built on Linux; its tests are cross-platform).
+  migration-assistant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet test apps/migration-assistant/tests/AmpleMigration.Tests
+      - run: dotnet publish apps/migration-assistant/src/AmpleMigration.App -c Release -o publish
+
   # The image Render deploys (render.yaml); catches Dockerfile and standalone-build breakage.
   docker-image:
     runs-on: ubuntu-latest

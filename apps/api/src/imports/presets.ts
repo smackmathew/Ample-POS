@@ -371,7 +371,10 @@ export function normalize(kind: ImportKind, headers: string[], rows: string[][],
       const quantity = parseQuantity(get('quantity')) ?? 1;
       const total = parseMoney(get('total').replace(/^\s*-|[()]/g, ''));
       const price = parseMoney(get('price'));
-      const tax = parseMoney(get('tax')) ?? 0;
+      // Returns carry negative tax: "-0.96" or "(0.96)".
+      const taxText = get('tax');
+      const taxAbs = parseMoney(taxText.replace(/^\s*-|[()]/g, '')) ?? 0;
+      const tax = /^\s*-|\(/.test(taxText) ? -taxAbs : taxAbs;
       const negative = /^\s*-|\(/.test(get('total'));
       if (!soldOn) errors.push(get('date') ? `Date “${get('date')}” isn’t a date` : 'No date');
       if (!description) errors.push('No item');

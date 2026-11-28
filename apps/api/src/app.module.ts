@@ -61,6 +61,7 @@ import { PlatformEmailController } from './platform/platform-email.controller';
 import { PrintersController } from './platform/printers.controller';
 import { ScannersController } from './platform/scanners.controller';
 import { ImportsController } from './imports/imports.controller';
+import { AssistantController } from './imports/assistant.controller';
 import { ImportsService } from './imports/imports.service';
 import { ImportReconciliation } from './imports/reconciliation';
 import { ApiEvents } from './core/api-events';
@@ -108,6 +109,7 @@ export class AppModule {
         PrintersController,
         ScannersController,
         ImportsController,
+        AssistantController,
         AuditController,
         CatalogController,
         InventoryController,
